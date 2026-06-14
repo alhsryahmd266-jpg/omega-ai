@@ -1,0 +1,230 @@
+name: 🧠 Omega AI v2 - Train & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Training mode'
+        required: false
+        default: 'ci'
+        type: choice
+        options: [ci, full]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: ✅ Validate Architecture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu -q
+          pip install numpy -q
+
+      - name: Test architecture
+        run: |
+          python3 -c "
+          import sys, torch
+          sys.path.insert(0,'.')
+          from omega.model.architecture import OmegaConfig, OmegaModel
+
+          cfg = OmegaConfig(
+              vocab_size=512, dim=128, n_layers=3,
+              n_heads=4, n_kv_heads=2, head_dim=32,
+              kv_lora_rank=64, q_lora_rank=96, rope_head_dim=8,
+              n_experts=2, n_active_experts=1, n_shared_experts=1,
+              expert_dim=128, ssm_d_state=8, ssm_expand=2,
+              ssm_headdim=16, ssm_layers_freq=3, max_seq_len=64
+          )
+          m = OmegaModel(cfg)
+          x = torch.randint(0, 512, (2, 32))
+          logits, _ = m(x)
+          print(f'✅ Forward pass OK | shape: {logits.shape}')
+          print(f'✅ Params: {m.count_params()/1e6:.3f}M')
+
+          # Test generation
+          out = m.generate(x[:1], max_new=10)
+          print(f'✅ Generation OK | out: {out.shape}')
+          "
+
+      - name: Test tokenizer
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0,'.')
+          from omega.tokenizer.bpe import OmegaTokenizer
+
+          tok = OmegaTokenizer(vocab_size=1000)
+          texts = [
+              'الذكاء الاصطناعي مستقبل البشرية',
+              'Python programming language for AI',
+              'def hello(): return \"مرحباً\"',
+              'Android Kotlin Java development',
+              'Neural networks deep learning',
+          ]
+          tok.train(texts, min_freq=1, verbose=False)
+          for text in texts[:3]:
+              enc = tok.encode(text)
+              dec = tok.decode(enc)
+              print(f'  [{len(enc)}tok] {text[:30]}')
+          print(f'✅ Tokenizer OK | vocab: {len(tok.vocab)}')
+          "
+
+  train:
+    name: 🏋️ Train Omega AI
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu -q
+          pip install numpy tqdm -q
+
+      - name: Prepare data
+        run: |
+          mkdir -p data
+          python3 scripts/prepare_data.py
+
+      - name: Train
+        run: CI=true python3 scripts/train_omega.py
+        env:
+          CI: true
+
+      - name: Evaluate
+        run: |
+          python3 -c "
+          import sys, torch, json, os
+          sys.path.insert(0,'.')
+          from omega.model.architecture import OmegaConfig, OmegaModel
+          from omega.tokenizer.bpe import OmegaTokenizer
+          from omega.agent.agent import OmegaAgent
+
+          with open('checkpoints/config.json') as f:
+              cfg = OmegaModel.__new__(OmegaModel)
+              from omega.model.architecture import OmegaConfig
+              c = OmegaConfig(**json.load(f))
+
+          model = OmegaModel(c)
+          ck_path = 'checkpoints/omega_best.pt'
+          if os.path.exists(ck_path):
+              ck = torch.load(ck_path, map_location='cpu')
+              model.load_state_dict(ck['model'])
+              print(f'✅ Loaded step {ck[\"step\"]} | loss {ck[\"best_loss\"]:.4f}')
+          model.eval()
+
+          tok = OmegaTokenizer.load('checkpoints')
+          agent = OmegaAgent(model, tok, memory_path='memory')
+
+          queries = [
+              'ما هو الذكاء الاصطناعي؟',
+              'def fibonacci',
+              'Android Activity',
+          ]
+          for q in queries:
+              r = agent.chat(q)
+              print(f'Q: {q[:40]}')
+              print(f'A: {r[:80]}')
+              print()
+          
+          stats = agent.stats()
+          print(f'Memory: {stats[\"memory\"]}')
+          print('✅ Evaluation complete!')
+          "
+
+      - name: Generate model card
+        run: |
+          python3 -c "
+          import json, os
+          with open('checkpoints/config.json') as f:
+              cfg = json.load(f)
+          
+          result = {}
+          r_path = 'checkpoints/train_result.json'
+          if os.path.exists(r_path):
+              with open(r_path) as f:
+                  result = json.load(f)
+          
+          card = f'''# 🧠 Omega AI v2
+
+          **بناء:** \${{ github.run_number }}
+          **تاريخ:** \$(date -u +%Y-%m-%d)
+
+          ## المعمارية
+          - Dim: {cfg.get(\"dim\")}
+          - Layers: {cfg.get(\"n_layers\")}
+          - Heads: {cfg.get(\"n_heads\")} (KV: {cfg.get(\"n_kv_heads\")})
+          - Experts: {cfg.get(\"n_experts\")} (active: {cfg.get(\"n_active_experts\")})
+          - Vocab: {cfg.get(\"vocab_size\")}
+          - Max Seq: {cfg.get(\"max_seq_len\")}
+
+          ## التدريب
+          - Best Loss: {result.get(\"best_loss\", \"N/A\")}
+          - Steps: {result.get(\"steps\", \"N/A\")}
+
+          ## المميزات
+          - ✅ Multi-Head Latent Attention (MLA)
+          - ✅ Mamba2-style SSM layers  
+          - ✅ Mixture of Experts + Shared Experts
+          - ✅ SwiGLU activation
+          - ✅ RoPE (500K theta)
+          - ✅ BPE Tokenizer (عربي + كود)
+          - ✅ Memory System
+          - ✅ Autonomous Agent
+          '''
+          with open('checkpoints/MODEL_CARD.md','w') as f:
+              f.write(card)
+          print('✅ Model card generated')
+          "
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: omega-ai-v2-build-${{ github.run_number }}
+          path: |
+            checkpoints/
+            memory/
+          retention-days: 90
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v2.0.${{ github.run_number }}"
+          name: "🧠 Omega AI v2.0.${{ github.run_number }}"
+          body: |
+            ## 🧠 Omega AI v2 - Build ${{ github.run_number }}
+            
+            ### ✨ المعمارية الجديدة:
+            | المكوّن | التفاصيل |
+            |---|---|
+            | Attention | Multi-Head Latent (MLA) - مثل DeepSeek V3 |
+            | SSM | Mamba2-style selective scan |
+            | FFN | Mixture of Experts + Shared Experts |
+            | Activation | SwiGLU |
+            | Positional | RoPE (500K theta) |
+            | Tokenizer | BPE 65K (عربي + إنجليزي + كود) |
+            | Memory | طويل + قصير المدى |
+            | Agent | وكيل ذاتي بأدوات |
+            
+            ### 📦 التحميل:
+            الـ checkpoints في Artifacts أعلاه
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
