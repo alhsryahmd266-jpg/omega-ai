@@ -1,33 +1,26 @@
 import os, sys, json, torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from omega.model.architecture import OmegaConfig, OmegaModel
+from omega.model.architecture import get_config, OmegaModel
 from omega.trainer.train import OmegaTrainer
 from scripts.prepare_data import get_training_data
 
 def main():
     is_ci = os.environ.get('CI','false') == 'true'
+    
     if is_ci:
-        cfg = OmegaConfig(
-            vocab_size=16000, dim=512, n_layers=8,
-            n_heads=8, n_kv_heads=2, head_dim=64,
-            kv_lora_rank=128, q_lora_rank=192, rope_head_dim=16,
-            n_experts=4, n_active_experts=2, n_shared_experts=1,
-            expert_dim=512, ssm_d_state=32, ssm_expand=2,
-            ssm_headdim=32, ssm_layers_freq=3,
-            max_seq_len=256, dropout=0.05,
-        )
-        tc = dict(batch_size=2, seq_len=128, max_lr=3e-4, min_lr=1e-5,
-                  warmup=30, total_steps=300, grad_accum=2,
+        cfg = get_config('nano')
+        tc = dict(batch_size=2, seq_len=64, max_lr=3e-4, min_lr=1e-5,
+                  warmup=20, total_steps=200, grad_accum=2,
                   grad_clip=1.0, wd=0.1, log_every=20,
-                  out_dir='checkpoints', epochs=2)
-        print("Mode: CI quick-train")
+                  out_dir='checkpoints', epochs=1)
+        print("Mode: CI nano")
     else:
-        cfg = OmegaConfig()  # Full config
-        tc = dict(batch_size=8, seq_len=512, max_lr=3e-4, min_lr=1e-5,
-                  warmup=200, total_steps=20000, grad_accum=8,
+        cfg = get_config('large')  # 16GB target
+        tc = dict(batch_size=4, seq_len=512, max_lr=2e-4, min_lr=1e-5,
+                  warmup=500, total_steps=50000, grad_accum=8,
                   grad_clip=1.0, wd=0.1, log_every=100,
                   out_dir='checkpoints', epochs=10)
-        print("Mode: Full training")
+        print("Mode: LARGE (16GB)")
 
     data_path = 'data/training_data.json'
     if os.path.exists(data_path):
@@ -40,8 +33,9 @@ def main():
     trainer.run(samples, epochs=tc['epochs'])
 
     os.makedirs('checkpoints', exist_ok=True)
+    cfg_dict = {k: v for k, v in cfg.__dict__.items() if not k.startswith('_')}
     with open('checkpoints/config.json','w') as f:
-        json.dump(cfg.__dict__, f, indent=2)
-    print("✅ Training complete!")
+        json.dump(cfg_dict, f, indent=2)
+    print("Done!")
 
 if __name__ == '__main__': main()
