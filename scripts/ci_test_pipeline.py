@@ -1,6 +1,6 @@
 import sys, torch, json, os
 sys.path.insert(0,'.')
-from omega.model.architecture import get_config, AIONModel
+from omega.model.architecture import get_config, AIONModel, AIONConfig
 from omega.tokenizer.bpe import OmegaTokenizer
 from omega.memory.persistent import OmegaPersistentMemory
 from omega.agent.agent import OmegaAgent
@@ -8,14 +8,12 @@ from omega.agent.agent import OmegaAgent
 with open('checkpoints/config.json') as f:
     raw = json.load(f)
 
-from omega.model.architecture import AIONConfig
-fields = {k: v for k, v in raw.items() if k in AIONConfig.__dataclass_fields__}
+fields = {k:v for k,v in raw.items() if k in AIONConfig.__dataclass_fields__}
 cfg = AIONConfig(**fields)
-model = OmegaModel_unused = None
-
-from omega.model.architecture import AIONModel
 model = AIONModel(cfg)
 ck = 'checkpoints/aion_best.pt'
+if not os.path.exists(ck):
+    ck = 'checkpoints/omega_best.pt'
 if os.path.exists(ck):
     data = torch.load(ck, map_location='cpu')
     model.load_state_dict(data['model'])
