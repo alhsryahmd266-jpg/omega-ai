@@ -717,3 +717,9 @@ def get_config(size: str = 'nano') -> AIONConfig:
         )
     else:  # large = 16GB target
         return AIONConfig()
+
+
+# Aliases for backward compatibility
+OmegaModel  = AIONModel
+OmegaConfig = AIONConfig
+NovaConfig  = AIONConfig
