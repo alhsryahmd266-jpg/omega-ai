@@ -1,0 +1,78 @@
+name: AION - Build & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build AION
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu -q
+          pip install numpy tqdm -q
+
+      - name: Test AION architecture
+        run: python3 scripts/ci_test_arch.py
+
+      - name: Test tokenizer
+        run: python3 scripts/ci_test_tok.py
+
+      - name: Test memory system
+        run: python3 scripts/ci_test_mem.py
+
+      - name: Prepare data
+        run: |
+          mkdir -p data
+          python3 scripts/prepare_data.py
+
+      - name: Train AION
+        run: python3 scripts/train_omega.py
+        env:
+          CI: true
+
+      - name: Test full pipeline
+        run: python3 scripts/ci_test_pipeline.py
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: aion-v1-build-${{ github.run_number }}
+          path: checkpoints/
+          retention-days: 90
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "aion-v1.0.${{ github.run_number }}"
+          name: "AION v1.0.${{ github.run_number }}"
+          body: |
+            # AION v1.0.${{ github.run_number }}
+            ## أول نموذج يعيد تعريف نفسه أثناء التفكير
+
+            | المكوّن | التفاصيل |
+            |---|---|
+            | **Meta-Cognitive Loop** | يراقب تفكيره ويعدّله |
+            | **Live LoRA** | يعدّل أوزانه مؤقتاً للمسائل الصعبة |
+            | **Confidence Oracle** | يقيس ثقته — لو أقل من 75% يعيد التفكير |
+            | **HSMoE** | خبراء هرميين: كلمة + جملة + مستند |
+            | **RSM** | هجين SSM + Attention |
+            | **الحجم** | ~9GB @ 4bit — يشتغل على 16GB |
+            | **الذاكرة** | SQLite دائمة + تعلم من الإنترنت |
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
