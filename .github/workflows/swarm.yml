@@ -1,0 +1,202 @@
+name: AION-SWARM Distributed Training
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      n_shards:
+        description: 'Number of parallel shards'
+        default: '4'
+        required: false
+  schedule:
+    - cron: '0 */6 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Prepare and Generate Data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu -q
+          pip install numpy requests -q
+
+      - name: Validate architecture
+        run: python3 scripts/ci_test_arch.py
+
+      - name: Prepare base data
+        run: |
+          mkdir -p data checkpoints memory
+          python3 scripts/prepare_data.py
+
+      - name: Download latest checkpoint if exists
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 scripts/download_latest_checkpoint.py
+
+      - name: Ensure base checkpoint exists
+        run: |
+          if [ ! -f checkpoints/aion_best.pt ] && [ ! -f checkpoints/omega_best.pt ]; then
+            echo "No checkpoint found, training base model from scratch"
+            CI=true python3 scripts/train_omega.py
+          fi
+
+      - name: Self-generate new training data
+        run: |
+          python3 omega/swarm/data_generator.py \
+            --n 50 \
+            --out data/training_data.json \
+            --existing data/training_data.json \
+            --memory memory/aion.db
+
+      - name: Upload shared data and checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarm-shared-data
+          path: |
+            data/
+            checkpoints/
+          retention-days: 7
+
+  train-shards:
+    name: Train Shard ${{ matrix.shard }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu -q
+          pip install numpy -q
+
+      - name: Download shared data
+        uses: actions/download-artifact@v4
+        with:
+          name: swarm-shared-data
+          path: .
+
+      - name: Train shard
+        run: |
+          CKPT="checkpoints/aion_best.pt"
+          if [ ! -f "$CKPT" ]; then CKPT="checkpoints/omega_best.pt"; fi
+          mkdir -p swarm_out
+          python3 omega/swarm/shard_trainer.py \
+            --shard ${{ matrix.shard }} \
+            --n-shards 4 \
+            --config checkpoints/config.json \
+            --data data/training_data.json \
+            --checkpoint "$CKPT" \
+            --out-dir swarm_out \
+            --max-steps 150
+
+      - name: Upload shard result
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-result-${{ matrix.shard }}
+          path: swarm_out/
+          retention-days: 7
+
+  aggregate:
+    name: Aggregate and Release
+    needs: train-shards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu -q
+          pip install numpy -q
+
+      - name: Download shared data
+        uses: actions/download-artifact@v4
+        with:
+          name: swarm-shared-data
+          path: .
+
+      - name: Download all shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: shard-result-*
+          path: swarm_merge
+          merge-multiple: true
+
+      - name: List downloaded files
+        run: ls -la swarm_merge/
+
+      - name: Aggregate shards
+        run: |
+          mkdir -p checkpoints
+          python3 omega/swarm/aggregator.py \
+            --swarm-dir swarm_merge \
+            --checkpoint checkpoints/aion_best.pt \
+            --config checkpoints/config.json \
+            --out checkpoints/aion_best.pt \
+            --method soup
+
+      - name: Validate merged model
+        run: python3 scripts/validate_merged.py
+
+      - name: Upload final checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: aion-swarm-gen-${{ github.run_number }}
+          path: checkpoints/
+          retention-days: 90
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "swarm-v1.0.${{ github.run_number }}"
+          name: "AION-SWARM Generation ${{ github.run_number }}"
+          body: |
+            # AION-SWARM Generation ${{ github.run_number }}
+
+            ## النظام الموزع المستمر
+            - 4 shards دربت بالتوازي
+            - دمج تلقائي بـ Model Soup
+            - بيانات تدريب ولدها النموذج نفسه
+            - يعمل تلقائياً كل 6 ساعات
+
+            جزء من نظام تدريب مستمر لا يتوقف.
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit data back to repo
+        run: |
+          git config user.name "AION-SWARM Bot"
+          git config user.email "swarm@aion.ai"
+          git add data/training_data.json checkpoints/config.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "SWARM auto-update generation ${{ github.run_number }}"
+          git push || echo "No changes to push"
