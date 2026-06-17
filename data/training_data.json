@@ -1,0 +1,330 @@
+[
+  {
+    "user": "نفّذ Dijkstra لأقصر مسار",
+    "assistant": "<think>خوارزمية Dijkstra: Priority Queue + Relaxation</think>\n<python>\nimport heapq\nfrom collections import defaultdict\n\ndef dijkstra(graph: dict, start: str) -> dict:\n    distances = {node: float('inf') for node in graph}\n    distances[start] = 0\n    pq = [(0, start)]\n    visited = set()\n\n    while pq:\n        dist, node = heapq.heappop(pq)\n        if node in visited:\n            continue\n        visited.add(node)\n        for neighbor, weight in graph[node].items():\n            new_dist = dist + weight\n            if new_dist < distances[neighbor]:\n                distances[neighbor] = new_dist\n                heapq.heappush(pq, (new_dist, neighbor))\n    return distances\n\n# اختبار\ngraph = {\n    'A': {'B': 4, 'C': 2},\n    'B': {'D': 3, 'C': 1},\n    'C': {'B': 1, 'D': 5},\n    'D': {}\n}\nprint(dijkstra(graph, 'A'))  # {'A':0,'B':3,'C':2,'D':6}\n</python>"
+  },
+  {
+    "user": "نفّذ A* Search للـ pathfinding",
+    "assistant": "<think>A* = Dijkstra + Heuristic للتوجيه الذكي</think>\n<python>\nimport heapq\nfrom typing import Callable, List, Tuple\n\ndef astar(grid: List[List[int]], start: Tuple, goal: Tuple,\n          h: Callable = None) -> List[Tuple]:\n    if h is None:\n        h = lambda a, b: abs(a[0]-b[0]) + abs(a[1]-b[1])  # Manhattan\n\n    rows, cols = len(grid), len(grid[0])\n    open_set = [(0 + h(start, goal), 0, start, [start])]\n    visited = set()\n\n    while open_set:\n        f, g, curr, path = heapq.heappop(open_set)\n        if curr == goal:\n            return path\n        if curr in visited:\n            continue\n        visited.add(curr)\n\n        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:\n            nr, nc = curr[0]+dr, curr[1]+dc\n            if 0<=nr<rows and 0<=nc<cols and grid[nr][nc]==0:\n                nxt = (nr, nc)\n                if nxt not in visited:\n                    ng = g + 1\n                    heapq.heappush(open_set,\n                        (ng + h(nxt, goal), ng, nxt, path + [nxt]))\n    return []\n\ngrid = [\n    [0,0,0,0,0],\n    [0,1,1,1,0],\n    [0,0,0,1,0],\n    [0,1,0,0,0],\n    [0,0,0,0,0],\n]\npath = astar(grid, (0,0), (4,4))\nprint(\"Path:\", path)\n</python>"
+  },
+  {
+    "user": "نفّذ Binary Search Tree مع كل العمليات",
+    "assistant": "<python>\nclass BST:\n    class Node:\n        def __init__(self, val):\n            self.val = val\n            self.left = self.right = None\n\n    def __init__(self): self.root = None\n\n    def insert(self, val):\n        def _ins(node, val):\n            if not node: return self.Node(val)\n            if val < node.val: node.left  = _ins(node.left,  val)\n            else:              node.right = _ins(node.right, val)\n            return node\n        self.root = _ins(self.root, val)\n\n    def search(self, val) -> bool:\n        node = self.root\n        while node:\n            if val == node.val: return True\n            node = node.left if val < node.val else node.right\n        return False\n\n    def delete(self, val):\n        def _del(node, val):\n            if not node: return None\n            if val < node.val:\n                node.left  = _del(node.left,  val)\n            elif val > node.val:\n                node.right = _del(node.right, val)\n            else:\n                if not node.left:  return node.right\n                if not node.right: return node.left\n                # Find inorder successor\n                succ = node.right\n                while succ.left: succ = succ.left\n                node.val   = succ.val\n                node.right = _del(node.right, succ.val)\n            return node\n        self.root = _del(self.root, val)\n\n    def inorder(self):\n        res = []\n        def _io(n):\n            if n: _io(n.left); res.append(n.val); _io(n.right)\n        _io(self.root)\n        return res\n\nbst = BST()\nfor v in [5,3,7,1,4,6,8]: bst.insert(v)\nprint(bst.inorder())   # [1,3,4,5,6,7,8]\nbst.delete(3)\nprint(bst.inorder())   # [1,4,5,6,7,8]\n</python>"
+  },
+  {
+    "user": "نفّذ LRU Cache من الصفر",
+    "assistant": "<python>\nfrom collections import OrderedDict\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.cap   = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache:\n            return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, val: int):\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = val\n        if len(self.cache) > self.cap:\n            self.cache.popitem(last=False)\n\n# Manual implementation with doubly linked list (O(1) guaranteed)\nclass LRUCacheFast:\n    class Node:\n        def __init__(self, k=0, v=0):\n            self.k, self.v = k, v\n            self.prev = self.next = None\n\n    def __init__(self, capacity):\n        self.cap  = capacity\n        self.map  = {}\n        self.head = self.Node()\n        self.tail = self.Node()\n        self.head.next = self.tail\n        self.tail.prev = self.head\n\n    def _remove(self, node):\n        node.prev.next = node.next\n        node.next.prev = node.prev\n\n    def _insert(self, node):  # insert at tail (most recent)\n        node.prev = self.tail.prev\n        node.next = self.tail\n        self.tail.prev.next = node\n        self.tail.prev = node\n\n    def get(self, key):\n        if key in self.map:\n            self._remove(self.map[key])\n            self._insert(self.map[key])\n            return self.map[key].v\n        return -1\n\n    def put(self, key, val):\n        if key in self.map:\n            self._remove(self.map[key])\n        node = self.Node(key, val)\n        self._insert(node)\n        self.map[key] = node\n        if len(self.map) > self.cap:\n            lru = self.head.next\n            self._remove(lru)\n            del self.map[lru.k]\n\ncache = LRUCacheFast(2)\ncache.put(1, 1); cache.put(2, 2)\nprint(cache.get(1))   # 1\ncache.put(3, 3)\nprint(cache.get(2))   # -1 (evicted)\n</python>"
+  },
+  {
+    "user": "نفّذ Graph BFS و DFS مع تطبيقات عملية",
+    "assistant": "<python>\nfrom collections import deque\nfrom typing import Dict, List, Set, Optional\n\nclass Graph:\n    def __init__(self): self.adj: Dict[int, List[int]] = {}\n\n    def add_edge(self, u: int, v: int, directed=False):\n        self.adj.setdefault(u, []).append(v)\n        if not directed:\n            self.adj.setdefault(v, []).append(u)\n\n    def bfs(self, start: int) -> List[int]:\n        visited, order = {start}, []\n        queue = deque([start])\n        while queue:\n            node = queue.popleft()\n            order.append(node)\n            for nb in self.adj.get(node, []):\n                if nb not in visited:\n                    visited.add(nb)\n                    queue.append(nb)\n        return order\n\n    def dfs(self, start: int) -> List[int]:\n        visited, order = set(), []\n        def _dfs(v):\n            visited.add(v); order.append(v)\n            for nb in self.adj.get(v, []):\n                if nb not in visited: _dfs(nb)\n        _dfs(start)\n        return order\n\n    def has_cycle(self) -> bool:\n        # Detect cycle in directed graph\n        WHITE, GRAY, BLACK = 0, 1, 2\n        color = {v: WHITE for v in self.adj}\n        def dfs(v):\n            color[v] = GRAY\n            for nb in self.adj.get(v, []):\n                if color[nb] == GRAY: return True\n                if color[nb] == WHITE and dfs(nb): return True\n            color[v] = BLACK\n            return False\n        return any(dfs(v) for v in self.adj if color[v] == WHITE)\n\n    def topo_sort(self) -> List[int]:\n        # Kahn algorithm for topological sort\n        in_deg = {v: 0 for v in self.adj}\n        for v in self.adj:\n            for nb in self.adj[v]:\n                in_deg[nb] = in_deg.get(nb, 0) + 1\n        queue = deque(v for v in in_deg if in_deg[v] == 0)\n        order = []\n        while queue:\n            v = queue.popleft(); order.append(v)\n            for nb in self.adj.get(v, []):\n                in_deg[nb] -= 1\n                if in_deg[nb] == 0: queue.append(nb)\n        return order if len(order) == len(self.adj) else []\n\ng = Graph()\nfor u, v in [(0,1),(0,2),(1,3),(2,3),(3,4)]:\n    g.add_edge(u, v, directed=True)\nprint(\"BFS:\", g.bfs(0))\nprint(\"Topo:\", g.topo_sort())\n</python>"
+  },
+  {
+    "user": "اكتب Clean Architecture كاملة لتطبيق Android",
+    "assistant": "<android><kotlin>\n// ── Domain Layer ──────────────────────────────────────\ndata class User(val id: String, val name: String, val email: String)\n\ninterface UserRepository {\n    suspend fun getUser(id: String): Result<User>\n    suspend fun saveUser(user: User): Result<Unit>\n    fun observeUsers(): Flow<List<User>>\n}\n\nclass GetUserUseCase(private val repo: UserRepository) {\n    suspend operator fun invoke(id: String): Result<User> =\n        repo.getUser(id)\n}\n\n// ── Data Layer ─────────────────────────────────────────\n@Entity(tableName = \"users\")\ndata class UserEntity(\n    @PrimaryKey val id: String,\n    val name: String,\n    val email: String\n)\n\n@Dao\ninterface UserDao {\n    @Query(\"SELECT * FROM users WHERE id = :id\")\n    suspend fun getById(id: String): UserEntity?\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun insert(user: UserEntity)\n\n    @Query(\"SELECT * FROM users\")\n    fun observeAll(): Flow<List<UserEntity>>\n}\n\nclass UserRepositoryImpl(\n    private val dao: UserDao,\n    private val api: UserApi,\n    private val dispatcher: CoroutineDispatcher = Dispatchers.IO\n) : UserRepository {\n    override suspend fun getUser(id: String): Result<User> =\n        withContext(dispatcher) {\n            runCatching {\n                dao.getById(id)?.toDomain()\n                    ?: api.fetchUser(id).also {\n                        dao.insert(it.toEntity())\n                    }.toDomain()\n            }\n        }\n\n    override fun observeUsers(): Flow<List<User>> =\n        dao.observeAll().map { list -> list.map { it.toDomain() } }\n}\n\n// ── Presentation Layer ─────────────────────────────────\nsealed class UiState<out T> {\n    object Loading : UiState<Nothing>()\n    data class Success<T>(val data: T) : UiState<T>()\n    data class Error(val message: String) : UiState<Nothing>()\n}\n\nclass UserViewModel(\n    private val getUser: GetUserUseCase\n) : ViewModel() {\n    private val _state = MutableStateFlow<UiState<User>>(UiState.Loading)\n    val state: StateFlow<UiState<User>> = _state.asStateFlow()\n\n    fun loadUser(id: String) {\n        viewModelScope.launch {\n            _state.value = UiState.Loading\n            getUser(id).fold(\n                onSuccess = { _state.value = UiState.Success(it) },\n                onFailure = { _state.value = UiState.Error(it.message ?: \"خطأ\") }\n            )\n        }\n    }\n}\n</kotlin></android>"
+  },
+  {
+    "user": "اكتب Jetpack Compose UI متقدمة مع animations",
+    "assistant": "<kotlin>\n@Composable\nfun AnimatedCard(\n    title: String,\n    expanded: Boolean,\n    onToggle: () -> Unit,\n    content: @Composable () -> Unit\n) {\n    val rotation by animateFloatAsState(\n        targetValue = if (expanded) 180f else 0f,\n        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)\n    )\n    val elevation by animateDpAsState(\n        targetValue = if (expanded) 8.dp else 2.dp\n    )\n\n    Card(\n        modifier = Modifier\n            .fillMaxWidth()\n            .animateContentSize(\n                animationSpec = spring(\n                    dampingRatio = Spring.DampingRatioLowBouncy,\n                    stiffness = Spring.StiffnessLow\n                )\n            ),\n        elevation = CardDefaults.cardElevation(elevation)\n    ) {\n        Column {\n            Row(\n                modifier = Modifier\n                    .fillMaxWidth()\n                    .clickable(onClick = onToggle)\n                    .padding(16.dp),\n                horizontalArrangement = Arrangement.SpaceBetween,\n                verticalAlignment = Alignment.CenterVertically\n            ) {\n                Text(title, style = MaterialTheme.typography.titleMedium)\n                Icon(\n                    Icons.Default.ExpandMore,\n                    contentDescription = null,\n                    modifier = Modifier.rotate(rotation)\n                )\n            }\n            AnimatedVisibility(\n                visible = expanded,\n                enter = fadeIn() + expandVertically(),\n                exit  = fadeOut() + shrinkVertically()\n            ) {\n                Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {\n                    content()\n                }\n            }\n        }\n    }\n}\n\n// Shimmer loading effect\n@Composable\nfun ShimmerBox(modifier: Modifier = Modifier) {\n    val transition = rememberInfiniteTransition()\n    val shimmer by transition.animateFloat(\n        initialValue = -1f, targetValue = 2f,\n        animationSpec = infiniteRepeatable(tween(1200))\n    )\n    val brush = Brush.horizontalGradient(\n        colors = listOf(Color.Gray.copy(.3f), Color.Gray.copy(.6f), Color.Gray.copy(.3f)),\n        startX = shimmer * 300, endX = shimmer * 300 + 300\n    )\n    Box(modifier.background(brush))\n}\n</kotlin>"
+  },
+  {
+    "user": "اكتب Room Database مع Migrations و Relations",
+    "assistant": "<kotlin>\n// Entities\n@Entity(tableName = \"posts\")\ndata class Post(\n    @PrimaryKey(autoGenerate = true) val id: Long = 0,\n    val title: String,\n    val content: String,\n    val authorId: Long,\n    val createdAt: Long = System.currentTimeMillis()\n)\n\n@Entity(tableName = \"comments\",\n    foreignKeys = [ForeignKey(\n        entity = Post::class,\n        parentColumns = [\"id\"],\n        childColumns = [\"postId\"],\n        onDelete = ForeignKey.CASCADE\n    )],\n    indices = [Index(\"postId\")]\n)\ndata class Comment(\n    @PrimaryKey(autoGenerate = true) val id: Long = 0,\n    val postId: Long,\n    val text: String,\n    val author: String\n)\n\n// Relation\ndata class PostWithComments(\n    @Embedded val post: Post,\n    @Relation(parentColumn = \"id\", entityColumn = \"postId\")\n    val comments: List<Comment>\n)\n\n// DAO\n@Dao\ninterface PostDao {\n    @Transaction\n    @Query(\"SELECT * FROM posts WHERE id = :id\")\n    suspend fun getPostWithComments(id: Long): PostWithComments?\n\n    @Query(\"SELECT * FROM posts ORDER BY createdAt DESC\")\n    fun getAllPosts(): Flow<List<Post>>\n\n    @Insert suspend fun insertPost(post: Post): Long\n    @Insert suspend fun insertComment(comment: Comment)\n    @Update suspend fun updatePost(post: Post)\n    @Delete suspend fun deletePost(post: Post)\n}\n\n// Database with Migration\n@Database(entities = [Post::class, Comment::class], version = 2)\nabstract class AppDatabase : RoomDatabase() {\n    abstract fun postDao(): PostDao\n\n    companion object {\n        val MIGRATION_1_2 = object : Migration(1, 2) {\n            override fun migrate(db: SupportSQLiteDatabase) {\n                db.execSQL(\"ALTER TABLE posts ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0\")\n            }\n        }\n\n        fun create(context: Context) = Room.databaseBuilder(\n            context, AppDatabase::class.java, \"app_db\"\n        ).addMigrations(MIGRATION_1_2).build()\n    }\n}\n</kotlin>"
+  },
+  {
+    "user": "نفّذ Transformer من الصفر بـ PyTorch",
+    "assistant": "<python>\nimport torch\nimport torch.nn as nn\nimport math\n\nclass MultiHeadAttention(nn.Module):\n    def __init__(self, d_model: int, n_heads: int, dropout: float = 0.1):\n        super().__init__()\n        assert d_model % n_heads == 0\n        self.d_k    = d_model // n_heads\n        self.h      = n_heads\n        self.qkv    = nn.Linear(d_model, d_model * 3, bias=False)\n        self.out    = nn.Linear(d_model, d_model, bias=False)\n        self.drop   = nn.Dropout(dropout)\n        self.scale  = math.sqrt(self.d_k)\n\n    def forward(self, x, mask=None):\n        B, T, D = x.shape\n        qkv = self.qkv(x).chunk(3, dim=-1)\n        q, k, v = [t.view(B, T, self.h, self.d_k).transpose(1,2) for t in qkv]\n        attn = (q @ k.transpose(-2,-1)) / self.scale\n        if mask is not None:\n            attn = attn.masked_fill(mask == 0, float('-inf'))\n        attn = self.drop(torch.softmax(attn, dim=-1))\n        return self.out((attn @ v).transpose(1,2).contiguous().view(B, T, D))\n\nclass FeedForward(nn.Module):\n    def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1):\n        super().__init__()\n        self.net = nn.Sequential(\n            nn.Linear(d_model, d_ff),\n            nn.GELU(),\n            nn.Dropout(dropout),\n            nn.Linear(d_ff, d_model),\n        )\n    def forward(self, x): return self.net(x)\n\nclass TransformerBlock(nn.Module):\n    def __init__(self, d_model: int, n_heads: int, d_ff: int, dropout=0.1):\n        super().__init__()\n        self.attn = MultiHeadAttention(d_model, n_heads, dropout)\n        self.ff   = FeedForward(d_model, d_ff, dropout)\n        self.n1   = nn.LayerNorm(d_model)\n        self.n2   = nn.LayerNorm(d_model)\n        self.drop = nn.Dropout(dropout)\n\n    def forward(self, x, mask=None):\n        x = x + self.drop(self.attn(self.n1(x), mask))\n        x = x + self.drop(self.ff(self.n2(x)))\n        return x\n\nclass GPT(nn.Module):\n    def __init__(self, vocab: int, d: int, heads: int, layers: int,\n                 ctx: int, dropout=0.1):\n        super().__init__()\n        self.embed = nn.Embedding(vocab, d)\n        self.pos   = nn.Embedding(ctx, d)\n        self.blocks= nn.ModuleList([TransformerBlock(d, heads, d*4, dropout)\n                                     for _ in range(layers)])\n        self.norm  = nn.LayerNorm(d)\n        self.head  = nn.Linear(d, vocab, bias=False)\n        self.head.weight = self.embed.weight  # weight tying\n\n    def forward(self, x):\n        B, T = x.shape\n        pos = torch.arange(T, device=x.device)\n        h = self.embed(x) + self.pos(pos)\n        mask = torch.tril(torch.ones(T, T, device=x.device))\n        for block in self.blocks:\n            h = block(h, mask.unsqueeze(0).unsqueeze(0))\n        return self.head(self.norm(h))\n\nmodel = GPT(vocab=50257, d=256, heads=8, layers=6, ctx=512)\nprint(f\"Params: {sum(p.numel() for p in model.parameters())/1e6:.1f}M\")\n</python>"
+  },
+  {
+    "user": "نفّذ خوارزمية backpropagation يدوياً",
+    "assistant": "<python>\nimport numpy as np\n\nclass Value:\n    \"\"\"Autograd engine - مثل micrograd\"\"\"\n    def __init__(self, data, _children=(), op='', label=''):\n        self.data  = float(data)\n        self.grad  = 0.0\n        self._back = lambda: None\n        self._prev = set(_children)\n        self.op    = op\n        self.label = label\n\n    def __add__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out   = Value(self.data + other.data, (self, other), '+')\n        def _back():\n            self.grad  += out.grad\n            other.grad += out.grad\n        out._back = _back\n        return out\n\n    def __mul__(self, other):\n        other = other if isinstance(other, Value) else Value(other)\n        out   = Value(self.data * other.data, (self, other), '*')\n        def _back():\n            self.grad  += other.data * out.grad\n            other.grad += self.data  * out.grad\n        out._back = _back\n        return out\n\n    def tanh(self):\n        t   = np.tanh(self.data)\n        out = Value(t, (self,), 'tanh')\n        def _back():\n            self.grad += (1 - t**2) * out.grad\n        out._back = _back\n        return out\n\n    def relu(self):\n        out = Value(max(0, self.data), (self,), 'relu')\n        def _back():\n            self.grad += (out.data > 0) * out.grad\n        out._back = _back\n        return out\n\n    def backward(self):\n        topo, visited = [], set()\n        def build(v):\n            if v not in visited:\n                visited.add(v)\n                for child in v._prev: build(child)\n                topo.append(v)\n        build(self)\n        self.grad = 1.0\n        for v in reversed(topo): v._back()\n\n    def __repr__(self): return f\"Value(data={self.data:.4f}, grad={self.grad:.4f})\"\n    def __radd__(self, other): return self + other\n    def __rmul__(self, other): return self * other\n    def __neg__(self): return self * -1\n    def __sub__(self, other): return self + (-other)\n    def __pow__(self, n):\n        out = Value(self.data**n, (self,), f'**{n}')\n        def _back(): self.grad += n * (self.data**(n-1)) * out.grad\n        out._back = _back\n        return out\n\n# اختبار: تدريب neuron بسيط\nx = Value(2.0, label='x')\nw = Value(-3.0, label='w')\nb = Value(6.8, label='b')\nout = (x * w + b).tanh()\nout.backward()\nprint(f\"x.grad={x.grad:.4f}, w.grad={w.grad:.4f}, b.grad={b.grad:.4f}\")\n</python>"
+  },
+  {
+    "user": "نفّذ نظام Retrieval-Augmented Generation (RAG) كامل",
+    "assistant": "<python>\nimport numpy as np\nfrom typing import List, Dict\n\nclass SimpleEmbedder:\n    \"\"\"Embedder بسيط بدون APIs خارجية\"\"\"\n    def embed(self, text: str) -> np.ndarray:\n        words = text.lower().split()\n        vec = np.zeros(512)\n        for i, w in enumerate(words):\n            h = hash(w) % 512\n            vec[h] += 1.0 / (i + 1)\n        norm = np.linalg.norm(vec)\n        return vec / norm if norm > 0 else vec\n\nclass VectorStore:\n    def __init__(self, embedder: SimpleEmbedder):\n        self.embedder = embedder\n        self.docs: List[str] = []\n        self.vecs: List[np.ndarray] = []\n\n    def add(self, text: str):\n        self.docs.append(text)\n        self.vecs.append(self.embedder.embed(text))\n\n    def search(self, query: str, k: int = 3) -> List[Dict]:\n        q_vec = self.embedder.embed(query)\n        scores = [np.dot(q_vec, v) for v in self.vecs]\n        top_k  = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]\n        return [{'text': self.docs[i], 'score': scores[i]} for i in top_k]\n\nclass RAGSystem:\n    def __init__(self, generator=None):\n        self.store     = VectorStore(SimpleEmbedder())\n        self.generator = generator  # LLM call\n\n    def index(self, documents: List[str], chunk_size: int = 200):\n        for doc in documents:\n            words = doc.split()\n            chunks = [' '.join(words[i:i+chunk_size])\n                      for i in range(0, len(words), chunk_size//2)]\n            for chunk in chunks:\n                if chunk.strip(): self.store.add(chunk)\n        print(f\"Indexed {len(self.store.docs)} chunks\")\n\n    def query(self, question: str, k: int = 3) -> str:\n        results = self.store.search(question, k)\n        context = \"\n\n\".join(f\"[{i+1}] {r['text']}\"\n                               for i, r in enumerate(results))\n        prompt = f\"\"\"السياق:\n{context}\n\nالسؤال: {question}\nالإجابة:\"\"\"\n        if self.generator:\n            return self.generator(prompt)\n        return f\"Context retrieved:\n{context}\"\n\n# اختبار\nrag = RAGSystem()\ndocs = [\n    \"Python لغة برمجة عالية المستوى تستخدم في الذكاء الاصطناعي وتحليل البيانات\",\n    \"Kotlin لغة رسمية لتطوير Android وتتميز بأمان النوع والتعبيرية\",\n    \"الذكاء الاصطناعي يتضمن التعلم الآلي والتعلم العميق والشبكات العصبية\",\n]\nrag.index(docs)\nresult = rag.query(\"ما هي لغة تطوير Android؟\")\nprint(result)\n</python>"
+  },
+  {
+    "user": "صمّم نظام Event-Driven Architecture بـ Python",
+    "assistant": "<python>\nimport asyncio\nfrom collections import defaultdict\nfrom typing import Any, Callable, Coroutine\nimport json, time\n\nclass Event:\n    def __init__(self, type: str, data: Any, source: str = \"\"):\n        self.type      = type\n        self.data      = data\n        self.source    = source\n        self.timestamp = time.time()\n        self.id        = f\"{type}_{int(self.timestamp*1000)}\"\n\nclass EventBus:\n    \"\"\"نظام نشر/اشتراك غير متزامن\"\"\"\n    def __init__(self):\n        self._handlers:  defaultdict = defaultdict(list)\n        self._middleware: list        = []\n        self._history:   list         = []\n\n    def use(self, middleware: Callable):\n        self._middleware.append(middleware)\n        return self\n\n    def on(self, event_type: str, handler: Callable):\n        self._handlers[event_type].append(handler)\n        return self\n\n    def off(self, event_type: str, handler: Callable):\n        self._handlers[event_type].remove(handler)\n\n    async def emit(self, event: Event):\n        # تطبيق الـ middleware\n        for mw in self._middleware:\n            event = await mw(event) if asyncio.iscoroutinefunction(mw)                     else mw(event)\n            if event is None: return\n\n        self._history.append(event)\n        handlers = (self._handlers.get(event.type, []) +\n                    self._handlers.get('*', []))\n        await asyncio.gather(*[\n            h(event) if asyncio.iscoroutinefunction(h) else asyncio.to_thread(h, event)\n            for h in handlers\n        ])\n\n# اختبار\nbus = EventBus()\n\nasync def logger_mw(event):\n    print(f\"[LOG] {event.type}: {event.data}\")\n    return event\n\nbus.use(logger_mw)\n\n@bus.on(\"user.created\")\nasync def send_welcome(event):\n    print(f\"Welcome email → {event.data['email']}\")\n\n@bus.on(\"user.created\")\nasync def setup_profile(event):\n    print(f\"Profile created for {event.data['name']}\")\n\n@bus.on(\"*\")\nasync def audit(event):\n    print(f\"[AUDIT] {event.source} emitted {event.type}\")\n\nasync def main():\n    await bus.emit(Event(\"user.created\",\n        {\"name\": \"Ahmed\", \"email\": \"ahmed@example.com\"},\n        source=\"auth-service\"))\n\nasyncio.run(main())\n</python>"
+  },
+  {
+    "user": "نفّذ Connection Pool و Rate Limiter",
+    "assistant": "<python>\nimport asyncio\nimport time\nfrom collections import deque\nfrom typing import Optional\n\nclass ConnectionPool:\n    \"\"\"Pool للاتصالات مع timeout و health check\"\"\"\n    def __init__(self, factory, max_size: int = 10, timeout: float = 30):\n        self._factory  = factory\n        self._max      = max_size\n        self._timeout  = timeout\n        self._pool     = deque()\n        self._size     = 0\n        self._sem      = asyncio.Semaphore(max_size)\n        self._lock     = asyncio.Lock()\n\n    async def acquire(self):\n        await self._sem.acquire()\n        async with self._lock:\n            if self._pool:\n                conn = self._pool.popleft()\n                if await self._is_healthy(conn):\n                    return conn\n                else:\n                    self._size -= 1\n            self._size += 1\n        return await self._factory()\n\n    async def release(self, conn):\n        async with self._lock:\n            self._pool.append(conn)\n        self._sem.release()\n\n    async def _is_healthy(self, conn) -> bool:\n        try:\n            return await conn.ping() if hasattr(conn, 'ping') else True\n        except:\n            return False\n\n    async def __aenter__(self):\n        self._conn = await self.acquire()\n        return self._conn\n\n    async def __aexit__(self, *_):\n        await self.release(self._conn)\n\n\nclass RateLimiter:\n    \"\"\"Token Bucket Algorithm\"\"\"\n    def __init__(self, rate: float, burst: int):\n        self.rate    = rate    # tokens per second\n        self.burst   = burst   # max tokens\n        self.tokens  = burst\n        self.last    = time.monotonic()\n        self._lock   = asyncio.Lock()\n\n    async def acquire(self, n: int = 1) -> bool:\n        async with self._lock:\n            now = time.monotonic()\n            elapsed = now - self.last\n            self.tokens = min(self.burst, self.tokens + elapsed * self.rate)\n            self.last = now\n            if self.tokens >= n:\n                self.tokens -= n\n                return True\n            return False\n\n    async def wait(self, n: int = 1):\n        while not await self.acquire(n):\n            await asyncio.sleep(1 / self.rate)\n\n\nclass SlidingWindowRateLimiter:\n    \"\"\"Sliding Window لـ API rate limiting\"\"\"\n    def __init__(self, max_requests: int, window: float):\n        self.max  = max_requests\n        self.win  = window\n        self.reqs: dict = {}  # client_id -> deque of timestamps\n\n    def is_allowed(self, client_id: str) -> bool:\n        now = time.time()\n        if client_id not in self.reqs:\n            self.reqs[client_id] = deque()\n        q = self.reqs[client_id]\n        while q and now - q[0] > self.win:\n            q.popleft()\n        if len(q) < self.max:\n            q.append(now)\n            return True\n        return False\n\nlimiter = SlidingWindowRateLimiter(max_requests=5, window=10.0)\nfor i in range(7):\n    allowed = limiter.is_allowed(\"user_1\")\n    print(f\"Request {i+1}: {'✅' if allowed else '❌'}\")\n</python>"
+  },
+  {
+    "user": "حل Longest Common Subsequence وشرح الـ DP",
+    "assistant": "<python>\ndef lcs(s1: str, s2: str) -> str:\n    m, n = len(s1), len(s2)\n    # dp[i][j] = طول LCS لـ s1[:i] و s2[:j]\n    dp = [[0]*(n+1) for _ in range(m+1)]\n\n    for i in range(1, m+1):\n        for j in range(1, n+1):\n            if s1[i-1] == s2[j-1]:\n                dp[i][j] = dp[i-1][j-1] + 1\n            else:\n                dp[i][j] = max(dp[i-1][j], dp[i][j-1])\n\n    # Backtrack لإيجاد السلسلة نفسها\n    result = []\n    i, j = m, n\n    while i > 0 and j > 0:\n        if s1[i-1] == s2[j-1]:\n            result.append(s1[i-1])\n            i -= 1; j -= 1\n        elif dp[i-1][j] > dp[i][j-1]:\n            i -= 1\n        else:\n            j -= 1\n\n    return ''.join(reversed(result))\n\nprint(lcs(\"ABCBDAB\", \"BDCABA\"))   # BCBA\nprint(lcs(\"AGGTAB\", \"GXTXAYB\"))   # GTAB\n\n# Space-optimized O(n) space\ndef lcs_length_optimized(s1: str, s2: str) -> int:\n    prev = [0] * (len(s2) + 1)\n    for c in s1:\n        curr = [0] * (len(s2) + 1)\n        for j, d in enumerate(s2, 1):\n            curr[j] = prev[j-1] + 1 if c == d else max(prev[j], curr[j-1])\n        prev = curr\n    return prev[-1]\n</python>"
+  },
+  {
+    "user": "حل Word Break II وExplain Memoization",
+    "assistant": "<python>\nfrom functools import lru_cache\nfrom typing import List\n\ndef word_break_ii(s: str, words: List[str]) -> List[str]:\n    word_set = set(words)\n\n    @lru_cache(maxsize=None)\n    def dp(start: int) -> List[str]:\n        \"\"\"يرجع كل جمل ممكنة من الموضع start\"\"\"\n        if start == len(s):\n            return ['']\n\n        result = []\n        for end in range(start + 1, len(s) + 1):\n            word = s[start:end]\n            if word in word_set:\n                for rest in dp(end):\n                    result.append(word + (' ' + rest if rest else ''))\n\n        return result\n\n    return dp(0)\n\nprint(word_break_ii(\"catsanddog\", [\"cat\",\"cats\",\"and\",\"sand\",\"dog\"]))\n# ['cat sand dog', 'cats and dog']\n\n# Version 2: bottom-up DP\ndef word_break_ii_v2(s: str, words: List[str]) -> List[str]:\n    word_set = set(words)\n    n = len(s)\n    dp = [[] for _ in range(n + 1)]\n    dp[0] = ['']\n\n    for i in range(1, n + 1):\n        for j in range(i):\n            word = s[j:i]\n            if word in word_set and dp[j]:\n                for prev in dp[j]:\n                    dp[i].append((prev + ' ' + word).strip())\n\n    return dp[n]\n</python>"
+  },
+  {
+    "user": "نفّذ Trie مع Autocomplete",
+    "assistant": "<python>\nfrom collections import defaultdict\nimport heapq\nfrom typing import List\n\nclass TrieNode:\n    def __init__(self):\n        self.children = {}\n        self.is_end   = False\n        self.count    = 0  # عدد مرات البحث\n\nclass Trie:\n    def __init__(self):\n        self.root = TrieNode()\n\n    def insert(self, word: str, count: int = 1):\n        node = self.root\n        for ch in word:\n            node = node.children.setdefault(ch, TrieNode())\n        node.is_end = True\n        node.count  = count\n\n    def search(self, word: str) -> bool:\n        node = self._traverse(word)\n        return node is not None and node.is_end\n\n    def starts_with(self, prefix: str) -> bool:\n        return self._traverse(prefix) is not None\n\n    def autocomplete(self, prefix: str, k: int = 5) -> List[str]:\n        node = self._traverse(prefix)\n        if not node: return []\n\n        results = []\n        def dfs(curr, word):\n            if curr.is_end:\n                heapq.heappush(results, (-curr.count, word))\n            for ch, child in curr.children.items():\n                dfs(child, word + ch)\n\n        dfs(node, prefix)\n        return [word for _, word in heapq.nsmallest(k, results)]\n\n    def _traverse(self, prefix: str):\n        node = self.root\n        for ch in prefix:\n            if ch not in node.children: return None\n            node = node.children[ch]\n        return node\n\n# اختبار\ntrie = Trie()\nwords = [(\"python\", 100), (\"pytorch\", 80), (\"pandas\", 60),\n         (\"programming\", 40), (\"problem\", 30)]\nfor w, c in words: trie.insert(w, c)\n\nprint(trie.autocomplete(\"p\"))      # ['python','pytorch','pandas',...]\nprint(trie.autocomplete(\"py\"))     # ['python','pytorch']\nprint(trie.search(\"python\"))       # True\n</python>"
+  },
+  {
+    "user": "نفّذ Observer Pattern بـ Python و Kotlin",
+    "assistant": "<python>\nfrom abc import ABC, abstractmethod\nfrom typing import List, Any\n\nclass Observer(ABC):\n    @abstractmethod\n    def update(self, event: str, data: Any): pass\n\nclass Observable:\n    def __init__(self):\n        self._observers: List[Observer] = []\n\n    def subscribe(self, observer: Observer):\n        self._observers.append(observer)\n        return self\n\n    def unsubscribe(self, observer: Observer):\n        self._observers.remove(observer)\n\n    def notify(self, event: str, data: Any = None):\n        for obs in self._observers:\n            obs.update(event, data)\n\nclass StockMarket(Observable):\n    def __init__(self, symbol: str):\n        super().__init__()\n        self.symbol = symbol\n        self._price = 0.0\n\n    @property\n    def price(self): return self._price\n\n    @price.setter\n    def price(self, val: float):\n        old = self._price\n        self._price = val\n        if old != val:\n            self.notify(\"price_change\", {\n                \"symbol\": self.symbol,\n                \"old\": old, \"new\": val,\n                \"change\": val - old\n            })\n\nclass PriceAlert(Observer):\n    def __init__(self, name: str, threshold: float):\n        self.name, self.threshold = name, threshold\n\n    def update(self, event: str, data: Any):\n        if event == \"price_change\" and data[\"new\"] > self.threshold:\n            print(f\"🔔 {self.name}: {data['symbol']} تجاوز {self.threshold}!\")\n\nstock = StockMarket(\"AAPL\")\nstock.subscribe(PriceAlert(\"Ahmed\", 180))\nstock.subscribe(PriceAlert(\"Sara\", 190))\nstock.price = 175\nstock.price = 185   # Ahmed alert\nstock.price = 195   # Both alert\n</python>"
+  },
+  "الخوارزمية الجيدة هي التي تحل المشكلة بأقل استهلاك للوقت والذاكرة.",
+  "Clean Code يعني كود سهل القراءة والتعديل والاختبار.",
+  "SOLID principles أساس لبناء برمجيات قابلة للتوسع والصيانة.",
+  "Test-Driven Development يجعل الكود أكثر موثوقية وأقل أخطاء.",
+  "Python مثالي للنماذج الأولية بينما Kotlin أسرع لتطبيقات Android.",
+  "Coroutines في Kotlin تجعل البرمجة غير المتزامنة أبسط وأوضح.",
+  "Design patterns حلول مجربة لمشاكل متكررة في تصميم البرمجيات.",
+  "Git يتيح التعاون الفعّال بين المطورين وتتبع تاريخ التغييرات.",
+  "REST APIs تتبع مبادئ Stateless وUniform Interface.",
+  "Docker يضمن أن التطبيق يعمل بنفس الطريقة في أي بيئة.",
+  {
+    "user": "اكتب خوارزمية Binary Tree بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن Binary Tree</think>\nBinary Tree هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Binary Tree\nprint('مثال Binary Tree')\n```",
+    "topic": "Binary Tree"
+  },
+  {
+    "user": "حل مسألة Dynamic Programming بـ Kotlin لـ Android",
+    "assistant": "<think>سؤال عن Dynamic Programming</think>\nDynamic Programming هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dynamic Programming\nprint('مثال Dynamic Programming')\n```",
+    "topic": "Dynamic Programming"
+  },
+  {
+    "user": "نفّذ gRPC من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن gRPC</think>\ngRPC هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على gRPC\nprint('مثال gRPC')\n```",
+    "topic": "gRPC"
+  },
+  {
+    "user": "اشرح LinkedList مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن LinkedList</think>\nLinkedList هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LinkedList\nprint('مثال LinkedList')\n```",
+    "topic": "LinkedList"
+  },
+  {
+    "user": "ما الفرق بين Gradient Descent و Binary Search؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن Gradient Descent</think>\nGradient Descent هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Gradient Descent\nprint('مثال Gradient Descent')\n```",
+    "topic": "Gradient Descent"
+  },
+  {
+    "user": "كيف يعمل Binary Search في الشبكات العصبية؟",
+    "assistant": "<python>\ndef binary_search(arr: list, target: int) -> int:\n    lo, hi = 0, len(arr) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if arr[mid] == target:   return mid\n        elif arr[mid] < target:  lo = mid + 1\n        else:                    hi = mid - 1\n    return -1\n\narr = [1,3,5,7,9,11,13]\nprint(binary_search(arr, 7))   # 3\nprint(binary_search(arr, 6))   # -1\n</python>",
+    "topic": "Binary Search"
+  },
+  {
+    "user": "نفّذ Transformer بـ PyTorch من الصفر",
+    "assistant": "<think>سؤال عن Transformer</think>\nTransformer هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Transformer\nprint('مثال Transformer')\n```",
+    "topic": "Transformer"
+  },
+  {
+    "user": "ما أفضل طريقة لـ Room Database في نماذج اللغة؟",
+    "assistant": "<think>سؤال عن Room Database</think>\nRoom Database هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Room Database\nprint('مثال Room Database')\n```",
+    "topic": "Room Database"
+  },
+  {
+    "user": "كيف أبني Attention Mechanism في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن Attention Mechanism</think>\nAttention Mechanism هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Attention Mechanism\nprint('مثال Attention Mechanism')\n```",
+    "topic": "Attention Mechanism"
+  },
+  {
+    "user": "نفّذ Navigation Component بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن Navigation Component</think>\nNavigation Component هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Navigation Component\nprint('مثال Navigation Component')\n```",
+    "topic": "Navigation Component"
+  },
+  {
+    "user": "اكتب خوارزمية Heap بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن Heap</think>\nHeap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Heap\nprint('مثال Heap')\n```",
+    "topic": "Heap"
+  },
+  {
+    "user": "حل مسألة Docker بـ Kotlin لـ Android",
+    "assistant": "<think>سؤال عن Docker</think>\nDocker هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Docker\nprint('مثال Docker')\n```",
+    "topic": "Docker"
+  },
+  {
+    "user": "نفّذ Retrofit من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Retrofit</think>\nRetrofit هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Retrofit\nprint('مثال Retrofit')\n```",
+    "topic": "Retrofit"
+  },
+  {
+    "user": "اشرح CI/CD Pipeline مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن CI/CD Pipeline</think>\nCI/CD Pipeline هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على CI/CD Pipeline\nprint('مثال CI/CD Pipeline')\n```",
+    "topic": "CI/CD Pipeline"
+  },
+  {
+    "user": "ما الفرق بين LRU Cache و HashMap؟ مع أمثلة كود",
+    "assistant": "<python>\nfrom collections import OrderedDict\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.cap   = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache: return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, val: int):\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = val\n        if len(self.cache) > self.cap:\n            self.cache.popitem(last=False)\n</python>",
+    "topic": "LRU Cache"
+  },
+  {
+    "user": "كيف يعمل HashMap في الشبكات العصبية؟",
+    "assistant": "<think>سؤال عن HashMap</think>\nHashMap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على HashMap\nprint('مثال HashMap')\n```",
+    "topic": "HashMap"
+  },
+  {
+    "user": "نفّذ Coroutines بـ PyTorch من الصفر",
+    "assistant": "<think>سؤال عن Coroutines</think>\nCoroutines هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Coroutines\nprint('مثال Coroutines')\n```",
+    "topic": "Coroutines"
+  },
+  {
+    "user": "ما أفضل طريقة لـ Dijkstra في نماذج اللغة؟",
+    "assistant": "<think>سؤال عن Dijkstra</think>\nDijkstra هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dijkstra\nprint('مثال Dijkstra')\n```",
+    "topic": "Dijkstra"
+  },
+  {
+    "user": "كيف أبني ViewModel في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن ViewModel</think>\nViewModel هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على ViewModel\nprint('مثال ViewModel')\n```",
+    "topic": "ViewModel"
+  },
+  {
+    "user": "نفّذ Batch Normalization بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن Batch Normalization</think>\nBatch Normalization هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Batch Normalization\nprint('مثال Batch Normalization')\n```",
+    "topic": "Batch Normalization"
+  },
+  {
+    "user": "اكتب خوارزمية REST API بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن REST API</think>\nREST API هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على REST API\nprint('مثال REST API')\n```",
+    "topic": "REST API"
+  },
+  {
+    "user": "حل مسألة GraphQL بـ Kotlin لـ Android",
+    "assistant": "<think>سؤال عن GraphQL</think>\nGraphQL هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على GraphQL\nprint('مثال GraphQL')\n```",
+    "topic": "GraphQL"
+  },
+  {
+    "user": "نفّذ Hilt DI من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Hilt DI</think>\nHilt DI هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Hilt DI\nprint('مثال Hilt DI')\n```",
+    "topic": "Hilt DI"
+  },
+  {
+    "user": "اشرح LoRA Fine-tuning مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن LoRA Fine-tuning</think>\nLoRA Fine-tuning هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LoRA Fine-tuning\nprint('مثال LoRA Fine-tuning')\n```",
+    "topic": "LoRA Fine-tuning"
+  },
+  {
+    "user": "ما الفرق بين RecyclerView و WebSocket؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن RecyclerView</think>\nRecyclerView هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على RecyclerView\nprint('مثال RecyclerView')\n```",
+    "topic": "RecyclerView"
+  },
+  {
+    "user": "كيف يعمل WebSocket في الشبكات العصبية؟",
+    "assistant": "<think>سؤال عن WebSocket</think>\nWebSocket هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على WebSocket\nprint('مثال WebSocket')\n```",
+    "topic": "WebSocket"
+  },
+  {
+    "user": "نفّذ Graph BFS/DFS بـ PyTorch من الصفر",
+    "assistant": "<think>سؤال عن Graph BFS/DFS</think>\nGraph BFS/DFS هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Graph BFS/DFS\nprint('مثال Graph BFS/DFS')\n```",
+    "topic": "Graph BFS/DFS"
+  },
+  {
+    "user": "ما أفضل طريقة لـ Quick Sort في نماذج اللغة؟",
+    "assistant": "<python>\ndef quicksort(arr: list) -> list:\n    if len(arr) <= 1: return arr\n    pivot = arr[len(arr)//2]\n    left   = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right  = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\nprint(quicksort([3,6,8,10,1,2,1]))  # [1,1,2,3,6,8,10]\n</python>",
+    "topic": "Quick Sort"
+  },
+  {
+    "user": "كيف أبني Trie في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن Trie</think>\nTrie هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Trie\nprint('مثال Trie')\n```",
+    "topic": "Trie"
+  },
+  {
+    "user": "نفّذ Backpropagation بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن Backpropagation</think>\nBackpropagation هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Backpropagation\nprint('مثال Backpropagation')\n```",
+    "topic": "Backpropagation"
+  },
+  {
+    "user": "اكتب خوارزمية Git branching بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن Git branching</think>\nGit branching هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Git branching\nprint('مثال Git branching')\n```",
+    "topic": "Git branching"
+  },
+  {
+    "user": "حل مسألة Binary Tree بـ Kotlin لـ Android",
+    "assistant": "<think>سؤال عن Binary Tree</think>\nBinary Tree هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Binary Tree\nprint('مثال Binary Tree')\n```",
+    "topic": "Binary Tree"
+  },
+  {
+    "user": "نفّذ Dynamic Programming من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Dynamic Programming</think>\nDynamic Programming هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dynamic Programming\nprint('مثال Dynamic Programming')\n```",
+    "topic": "Dynamic Programming"
+  },
+  {
+    "user": "اشرح gRPC مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن gRPC</think>\ngRPC هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على gRPC\nprint('مثال gRPC')\n```",
+    "topic": "gRPC"
+  },
+  {
+    "user": "ما الفرق بين LinkedList و Gradient Descent؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن LinkedList</think>\nLinkedList هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LinkedList\nprint('مثال LinkedList')\n```",
+    "topic": "LinkedList"
+  },
+  {
+    "user": "كيف يعمل Gradient Descent في الشبكات العصبية؟",
+    "assistant": "<think>سؤال عن Gradient Descent</think>\nGradient Descent هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Gradient Descent\nprint('مثال Gradient Descent')\n```",
+    "topic": "Gradient Descent"
+  },
+  {
+    "user": "نفّذ Binary Search بـ PyTorch من الصفر",
+    "assistant": "<python>\ndef binary_search(arr: list, target: int) -> int:\n    lo, hi = 0, len(arr) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if arr[mid] == target:   return mid\n        elif arr[mid] < target:  lo = mid + 1\n        else:                    hi = mid - 1\n    return -1\n\narr = [1,3,5,7,9,11,13]\nprint(binary_search(arr, 7))   # 3\nprint(binary_search(arr, 6))   # -1\n</python>",
+    "topic": "Binary Search"
+  },
+  {
+    "user": "ما أفضل طريقة لـ Transformer في نماذج اللغة؟",
+    "assistant": "<think>سؤال عن Transformer</think>\nTransformer هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Transformer\nprint('مثال Transformer')\n```",
+    "topic": "Transformer"
+  },
+  {
+    "user": "كيف أبني Room Database في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن Room Database</think>\nRoom Database هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Room Database\nprint('مثال Room Database')\n```",
+    "topic": "Room Database"
+  },
+  {
+    "user": "نفّذ Attention Mechanism بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن Attention Mechanism</think>\nAttention Mechanism هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Attention Mechanism\nprint('مثال Attention Mechanism')\n```",
+    "topic": "Attention Mechanism"
+  },
+  {
+    "user": "اكتب خوارزمية Navigation Component بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن Navigation Component</think>\nNavigation Component هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Navigation Component\nprint('مثال Navigation Component')\n```",
+    "topic": "Navigation Component"
+  },
+  {
+    "user": "حل مسألة Heap بـ Kotlin لـ Android",
+    "assistant": "<think>سؤال عن Heap</think>\nHeap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Heap\nprint('مثال Heap')\n```",
+    "topic": "Heap"
+  },
+  {
+    "user": "نفّذ Docker من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Docker</think>\nDocker هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Docker\nprint('مثال Docker')\n```",
+    "topic": "Docker"
+  },
+  {
+    "user": "اشرح Retrofit مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن Retrofit</think>\nRetrofit هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Retrofit\nprint('مثال Retrofit')\n```",
+    "topic": "Retrofit"
+  },
+  {
+    "user": "ما الفرق بين CI/CD Pipeline و LRU Cache؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن CI/CD Pipeline</think>\nCI/CD Pipeline هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على CI/CD Pipeline\nprint('مثال CI/CD Pipeline')\n```",
+    "topic": "CI/CD Pipeline"
+  },
+  {
+    "user": "كيف يعمل LRU Cache في الشبكات العصبية؟",
+    "assistant": "<python>\nfrom collections import OrderedDict\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.cap   = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache: return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, val: int):\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = val\n        if len(self.cache) > self.cap:\n            self.cache.popitem(last=False)\n</python>",
+    "topic": "LRU Cache"
+  },
+  {
+    "user": "نفّذ HashMap بـ PyTorch من الصفر",
+    "assistant": "<think>سؤال عن HashMap</think>\nHashMap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على HashMap\nprint('مثال HashMap')\n```",
+    "topic": "HashMap"
+  },
+  {
+    "user": "ما أفضل طريقة لـ Coroutines في نماذج اللغة؟",
+    "assistant": "<think>سؤال عن Coroutines</think>\nCoroutines هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Coroutines\nprint('مثال Coroutines')\n```",
+    "topic": "Coroutines"
+  },
+  {
+    "user": "كيف أبني Dijkstra في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن Dijkstra</think>\nDijkstra هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dijkstra\nprint('مثال Dijkstra')\n```",
+    "topic": "Dijkstra"
+  },
+  {
+    "user": "نفّذ ViewModel بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن ViewModel</think>\nViewModel هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على ViewModel\nprint('مثال ViewModel')\n```",
+    "topic": "ViewModel"
+  }
+]
