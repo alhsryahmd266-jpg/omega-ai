@@ -78,34 +78,84 @@
   "REST APIs تتبع مبادئ Stateless وUniform Interface.",
   "Docker يضمن أن التطبيق يعمل بنفس الطريقة في أي بيئة.",
   {
-    "user": "اكتب خوارزمية Batch Normalization بـ Python مع شرح كامل",
-    "assistant": "<think>سؤال عن Batch Normalization</think>\nBatch Normalization هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Batch Normalization\nprint('مثال Batch Normalization')\n```",
-    "topic": "Batch Normalization"
+    "user": "اكتب خوارزمية Dijkstra بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن Dijkstra</think>\nDijkstra هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dijkstra\nprint('مثال Dijkstra')\n```",
+    "topic": "Dijkstra"
   },
   {
-    "user": "حل مسألة Room Database بـ Kotlin لـ Android",
-    "assistant": "<think>سؤال عن Room Database</think>\nRoom Database هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Room Database\nprint('مثال Room Database')\n```",
-    "topic": "Room Database"
+    "user": "حل مسألة LRU Cache بـ Kotlin لـ Android",
+    "assistant": "<python>\nfrom collections import OrderedDict\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.cap   = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache: return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, val: int):\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = val\n        if len(self.cache) > self.cap:\n            self.cache.popitem(last=False)\n</python>",
+    "topic": "LRU Cache"
   },
   {
-    "user": "نفّذ CI/CD Pipeline من الصفر بدون مكتبات خارجية",
+    "user": "نفّذ Docker من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Docker</think>\nDocker هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Docker\nprint('مثال Docker')\n```",
+    "topic": "Docker"
+  },
+  {
+    "user": "اشرح Navigation Component مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن Navigation Component</think>\nNavigation Component هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Navigation Component\nprint('مثال Navigation Component')\n```",
+    "topic": "Navigation Component"
+  },
+  {
+    "user": "ما الفرق بين Backpropagation و Graph BFS/DFS؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن Backpropagation</think>\nBackpropagation هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Backpropagation\nprint('مثال Backpropagation')\n```",
+    "topic": "Backpropagation"
+  },
+  {
+    "user": "كيف يعمل Graph BFS/DFS في الشبكات العصبية؟",
+    "assistant": "<think>سؤال عن Graph BFS/DFS</think>\nGraph BFS/DFS هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Graph BFS/DFS\nprint('مثال Graph BFS/DFS')\n```",
+    "topic": "Graph BFS/DFS"
+  },
+  {
+    "user": "نفّذ CI/CD Pipeline بـ PyTorch من الصفر",
     "assistant": "<think>سؤال عن CI/CD Pipeline</think>\nCI/CD Pipeline هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على CI/CD Pipeline\nprint('مثال CI/CD Pipeline')\n```",
     "topic": "CI/CD Pipeline"
   },
   {
-    "user": "اشرح Hilt DI مع مثال عملي كامل",
+    "user": "ما أفضل طريقة لـ ViewModel في نماذج اللغة؟",
+    "assistant": "<think>سؤال عن ViewModel</think>\nViewModel هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على ViewModel\nprint('مثال ViewModel')\n```",
+    "topic": "ViewModel"
+  },
+  {
+    "user": "كيف أبني LinkedList في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن LinkedList</think>\nLinkedList هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LinkedList\nprint('مثال LinkedList')\n```",
+    "topic": "LinkedList"
+  },
+  {
+    "user": "نفّذ WebSocket بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن WebSocket</think>\nWebSocket هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على WebSocket\nprint('مثال WebSocket')\n```",
+    "topic": "WebSocket"
+  },
+  {
+    "user": "اكتب خوارزمية Binary Tree بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن Binary Tree</think>\nBinary Tree هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Binary Tree\nprint('مثال Binary Tree')\n```",
+    "topic": "Binary Tree"
+  },
+  {
+    "user": "حل مسألة Hilt DI بـ Kotlin لـ Android",
     "assistant": "<think>سؤال عن Hilt DI</think>\nHilt DI هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Hilt DI\nprint('مثال Hilt DI')\n```",
     "topic": "Hilt DI"
   },
   {
-    "user": "ما الفرق بين Transformer و Binary Tree؟ مع أمثلة كود",
-    "assistant": "<think>سؤال عن Transformer</think>\nTransformer هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Transformer\nprint('مثال Transformer')\n```",
-    "topic": "Transformer"
+    "user": "نفّذ Retrofit من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Retrofit</think>\nRetrofit هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Retrofit\nprint('مثال Retrofit')\n```",
+    "topic": "Retrofit"
   },
   {
-    "user": "كيف يعمل Binary Tree في الشبكات العصبية؟",
-    "assistant": "<think>سؤال عن Binary Tree</think>\nBinary Tree هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Binary Tree\nprint('مثال Binary Tree')\n```",
-    "topic": "Binary Tree"
+    "user": "اشرح RecyclerView مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن RecyclerView</think>\nRecyclerView هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على RecyclerView\nprint('مثال RecyclerView')\n```",
+    "topic": "RecyclerView"
+  },
+  {
+    "user": "ما الفرق بين Trie و Room Database؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن Trie</think>\nTrie هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Trie\nprint('مثال Trie')\n```",
+    "topic": "Trie"
+  },
+  {
+    "user": "كيف يعمل Room Database في الشبكات العصبية؟",
+    "assistant": "<think>سؤال عن Room Database</think>\nRoom Database هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Room Database\nprint('مثال Room Database')\n```",
+    "topic": "Room Database"
   },
   {
     "user": "نفّذ GraphQL بـ PyTorch من الصفر",
@@ -113,204 +163,54 @@
     "topic": "GraphQL"
   },
   {
-    "user": "ما أفضل طريقة لـ Dijkstra في نماذج اللغة؟",
-    "assistant": "<think>سؤال عن Dijkstra</think>\nDijkstra هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dijkstra\nprint('مثال Dijkstra')\n```",
-    "topic": "Dijkstra"
-  },
-  {
-    "user": "كيف أبني LRU Cache في Jetpack Compose؟",
-    "assistant": "<python>\nfrom collections import OrderedDict\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.cap   = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache: return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, val: int):\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = val\n        if len(self.cache) > self.cap:\n            self.cache.popitem(last=False)\n</python>",
-    "topic": "LRU Cache"
-  },
-  {
-    "user": "نفّذ Gradient Descent بـ Clean Architecture في Android",
-    "assistant": "<think>سؤال عن Gradient Descent</think>\nGradient Descent هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Gradient Descent\nprint('مثال Gradient Descent')\n```",
-    "topic": "Gradient Descent"
-  },
-  {
-    "user": "اكتب خوارزمية Navigation Component بـ Python مع شرح كامل",
-    "assistant": "<think>سؤال عن Navigation Component</think>\nNavigation Component هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Navigation Component\nprint('مثال Navigation Component')\n```",
-    "topic": "Navigation Component"
-  },
-  {
-    "user": "حل مسألة WebSocket بـ Kotlin لـ Android",
-    "assistant": "<think>سؤال عن WebSocket</think>\nWebSocket هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على WebSocket\nprint('مثال WebSocket')\n```",
-    "topic": "WebSocket"
-  },
-  {
-    "user": "نفّذ Binary Search من الصفر بدون مكتبات خارجية",
-    "assistant": "<python>\ndef binary_search(arr: list, target: int) -> int:\n    lo, hi = 0, len(arr) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if arr[mid] == target:   return mid\n        elif arr[mid] < target:  lo = mid + 1\n        else:                    hi = mid - 1\n    return -1\n\narr = [1,3,5,7,9,11,13]\nprint(binary_search(arr, 7))   # 3\nprint(binary_search(arr, 6))   # -1\n</python>",
-    "topic": "Binary Search"
-  },
-  {
-    "user": "اشرح Dynamic Programming مع مثال عملي كامل",
-    "assistant": "<think>سؤال عن Dynamic Programming</think>\nDynamic Programming هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dynamic Programming\nprint('مثال Dynamic Programming')\n```",
-    "topic": "Dynamic Programming"
-  },
-  {
-    "user": "ما الفرق بين Attention Mechanism و LinkedList؟ مع أمثلة كود",
-    "assistant": "<think>سؤال عن Attention Mechanism</think>\nAttention Mechanism هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Attention Mechanism\nprint('مثال Attention Mechanism')\n```",
-    "topic": "Attention Mechanism"
-  },
-  {
-    "user": "كيف يعمل LinkedList في الشبكات العصبية؟",
-    "assistant": "<think>سؤال عن LinkedList</think>\nLinkedList هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LinkedList\nprint('مثال LinkedList')\n```",
-    "topic": "LinkedList"
-  },
-  {
-    "user": "نفّذ gRPC بـ PyTorch من الصفر",
-    "assistant": "<think>سؤال عن gRPC</think>\ngRPC هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على gRPC\nprint('مثال gRPC')\n```",
-    "topic": "gRPC"
-  },
-  {
-    "user": "ما أفضل طريقة لـ Graph BFS/DFS في نماذج اللغة؟",
-    "assistant": "<think>سؤال عن Graph BFS/DFS</think>\nGraph BFS/DFS هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Graph BFS/DFS\nprint('مثال Graph BFS/DFS')\n```",
-    "topic": "Graph BFS/DFS"
-  },
-  {
-    "user": "كيف أبني Trie في Jetpack Compose؟",
-    "assistant": "<think>سؤال عن Trie</think>\nTrie هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Trie\nprint('مثال Trie')\n```",
-    "topic": "Trie"
-  },
-  {
-    "user": "نفّذ Coroutines بـ Clean Architecture في Android",
-    "assistant": "<think>سؤال عن Coroutines</think>\nCoroutines هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Coroutines\nprint('مثال Coroutines')\n```",
-    "topic": "Coroutines"
-  },
-  {
-    "user": "اكتب خوارزمية Retrofit بـ Python مع شرح كامل",
-    "assistant": "<think>سؤال عن Retrofit</think>\nRetrofit هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Retrofit\nprint('مثال Retrofit')\n```",
-    "topic": "Retrofit"
-  },
-  {
-    "user": "حل مسألة Heap بـ Kotlin لـ Android",
-    "assistant": "<think>سؤال عن Heap</think>\nHeap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Heap\nprint('مثال Heap')\n```",
-    "topic": "Heap"
-  },
-  {
-    "user": "نفّذ Git branching من الصفر بدون مكتبات خارجية",
-    "assistant": "<think>سؤال عن Git branching</think>\nGit branching هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Git branching\nprint('مثال Git branching')\n```",
-    "topic": "Git branching"
-  },
-  {
-    "user": "اشرح Docker مع مثال عملي كامل",
-    "assistant": "<think>سؤال عن Docker</think>\nDocker هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Docker\nprint('مثال Docker')\n```",
-    "topic": "Docker"
-  },
-  {
-    "user": "ما الفرق بين ViewModel و RecyclerView؟ مع أمثلة كود",
-    "assistant": "<think>سؤال عن ViewModel</think>\nViewModel هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على ViewModel\nprint('مثال ViewModel')\n```",
-    "topic": "ViewModel"
-  },
-  {
-    "user": "كيف يعمل RecyclerView في الشبكات العصبية؟",
-    "assistant": "<think>سؤال عن RecyclerView</think>\nRecyclerView هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على RecyclerView\nprint('مثال RecyclerView')\n```",
-    "topic": "RecyclerView"
-  },
-  {
-    "user": "نفّذ REST API بـ PyTorch من الصفر",
-    "assistant": "<think>سؤال عن REST API</think>\nREST API هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على REST API\nprint('مثال REST API')\n```",
-    "topic": "REST API"
-  },
-  {
-    "user": "ما أفضل طريقة لـ LoRA Fine-tuning في نماذج اللغة؟",
-    "assistant": "<think>سؤال عن LoRA Fine-tuning</think>\nLoRA Fine-tuning هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LoRA Fine-tuning\nprint('مثال LoRA Fine-tuning')\n```",
-    "topic": "LoRA Fine-tuning"
-  },
-  {
-    "user": "كيف أبني Quick Sort في Jetpack Compose؟",
+    "user": "ما أفضل طريقة لـ Quick Sort في نماذج اللغة؟",
     "assistant": "<python>\ndef quicksort(arr: list) -> list:\n    if len(arr) <= 1: return arr\n    pivot = arr[len(arr)//2]\n    left   = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right  = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\nprint(quicksort([3,6,8,10,1,2,1]))  # [1,1,2,3,6,8,10]\n</python>",
     "topic": "Quick Sort"
   },
   {
-    "user": "نفّذ HashMap بـ Clean Architecture في Android",
-    "assistant": "<think>سؤال عن HashMap</think>\nHashMap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على HashMap\nprint('مثال HashMap')\n```",
-    "topic": "HashMap"
-  },
-  {
-    "user": "اكتب خوارزمية Backpropagation بـ Python مع شرح كامل",
-    "assistant": "<think>سؤال عن Backpropagation</think>\nBackpropagation هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Backpropagation\nprint('مثال Backpropagation')\n```",
-    "topic": "Backpropagation"
-  },
-  {
-    "user": "حل مسألة Batch Normalization بـ Kotlin لـ Android",
-    "assistant": "<think>سؤال عن Batch Normalization</think>\nBatch Normalization هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Batch Normalization\nprint('مثال Batch Normalization')\n```",
-    "topic": "Batch Normalization"
-  },
-  {
-    "user": "نفّذ Room Database من الصفر بدون مكتبات خارجية",
-    "assistant": "<think>سؤال عن Room Database</think>\nRoom Database هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Room Database\nprint('مثال Room Database')\n```",
-    "topic": "Room Database"
-  },
-  {
-    "user": "اشرح CI/CD Pipeline مع مثال عملي كامل",
-    "assistant": "<think>سؤال عن CI/CD Pipeline</think>\nCI/CD Pipeline هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على CI/CD Pipeline\nprint('مثال CI/CD Pipeline')\n```",
-    "topic": "CI/CD Pipeline"
-  },
-  {
-    "user": "ما الفرق بين Hilt DI و Transformer؟ مع أمثلة كود",
-    "assistant": "<think>سؤال عن Hilt DI</think>\nHilt DI هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Hilt DI\nprint('مثال Hilt DI')\n```",
-    "topic": "Hilt DI"
-  },
-  {
-    "user": "كيف يعمل Transformer في الشبكات العصبية؟",
-    "assistant": "<think>سؤال عن Transformer</think>\nTransformer هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Transformer\nprint('مثال Transformer')\n```",
-    "topic": "Transformer"
-  },
-  {
-    "user": "نفّذ Binary Tree بـ PyTorch من الصفر",
-    "assistant": "<think>سؤال عن Binary Tree</think>\nBinary Tree هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Binary Tree\nprint('مثال Binary Tree')\n```",
-    "topic": "Binary Tree"
-  },
-  {
-    "user": "ما أفضل طريقة لـ GraphQL في نماذج اللغة؟",
-    "assistant": "<think>سؤال عن GraphQL</think>\nGraphQL هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على GraphQL\nprint('مثال GraphQL')\n```",
-    "topic": "GraphQL"
-  },
-  {
-    "user": "كيف أبني Dijkstra في Jetpack Compose؟",
-    "assistant": "<think>سؤال عن Dijkstra</think>\nDijkstra هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dijkstra\nprint('مثال Dijkstra')\n```",
-    "topic": "Dijkstra"
-  },
-  {
-    "user": "نفّذ LRU Cache بـ Clean Architecture في Android",
-    "assistant": "<python>\nfrom collections import OrderedDict\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.cap   = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache: return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, val: int):\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = val\n        if len(self.cache) > self.cap:\n            self.cache.popitem(last=False)\n</python>",
-    "topic": "LRU Cache"
-  },
-  {
-    "user": "اكتب خوارزمية Gradient Descent بـ Python مع شرح كامل",
+    "user": "كيف أبني Gradient Descent في Jetpack Compose؟",
     "assistant": "<think>سؤال عن Gradient Descent</think>\nGradient Descent هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Gradient Descent\nprint('مثال Gradient Descent')\n```",
     "topic": "Gradient Descent"
   },
   {
-    "user": "حل مسألة Navigation Component بـ Kotlin لـ Android",
-    "assistant": "<think>سؤال عن Navigation Component</think>\nNavigation Component هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Navigation Component\nprint('مثال Navigation Component')\n```",
-    "topic": "Navigation Component"
-  },
-  {
-    "user": "نفّذ WebSocket من الصفر بدون مكتبات خارجية",
-    "assistant": "<think>سؤال عن WebSocket</think>\nWebSocket هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على WebSocket\nprint('مثال WebSocket')\n```",
-    "topic": "WebSocket"
-  },
-  {
-    "user": "اشرح Binary Search مع مثال عملي كامل",
-    "assistant": "<python>\ndef binary_search(arr: list, target: int) -> int:\n    lo, hi = 0, len(arr) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if arr[mid] == target:   return mid\n        elif arr[mid] < target:  lo = mid + 1\n        else:                    hi = mid - 1\n    return -1\n\narr = [1,3,5,7,9,11,13]\nprint(binary_search(arr, 7))   # 3\nprint(binary_search(arr, 6))   # -1\n</python>",
-    "topic": "Binary Search"
-  },
-  {
-    "user": "ما الفرق بين Dynamic Programming و Attention Mechanism؟ مع أمثلة كود",
-    "assistant": "<think>سؤال عن Dynamic Programming</think>\nDynamic Programming هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dynamic Programming\nprint('مثال Dynamic Programming')\n```",
-    "topic": "Dynamic Programming"
-  },
-  {
-    "user": "كيف يعمل Attention Mechanism في الشبكات العصبية؟",
+    "user": "نفّذ Attention Mechanism بـ Clean Architecture في Android",
     "assistant": "<think>سؤال عن Attention Mechanism</think>\nAttention Mechanism هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Attention Mechanism\nprint('مثال Attention Mechanism')\n```",
     "topic": "Attention Mechanism"
   },
   {
-    "user": "نفّذ LinkedList بـ PyTorch من الصفر",
-    "assistant": "<think>سؤال عن LinkedList</think>\nLinkedList هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LinkedList\nprint('مثال LinkedList')\n```",
-    "topic": "LinkedList"
+    "user": "اكتب خوارزمية REST API بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن REST API</think>\nREST API هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على REST API\nprint('مثال REST API')\n```",
+    "topic": "REST API"
+  },
+  {
+    "user": "حل مسألة Binary Search بـ Kotlin لـ Android",
+    "assistant": "<python>\ndef binary_search(arr: list, target: int) -> int:\n    lo, hi = 0, len(arr) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if arr[mid] == target:   return mid\n        elif arr[mid] < target:  lo = mid + 1\n        else:                    hi = mid - 1\n    return -1\n\narr = [1,3,5,7,9,11,13]\nprint(binary_search(arr, 7))   # 3\nprint(binary_search(arr, 6))   # -1\n</python>",
+    "topic": "Binary Search"
+  },
+  {
+    "user": "نفّذ Transformer من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Transformer</think>\nTransformer هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Transformer\nprint('مثال Transformer')\n```",
+    "topic": "Transformer"
+  },
+  {
+    "user": "اشرح Heap مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن Heap</think>\nHeap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Heap\nprint('مثال Heap')\n```",
+    "topic": "Heap"
+  },
+  {
+    "user": "ما الفرق بين HashMap و Coroutines؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن HashMap</think>\nHashMap هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على HashMap\nprint('مثال HashMap')\n```",
+    "topic": "HashMap"
+  },
+  {
+    "user": "كيف يعمل Coroutines في الشبكات العصبية؟",
+    "assistant": "<think>سؤال عن Coroutines</think>\nCoroutines هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Coroutines\nprint('مثال Coroutines')\n```",
+    "topic": "Coroutines"
+  },
+  {
+    "user": "نفّذ Git branching بـ PyTorch من الصفر",
+    "assistant": "<think>سؤال عن Git branching</think>\nGit branching هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Git branching\nprint('مثال Git branching')\n```",
+    "topic": "Git branching"
   },
   {
     "user": "ما أفضل طريقة لـ gRPC في نماذج اللغة؟",
@@ -318,13 +218,113 @@
     "topic": "gRPC"
   },
   {
-    "user": "كيف أبني Graph BFS/DFS في Jetpack Compose؟",
+    "user": "كيف أبني Batch Normalization في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن Batch Normalization</think>\nBatch Normalization هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Batch Normalization\nprint('مثال Batch Normalization')\n```",
+    "topic": "Batch Normalization"
+  },
+  {
+    "user": "نفّذ Dynamic Programming بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن Dynamic Programming</think>\nDynamic Programming هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dynamic Programming\nprint('مثال Dynamic Programming')\n```",
+    "topic": "Dynamic Programming"
+  },
+  {
+    "user": "اكتب خوارزمية LoRA Fine-tuning بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن LoRA Fine-tuning</think>\nLoRA Fine-tuning هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LoRA Fine-tuning\nprint('مثال LoRA Fine-tuning')\n```",
+    "topic": "LoRA Fine-tuning"
+  },
+  {
+    "user": "حل مسألة Dijkstra بـ Kotlin لـ Android",
+    "assistant": "<think>سؤال عن Dijkstra</think>\nDijkstra هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Dijkstra\nprint('مثال Dijkstra')\n```",
+    "topic": "Dijkstra"
+  },
+  {
+    "user": "نفّذ LRU Cache من الصفر بدون مكتبات خارجية",
+    "assistant": "<python>\nfrom collections import OrderedDict\n\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.cap   = capacity\n        self.cache = OrderedDict()\n\n    def get(self, key: int) -> int:\n        if key not in self.cache: return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n\n    def put(self, key: int, val: int):\n        if key in self.cache:\n            self.cache.move_to_end(key)\n        self.cache[key] = val\n        if len(self.cache) > self.cap:\n            self.cache.popitem(last=False)\n</python>",
+    "topic": "LRU Cache"
+  },
+  {
+    "user": "اشرح Docker مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن Docker</think>\nDocker هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Docker\nprint('مثال Docker')\n```",
+    "topic": "Docker"
+  },
+  {
+    "user": "ما الفرق بين Navigation Component و Backpropagation؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن Navigation Component</think>\nNavigation Component هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Navigation Component\nprint('مثال Navigation Component')\n```",
+    "topic": "Navigation Component"
+  },
+  {
+    "user": "كيف يعمل Backpropagation في الشبكات العصبية؟",
+    "assistant": "<think>سؤال عن Backpropagation</think>\nBackpropagation هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Backpropagation\nprint('مثال Backpropagation')\n```",
+    "topic": "Backpropagation"
+  },
+  {
+    "user": "نفّذ Graph BFS/DFS بـ PyTorch من الصفر",
     "assistant": "<think>سؤال عن Graph BFS/DFS</think>\nGraph BFS/DFS هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Graph BFS/DFS\nprint('مثال Graph BFS/DFS')\n```",
     "topic": "Graph BFS/DFS"
   },
   {
-    "user": "نفّذ Trie بـ Clean Architecture في Android",
+    "user": "ما أفضل طريقة لـ CI/CD Pipeline في نماذج اللغة؟",
+    "assistant": "<think>سؤال عن CI/CD Pipeline</think>\nCI/CD Pipeline هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على CI/CD Pipeline\nprint('مثال CI/CD Pipeline')\n```",
+    "topic": "CI/CD Pipeline"
+  },
+  {
+    "user": "كيف أبني ViewModel في Jetpack Compose؟",
+    "assistant": "<think>سؤال عن ViewModel</think>\nViewModel هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على ViewModel\nprint('مثال ViewModel')\n```",
+    "topic": "ViewModel"
+  },
+  {
+    "user": "نفّذ LinkedList بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن LinkedList</think>\nLinkedList هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على LinkedList\nprint('مثال LinkedList')\n```",
+    "topic": "LinkedList"
+  },
+  {
+    "user": "اكتب خوارزمية WebSocket بـ Python مع شرح كامل",
+    "assistant": "<think>سؤال عن WebSocket</think>\nWebSocket هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على WebSocket\nprint('مثال WebSocket')\n```",
+    "topic": "WebSocket"
+  },
+  {
+    "user": "حل مسألة Binary Tree بـ Kotlin لـ Android",
+    "assistant": "<think>سؤال عن Binary Tree</think>\nBinary Tree هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Binary Tree\nprint('مثال Binary Tree')\n```",
+    "topic": "Binary Tree"
+  },
+  {
+    "user": "نفّذ Hilt DI من الصفر بدون مكتبات خارجية",
+    "assistant": "<think>سؤال عن Hilt DI</think>\nHilt DI هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Hilt DI\nprint('مثال Hilt DI')\n```",
+    "topic": "Hilt DI"
+  },
+  {
+    "user": "اشرح Retrofit مع مثال عملي كامل",
+    "assistant": "<think>سؤال عن Retrofit</think>\nRetrofit هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Retrofit\nprint('مثال Retrofit')\n```",
+    "topic": "Retrofit"
+  },
+  {
+    "user": "ما الفرق بين RecyclerView و Trie؟ مع أمثلة كود",
+    "assistant": "<think>سؤال عن RecyclerView</think>\nRecyclerView هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على RecyclerView\nprint('مثال RecyclerView')\n```",
+    "topic": "RecyclerView"
+  },
+  {
+    "user": "كيف يعمل Trie في الشبكات العصبية؟",
     "assistant": "<think>سؤال عن Trie</think>\nTrie هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Trie\nprint('مثال Trie')\n```",
     "topic": "Trie"
+  },
+  {
+    "user": "نفّذ Room Database بـ PyTorch من الصفر",
+    "assistant": "<think>سؤال عن Room Database</think>\nRoom Database هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Room Database\nprint('مثال Room Database')\n```",
+    "topic": "Room Database"
+  },
+  {
+    "user": "ما أفضل طريقة لـ GraphQL في نماذج اللغة؟",
+    "assistant": "<think>سؤال عن GraphQL</think>\nGraphQL هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على GraphQL\nprint('مثال GraphQL')\n```",
+    "topic": "GraphQL"
+  },
+  {
+    "user": "كيف أبني Quick Sort في Jetpack Compose؟",
+    "assistant": "<python>\ndef quicksort(arr: list) -> list:\n    if len(arr) <= 1: return arr\n    pivot = arr[len(arr)//2]\n    left   = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right  = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\nprint(quicksort([3,6,8,10,1,2,1]))  # [1,1,2,3,6,8,10]\n</python>",
+    "topic": "Quick Sort"
+  },
+  {
+    "user": "نفّذ Gradient Descent بـ Clean Architecture في Android",
+    "assistant": "<think>سؤال عن Gradient Descent</think>\nGradient Descent هو مفهوم أساسي في علوم الحاسوب.\n\n```python\n# مثال على Gradient Descent\nprint('مثال Gradient Descent')\n```",
+    "topic": "Gradient Descent"
   }
 ]
