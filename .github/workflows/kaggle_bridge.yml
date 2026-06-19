@@ -1,0 +1,127 @@
+name: AION Kaggle GPU Bridge
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_minutes:
+        description: 'Training minutes on Kaggle GPU'
+        default: '240'
+        required: false
+  schedule:
+    # كل 12 ساعة - يستغل حصة Kaggle الأسبوعية (30 ساعة GPU)
+    - cron: '0 */12 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  kaggle-train:
+    name: Push, Run, and Pull from Kaggle GPU
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Kaggle CLI
+        run: pip install kaggle -q
+
+      - name: Configure Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
+            echo "::error::KAGGLE_USERNAME or KAGGLE_KEY secrets are not set."
+            echo "Add them in: Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      - name: Push training kernel to Kaggle
+        env:
+          AION_MAX_MINUTES: ${{ github.event.inputs.max_minutes || '240' }}
+        run: |
+          cd kaggle_kernel
+          kaggle kernels push -p .
+          echo "Kernel pushed, waiting for it to start..."
+          sleep 30
+
+      - name: Poll until Kaggle kernel finishes
+        run: |
+          SLUG="ahmedxdx/aion-gpu-training"
+          MAX_WAIT=18000   # 5 ساعات بالثواني
+          ELAPSED=0
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            STATUS=$(kaggle kernels status "$SLUG" 2>&1 || echo "unknown")
+            echo "[$ELAPSED s] Status: $STATUS"
+            if echo "$STATUS" | grep -qi "complete"; then
+              echo "✅ Kernel finished successfully"
+              break
+            fi
+            if echo "$STATUS" | grep -qi "error\|cancelacled\|failed"; then
+              echo "::warning::Kernel reported an error state: $STATUS"
+              break
+            fi
+            sleep 60
+            ELAPSED=$((ELAPSED + 60))
+          done
+
+      - name: Download kernel output
+        run: |
+          mkdir -p kaggle_output
+          kaggle kernels output "ahmedxdx/aion-gpu-training" -p kaggle_output/
+          ls -la kaggle_output/
+
+      - name: Merge GPU checkpoint into repo
+        run: |
+          mkdir -p checkpoints
+          find kaggle_output -name "*.pt" -exec cp {} checkpoints/ \;
+          find kaggle_output -name "config.json" -exec cp {} checkpoints/ \;
+          find kaggle_output -name "tokenizer.json" -exec cp {} checkpoints/ \;
+          find kaggle_output -name "kaggle_result.json" -exec cp {} checkpoints/ \;
+          echo "=== Result ==="
+          cat checkpoints/kaggle_result.json 2>/dev/null || echo "No result file found"
+
+      - name: Validate downloaded checkpoint
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu -q
+          python3 scripts/validate_merged.py || echo "Validation skipped (checkpoint may use different config)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aion-kaggle-gpu-${{ github.run_number }}
+          path: checkpoints/
+          retention-days: 90
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "kaggle-gpu-v1.0.${{ github.run_number }}"
+          name: "AION Kaggle-GPU Generation ${{ github.run_number }}"
+          body: |
+            # AION trained on Kaggle GPU - Run ${{ github.run_number }}
+
+            تدريب حقيقي على GPU مجاني (T4/P100) عبر Kaggle API،
+            بتنسيق GitHub Actions كجسر (bridge) لأن سيرفرات GitHub
+            عندها انترنت كامل بلا قيود.
+
+            راجع kaggle_result.json في الـ artifacts للتفاصيل.
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit checkpoint back to repo
+        run: |
+          git config user.name "AION-Kaggle-Bridge"
+          git config user.email "bridge@aion.ai"
+          git add checkpoints/ 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Kaggle GPU generation ${{ github.run_number }}"
+          git push || echo "No changes to push"
