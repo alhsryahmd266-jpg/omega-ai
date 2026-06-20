@@ -1,0 +1,9 @@
+=== Test run: Sat Jun 20 06:53:06 UTC 2026 ===
+www.kaggle.com:
+  HTTP: 200
+api.kaggle.com:
+  HTTP: 404
+kaggle.com (no www):
+  HTTP: 302
+api/v1/competitions/list (no token):
+{"code":401,"message":"Unauthenticated"}  HTTP: 401
