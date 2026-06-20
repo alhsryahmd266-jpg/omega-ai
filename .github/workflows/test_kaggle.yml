@@ -1,16 +1,31 @@
 name: Test Kaggle Connectivity (No Auth Needed)
 on: workflow_dispatch
+permissions:
+  contents: write
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Test Kaggle reachability from GitHub servers
         run: |
-          echo "=== www.kaggle.com ==="
-          curl -s -o /dev/null -w "HTTP: %{http_code}\n" https://www.kaggle.com
-          echo "=== api.kaggle.com ==="
-          curl -s -o /dev/null -w "HTTP: %{http_code}\n" https://api.kaggle.com
-          echo "=== kaggle.com (no www) ==="
-          curl -s -o /dev/null -w "HTTP: %{http_code}\n" https://kaggle.com
-          echo "=== www.kaggle.com/api/v1/competitions/list (no token, expect 401 not block) ==="
-          curl -s -w "\nHTTP: %{http_code}\n" https://www.kaggle.com/api/v1/competitions/list
+          {
+            echo "=== Test run: $(date -u) ==="
+            echo "www.kaggle.com:"
+            curl -s -o /dev/null -w "  HTTP: %{http_code}\n" https://www.kaggle.com
+            echo "api.kaggle.com:"
+            curl -s -o /dev/null -w "  HTTP: %{http_code}\n" https://api.kaggle.com
+            echo "kaggle.com (no www):"
+            curl -s -o /dev/null -w "  HTTP: %{http_code}\n" https://kaggle.com
+            echo "api/v1/competitions/list (no token):"
+            curl -s -w "  HTTP: %{http_code}\n" https://www.kaggle.com/api/v1/competitions/list
+          } > kaggle_connectivity_result.txt
+          cat kaggle_connectivity_result.txt
+
+      - name: Commit result
+        run: |
+          git config user.name "test-bot"
+          git config user.email "test@bot.com"
+          git add kaggle_connectivity_result.txt
+          git commit -m "test: kaggle connectivity result" || echo "no changes"
+          git push
