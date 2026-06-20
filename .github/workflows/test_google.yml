@@ -1,0 +1,11 @@
+name: Test Google Connectivity
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Google reachability
+        run: |
+          curl -s -o /dev/null -w "google.com: %{http_code}\n" https://www.google.com
+          curl -s -o /dev/null -w "colab.research.google.com: %{http_code}\n" https://colab.research.google.com
+          curl -s -o /dev/null -w "drive.google.com: %{http_code}\n" https://drive.google.com
