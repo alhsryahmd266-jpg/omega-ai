@@ -1,0 +1,166 @@
+Output file downloaded to kaggle_output/omega-ai/.git/HEAD
+Output file downloaded to kaggle_output/omega-ai/.git/config
+Output file downloaded to kaggle_output/omega-ai/.git/description
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/applypatch-msg.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/commit-msg.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/fsmonitor-watchman.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/post-update.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/pre-applypatch.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/pre-commit.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/pre-merge-commit.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/pre-push.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/pre-rebase.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/pre-receive.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/prepare-commit-msg.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/push-to-checkout.sample
+Output file downloaded to kaggle_output/omega-ai/.git/hooks/update.sample
+Output file downloaded to kaggle_output/omega-ai/.git/index
+Output file downloaded to kaggle_output/omega-ai/.git/info/exclude
+Output file downloaded to kaggle_output/omega-ai/.git/logs/HEAD
+Output file downloaded to kaggle_output/omega-ai/.git/logs/refs/heads/main
+Output file downloaded to kaggle_output/omega-ai/.git/logs/refs/remotes/origin/HEAD
+Output file downloaded to kaggle_output/omega-ai/.git/objects/pack/pack-ecae2e4fce1d95de923e4723fcbabeb074079b62.idx
+Output file downloaded to kaggle_output/omega-ai/.git/objects/pack/pack-ecae2e4fce1d95de923e4723fcbabeb074079b62.pack
+Output file downloaded to kaggle_output/omega-ai/.git/packed-refs
+Output file downloaded to kaggle_output/omega-ai/.git/refs/heads/main
+Output file downloaded to kaggle_output/omega-ai/.git/refs/remotes/origin/HEAD
+Output file downloaded to kaggle_output/omega-ai/.git/shallow
+Output file downloaded to kaggle_output/omega-ai/.github/workflows/kaggle_bridge.yml
+Output file downloaded to kaggle_output/omega-ai/.github/workflows/swarm.yml
+Output file downloaded to kaggle_output/omega-ai/.github/workflows/test_google.yml
+Output file downloaded to kaggle_output/omega-ai/.github/workflows/test_kaggle.yml
+Output file downloaded to kaggle_output/omega-ai/.github/workflows/train.yml
+Output file downloaded to kaggle_output/omega-ai/README.md
+Output file downloaded to kaggle_output/omega-ai/checkpoints/config.json
+Output file downloaded to kaggle_output/omega-ai/data/training_data.json
+Output file downloaded to kaggle_output/omega-ai/kaggle_connectivity_result.txt
+Output file downloaded to kaggle_output/omega-ai/kaggle_kernel/aion_kaggle_train.py
+Output file downloaded to kaggle_output/omega-ai/kaggle_kernel/kernel-metadata.json
+Output file downloaded to kaggle_output/omega-ai/kaggle_push_log.txt
+Output file downloaded to kaggle_output/omega-ai/omega/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/__pycache__/__init__.cpython-312.pyc
+Output file downloaded to kaggle_output/omega-ai/omega/agent/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/agent/agent.py
+Output file downloaded to kaggle_output/omega-ai/omega/core/compound_brain.py
+Output file downloaded to kaggle_output/omega-ai/omega/core/external_brain.py
+Output file downloaded to kaggle_output/omega-ai/omega/core/vision_brain.py
+Output file downloaded to kaggle_output/omega-ai/omega/learner/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/learner/self_improver.py
+Output file downloaded to kaggle_output/omega-ai/omega/learner/web_learner.py
+Output file downloaded to kaggle_output/omega-ai/omega/memory/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/memory/persistent.py
+Output file downloaded to kaggle_output/omega-ai/omega/model/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/model/__pycache__/__init__.cpython-312.pyc
+Output file downloaded to kaggle_output/omega-ai/omega/model/__pycache__/architecture.cpython-312.pyc
+Output file downloaded to kaggle_output/omega-ai/omega/model/architecture.py
+Output file downloaded to kaggle_output/omega-ai/omega/reasoning/hierarchical_thinking.py
+Output file downloaded to kaggle_output/omega-ai/omega/reasoning/tree_of_thought.py
+Output file downloaded to kaggle_output/omega-ai/omega/swarm/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/swarm/aggregator.py
+Output file downloaded to kaggle_output/omega-ai/omega/swarm/data_generator.py
+Output file downloaded to kaggle_output/omega-ai/omega/swarm/shard_trainer.py
+Output file downloaded to kaggle_output/omega-ai/omega/tokenizer/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/tokenizer/__pycache__/__init__.cpython-312.pyc
+Output file downloaded to kaggle_output/omega-ai/omega/tokenizer/__pycache__/bpe.cpython-312.pyc
+Output file downloaded to kaggle_output/omega-ai/omega/tokenizer/bpe.py
+Output file downloaded to kaggle_output/omega-ai/omega/trainer/__init__.py
+Output file downloaded to kaggle_output/omega-ai/omega/trainer/__pycache__/__init__.cpython-312.pyc
+Output file downloaded to kaggle_output/omega-ai/omega/trainer/__pycache__/train.cpython-312.pyc
+Output file downloaded to kaggle_output/omega-ai/omega/trainer/train.py
+Output file downloaded to kaggle_output/omega-ai/requirements.txt
+Output file downloaded to kaggle_output/omega-ai/scripts/__init__.py
+Output file downloaded to kaggle_output/omega-ai/scripts/ci_test_arch.py
+Output file downloaded to kaggle_output/omega-ai/scripts/ci_test_mem.py
+Output file downloaded to kaggle_output/omega-ai/scripts/ci_test_pipeline.py
+Output file downloaded to kaggle_output/omega-ai/scripts/ci_test_tok.py
+Output file downloaded to kaggle_output/omega-ai/scripts/download_latest_checkpoint.py
+Output file downloaded to kaggle_output/omega-ai/scripts/prepare_data.py
+Output file downloaded to kaggle_output/omega-ai/scripts/train_omega.py
+Output file downloaded to kaggle_output/omega-ai/scripts/validate_merged.py
+Kernel log downloaded to kaggle_output/aion-gpu-training.log 
+=== Files downloaded ===
+total 16
+drwxr-xr-x  3 runner runner 4096 Jun 21 05:24 .
+drwxr-xr-x 10 runner runner 4096 Jun 21 05:24 ..
+-rw-r--r--  1 runner runner 1364 Jun 21 05:24 aion-gpu-training.log
+drwxr-xr-x  9 runner runner 4096 Jun 21 05:24 omega-ai
+  kaggle_output/omega-ai/scripts/validate_merged.py
+  kaggle_output/omega-ai/scripts/__init__.py
+  kaggle_output/omega-ai/scripts/train_omega.py
+  kaggle_output/omega-ai/scripts/ci_test_mem.py
+  kaggle_output/omega-ai/scripts/ci_test_pipeline.py
+  kaggle_output/omega-ai/scripts/prepare_data.py
+  kaggle_output/omega-ai/scripts/download_latest_checkpoint.py
+  kaggle_output/omega-ai/scripts/ci_test_arch.py
+  kaggle_output/omega-ai/scripts/ci_test_tok.py
+  kaggle_output/omega-ai/README.md
+  kaggle_output/omega-ai/kaggle_kernel/aion_kaggle_train.py
+  kaggle_output/omega-ai/kaggle_kernel/kernel-metadata.json
+  kaggle_output/omega-ai/omega/swarm/__init__.py
+  kaggle_output/omega-ai/omega/swarm/aggregator.py
+  kaggle_output/omega-ai/omega/swarm/data_generator.py
+  kaggle_output/omega-ai/omega/swarm/shard_trainer.py
+  kaggle_output/omega-ai/omega/core/compound_brain.py
+  kaggle_output/omega-ai/omega/core/vision_brain.py
+  kaggle_output/omega-ai/omega/core/external_brain.py
+  kaggle_output/omega-ai/omega/__init__.py
+  kaggle_output/omega-ai/omega/reasoning/tree_of_thought.py
+  kaggle_output/omega-ai/omega/reasoning/hierarchical_thinking.py
+  kaggle_output/omega-ai/omega/agent/agent.py
+  kaggle_output/omega-ai/omega/agent/__init__.py
+  kaggle_output/omega-ai/omega/memory/__init__.py
+  kaggle_output/omega-ai/omega/memory/persistent.py
+  kaggle_output/omega-ai/omega/trainer/__init__.py
+  kaggle_output/omega-ai/omega/trainer/train.py
+  kaggle_output/omega-ai/omega/trainer/__pycache__/__init__.cpython-312.pyc
+  kaggle_output/omega-ai/omega/trainer/__pycache__/train.cpython-312.pyc
+  kaggle_output/omega-ai/omega/learner/__init__.py
+  kaggle_output/omega-ai/omega/learner/web_learner.py
+  kaggle_output/omega-ai/omega/learner/self_improver.py
+  kaggle_output/omega-ai/omega/tokenizer/__init__.py
+  kaggle_output/omega-ai/omega/tokenizer/bpe.py
+  kaggle_output/omega-ai/omega/tokenizer/__pycache__/__init__.cpython-312.pyc
+  kaggle_output/omega-ai/omega/tokenizer/__pycache__/bpe.cpython-312.pyc
+  kaggle_output/omega-ai/omega/__pycache__/__init__.cpython-312.pyc
+  kaggle_output/omega-ai/omega/model/__init__.py
+  kaggle_output/omega-ai/omega/model/architecture.py
+  kaggle_output/omega-ai/omega/model/__pycache__/__init__.cpython-312.pyc
+  kaggle_output/omega-ai/omega/model/__pycache__/architecture.cpython-312.pyc
+  kaggle_output/omega-ai/.git/index
+  kaggle_output/omega-ai/.git/HEAD
+  kaggle_output/omega-ai/.git/logs/HEAD
+  kaggle_output/omega-ai/.git/logs/refs/remotes/origin/HEAD
+  kaggle_output/omega-ai/.git/logs/refs/heads/main
+  kaggle_output/omega-ai/.git/shallow
+  kaggle_output/omega-ai/.git/info/exclude
+  kaggle_output/omega-ai/.git/config
+  kaggle_output/omega-ai/.git/packed-refs
+  kaggle_output/omega-ai/.git/description
+  kaggle_output/omega-ai/.git/hooks/pre-commit.sample
+  kaggle_output/omega-ai/.git/hooks/push-to-checkout.sample
+  kaggle_output/omega-ai/.git/hooks/pre-applypatch.sample
+  kaggle_output/omega-ai/.git/hooks/prepare-commit-msg.sample
+  kaggle_output/omega-ai/.git/hooks/update.sample
+  kaggle_output/omega-ai/.git/hooks/pre-rebase.sample
+  kaggle_output/omega-ai/.git/hooks/applypatch-msg.sample
+  kaggle_output/omega-ai/.git/hooks/commit-msg.sample
+  kaggle_output/omega-ai/.git/hooks/pre-receive.sample
+  kaggle_output/omega-ai/.git/hooks/fsmonitor-watchman.sample
+  kaggle_output/omega-ai/.git/hooks/post-update.sample
+  kaggle_output/omega-ai/.git/hooks/pre-merge-commit.sample
+  kaggle_output/omega-ai/.git/hooks/pre-push.sample
+  kaggle_output/omega-ai/.git/objects/pack/pack-ecae2e4fce1d95de923e4723fcbabeb074079b62.idx
+  kaggle_output/omega-ai/.git/objects/pack/pack-ecae2e4fce1d95de923e4723fcbabeb074079b62.pack
+  kaggle_output/omega-ai/.git/refs/remotes/origin/HEAD
+  kaggle_output/omega-ai/.git/refs/heads/main
+  kaggle_output/omega-ai/requirements.txt
+  kaggle_output/omega-ai/checkpoints/config.json
+  kaggle_output/omega-ai/kaggle_push_log.txt
+  kaggle_output/omega-ai/data/training_data.json
+  kaggle_output/omega-ai/kaggle_connectivity_result.txt
+  kaggle_output/omega-ai/.github/workflows/train.yml
+  kaggle_output/omega-ai/.github/workflows/swarm.yml
+  kaggle_output/omega-ai/.github/workflows/kaggle_bridge.yml
+  kaggle_output/omega-ai/.github/workflows/test_kaggle.yml
+  kaggle_output/omega-ai/.github/workflows/test_google.yml
+  kaggle_output/aion-gpu-training.log
