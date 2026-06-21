@@ -66,7 +66,97 @@ def download_latest_checkpoint(out_dir: str):
     return downloaded > 0
 
 
-def main():
+def download_deepseek_14b(out_dir: str) -> str:
+    """
+    يجيب نموذج DeepSeek-R1-Distill-Qwen-14B-Uncensored-GGUF (~9GB).
+    Kaggle عنده انترنت كامل فيقدر يوصل لـ Hugging Face عادي
+    (بعكس بيئة Claude المقيّدة بقائمة مسموحة).
+    """
+    model_dir = os.path.join(out_dir, "deepseek_14b")
+    os.makedirs(model_dir, exist_ok=True)
+    model_file = os.path.join(model_dir, "deepseek-r1-distill-qwen-14b-uncensored.Q4_K_M.gguf")
+
+    if os.path.exists(model_file) and os.path.getsize(model_file) > 1e9:
+        print(f"✅ النموذج موجود بالفعل: {model_file}")
+        return model_file
+
+    # ملاحظة: اسم الملف/الريبو الدقيق على Hugging Face لازم يتأكد
+    # وقت التشغيل لأن أسماء الإصدارات بتتغيّر. هنحاول استخدام
+    # huggingface_hub لو متاح، وإلا نطبع تعليمات واضحة.
+    try:
+        subprocess.run(["pip", "install", "-q", "huggingface_hub"], check=True)
+        from huggingface_hub import hf_hub_download
+        print("⬇️  جاري تحميل النموذج من Hugging Face (~9GB، يستغرق دقائق)...")
+        path = hf_hub_download(
+            repo_id=os.environ.get("AION_VISION_REPO_ID",
+                "TheDrummer/DeepSeek-R1-Distill-Qwen-14B-Uncensored-GGUF"),
+            filename=os.environ.get("AION_MODEL_FILENAME",
+                "DeepSeek-R1-Distill-Qwen-14B-Uncensored-Q4_K_M.gguf"),
+            local_dir=model_dir,
+        )
+        print(f"✅ تم التحميل: {path}")
+        return path
+    except Exception as e:
+        print(f"⚠️  تحميل تلقائي فشل ({e})")
+        print("   حدّد AION_VISION_REPO_ID / AION_MODEL_FILENAME الصحيحين "
+              "كمتغيرات بيئة في الـ workflow، أو نزّله يدوياً على Kaggle "
+              "كـ dataset واربطه بالـ kernel.")
+        return ""
+
+
+def test_compound_brain(gguf_path: str, out_dir: str):
+    """
+    يبني الذكاء المركّب فعلياً (Live على Kaggle GPU):
+    نموذج 14B + شجرة تفكير + ذاكرة دائمة، ويختبره بمسألة حقيقية.
+    """
+    if not gguf_path or not os.path.exists(gguf_path):
+        print("⏭️  تخطي اختبار الذكاء المركّب — النموذج غير متاح")
+        return
+
+    try:
+        subprocess.run(["pip", "install", "-q", "llama-cpp-python"], check=True)
+    except Exception as e:
+        print(f"⚠️  تثبيت llama-cpp-python فشل: {e}")
+        return
+
+    from omega.core.external_brain import ExternalBrain, ExternalBrainConfig
+    from omega.reasoning.tree_of_thought import TreeOfThought, ExternalBrainAdapter
+    from omega.memory.persistent import OmegaPersistentMemory
+
+    print("\n🧠 بناء الذكاء المركّب: 14B + شجرة تفكير + ذاكرة...")
+    n_gpu_layers = -1 if torch.cuda.is_available() else 0  # -1 = كل الطبقات على GPU
+
+    brain = ExternalBrain(ExternalBrainConfig(
+        model_path=gguf_path,
+        n_ctx=4096,
+        n_gpu_layers=n_gpu_layers,
+        max_tokens=300,
+    ))
+
+    mem_path = os.path.join(out_dir, "compound_memory.db")
+    memory = OmegaPersistentMemory(mem_path)
+
+    tot = TreeOfThought(
+        brain=ExternalBrainAdapter(brain, system_prompt="أنت محرك استدلال دقيق."),
+        breadth=2, keep_top=2, max_depth=2, memory=memory,
+    )
+
+    test_problem = "إزاي أحل مشكلة Gradle sync failed في Android Studio؟"
+    print(f"❓ سؤال تجريبي: {test_problem}")
+    result = tot.solve(test_problem)
+
+    print(f"✅ الإجابة: {result['answer'][:200]}")
+    print(f"   الثقة: {result['confidence']}")
+    print(f"   إحصائيات: {result['stats']}")
+
+    with open(os.path.join(out_dir, "compound_brain_test.json"), 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    memory.close()
+    print("✅ الذكاء المركّب يعمل بنجاح على Kaggle GPU")
+
+
+
     # ── إعداد الجهاز: GPU إذا توفر ──────────────────────────
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"الجهاز المستخدم: {device}")
@@ -208,6 +298,15 @@ def main():
 
     print(f"\nالنتائج محفوظة في {out_dir}")
     print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    # ── المرحلة الإضافية: جلب الـ14B + الذكاء المركّب ────────
+    # (يعمل فقط لو فيه GPU كافي ومفعّل عن طريق متغير بيئة)
+    if os.environ.get('AION_FETCH_14B', 'true').lower() == 'true':
+        print("\n" + "="*55)
+        print("  المرحلة الإضافية: نموذج DeepSeek-14B + الذكاء المركّب")
+        print("="*55)
+        gguf_path = download_deepseek_14b(out_dir)
+        test_compound_brain(gguf_path, out_dir)
 
 
 if __name__ == '__main__':
