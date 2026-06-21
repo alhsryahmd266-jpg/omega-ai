@@ -73,28 +73,51 @@ jobs:
       - name: Poll until Kaggle kernel finishes
         run: |
           SLUG="ahmedxdx/aion-gpu-training"
-          MAX_WAIT=18000   # 5 ساعات بالثواني
+          MAX_WAIT=18000
           ELAPSED=0
+          : > ../kaggle_poll_log.txt
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             STATUS=$(kaggle kernels status "$SLUG" 2>&1 || echo "unknown")
-            echo "[$ELAPSED s] Status: $STATUS"
+            echo "[$ELAPSED s] Status: $STATUS" | tee -a ../kaggle_poll_log.txt
             if echo "$STATUS" | grep -qi "complete"; then
-              echo "✅ Kernel finished successfully"
+              echo "Kernel finished successfully" | tee -a ../kaggle_poll_log.txt
               break
             fi
             if echo "$STATUS" | grep -qi "error\|cancelacled\|failed"; then
-              echo "::warning::Kernel reported an error state: $STATUS"
+              echo "WARNING: Kernel reported an error state" | tee -a ../kaggle_poll_log.txt
               break
             fi
             sleep 60
             ELAPSED=$((ELAPSED + 60))
           done
 
+      - name: Commit poll diagnostic log
+        if: always()
+        run: |
+          git config user.name "debug-bot"
+          git config user.email "debug@bot.com"
+          git add kaggle_poll_log.txt 2>/dev/null || true
+          git commit -m "debug: kaggle poll log" || echo "no changes"
+          git push || echo "push failed or nothing to push"
+
       - name: Download kernel output
         run: |
           mkdir -p kaggle_output
-          kaggle kernels output "ahmedxdx/aion-gpu-training" -p kaggle_output/
-          ls -la kaggle_output/
+          kaggle kernels output "ahmedxdx/aion-gpu-training" -p kaggle_output/ > kaggle_download_log.txt 2>&1 || true
+          cat kaggle_download_log.txt
+          echo "=== Files downloaded ===" >> kaggle_download_log.txt
+          ls -la kaggle_output/ >> kaggle_download_log.txt 2>&1 || echo "no files" >> kaggle_download_log.txt
+          find kaggle_output -type f -exec echo "  {}" \; >> kaggle_download_log.txt
+          cat kaggle_download_log.txt
+
+      - name: Commit download diagnostic log
+        if: always()
+        run: |
+          git config user.name "debug-bot"
+          git config user.email "debug@bot.com"
+          git add kaggle_download_log.txt 2>/dev/null || true
+          git commit -m "debug: kaggle download log" || echo "no changes"
+          git push || echo "push failed or nothing to push"
 
       - name: Merge GPU checkpoint into repo
         run: |
