@@ -37,12 +37,19 @@ jobs:
         run: |
           if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
             echo "::error::KAGGLE_USERNAME or KAGGLE_KEY secrets are not set."
-            echo "Add them in: Settings > Secrets and variables > Actions"
             exit 1
           fi
+          # الصيغة الجديدة لـ Kaggle CLI: access_token file (مش kaggle.json القديم)
           mkdir -p ~/.kaggle
+          echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+          chmod 600 ~/.kaggle/access_token
+          # كمان نحتفظ بالصيغة القديمة احتياطياً لو نسخة مختلفة بتتطلبها
           echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
+          echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
+          echo "KAGGLE_USERNAME=$KAGGLE_USERNAME" >> "$GITHUB_ENV"
+          # اختبار فوري قبل المتابعة
+          kaggle kernels list --mine 2>&1 | head -5 || echo "تحذير: الاختبار الأولي فشل، هنحاول المتابعة"
 
       - name: Push training kernel to Kaggle
         env:
