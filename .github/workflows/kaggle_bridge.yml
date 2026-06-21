@@ -49,9 +49,19 @@ jobs:
           AION_MAX_MINUTES: ${{ github.event.inputs.max_minutes || '240' }}
         run: |
           cd kaggle_kernel
-          kaggle kernels push -p .
+          kaggle kernels push -p . > ../kaggle_push_log.txt 2>&1 || true
+          cat ../kaggle_push_log.txt
           echo "Kernel pushed, waiting for it to start..."
           sleep 30
+
+      - name: Commit diagnostic log (always, even on failure)
+        if: always()
+        run: |
+          git config user.name "debug-bot"
+          git config user.email "debug@bot.com"
+          git add kaggle_push_log.txt 2>/dev/null || true
+          git commit -m "debug: kaggle push log" || echo "no changes"
+          git push || echo "push failed or nothing to push"
 
       - name: Poll until Kaggle kernel finishes
         run: |
