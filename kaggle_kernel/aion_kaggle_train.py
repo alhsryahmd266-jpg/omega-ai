@@ -104,13 +104,57 @@ def download_deepseek_14b(out_dir: str) -> str:
         return ""
 
 
-def test_compound_brain(gguf_path: str, out_dir: str):
+def download_vision_model(out_dir: str) -> str:
     """
-    يبني الذكاء المركّب فعلياً (Live على Kaggle GPU):
-    نموذج 14B + شجرة تفكير + ذاكرة دائمة، ويختبره بمسألة حقيقية.
+    يجيب MiniCPM-V-4.6-GGUF — أقوى موديل رؤية+فيديو في حدود 2GB
+    (الحجم الفعلي ~0.8GB بجودة Q8_0، يسيب مساحة كبيرة من حد الـ2GB).
+    يدعم صور وفيديو أصلياً عبر llama.cpp — نفس محرك النموذج النصي 14B.
+    """
+    model_dir = os.path.join(out_dir, "vision_minicpm")
+    os.makedirs(model_dir, exist_ok=True)
+    model_file = os.path.join(model_dir, "MiniCPM-V-4.6-Q8_0.gguf")
+    mmproj_file = os.path.join(model_dir, "mmproj-MiniCPM-V-4.6-f16.gguf")
+
+    if os.path.exists(model_file) and os.path.getsize(model_file) > 1e8:
+        print(f"✅ موديل الرؤية موجود بالفعل: {model_file}")
+        return model_file
+
+    try:
+        from huggingface_hub import hf_hub_download
+        print("⬇️  جاري تحميل موديل الرؤية MiniCPM-V-4.6 (~0.8GB)...")
+        path = hf_hub_download(
+            repo_id=os.environ.get("AION_VISION_REPO_ID", "ggml-org/MiniCPM-V-4.6-GGUF"),
+            filename=os.environ.get("AION_VISION_FILENAME", "Model-4.6-Q8_0.gguf"),
+            local_dir=model_dir,
+        )
+        # ملف الـ mmproj (المحوّل البصري) منفصل وضروري
+        try:
+            mmproj_path = hf_hub_download(
+                repo_id=os.environ.get("AION_VISION_REPO_ID", "ggml-org/MiniCPM-V-4.6-GGUF"),
+                filename=os.environ.get("AION_MMPROJ_FILENAME", "mmproj-model-f16.gguf"),
+                local_dir=model_dir,
+            )
+            print(f"✅ mmproj تم تحميله: {mmproj_path}")
+        except Exception as e:
+            print(f"⚠️  تحميل mmproj فشل ({e}) — راجع اسم الملف الدقيق على صفحة الموديل")
+        print(f"✅ موديل الرؤية تم تحميله: {path}")
+        return path
+    except Exception as e:
+        print(f"⚠️  تحميل موديل الرؤية فشل ({e})")
+        print("   حدّد AION_VISION_REPO_ID / AION_VISION_FILENAME الصحيحين، "
+              "أو راجع huggingface.co/ggml-org/MiniCPM-V-4.6-GGUF للأسماء الدقيقة")
+        return ""
+
+
+
+def test_compound_brain(gguf_path: str, vision_path: str, out_dir: str):
+    """
+    يبني الذكاء المركّب الهجين الكامل (Live على Kaggle GPU):
+    نموذج نصي 14B + موديل رؤية/فيديو ~0.8GB + شجرة تفكير + ذاكرة دائمة.
+    هذا هو النظام الهجين: 9GB + ~1GB = نظام واحد متكامل.
     """
     if not gguf_path or not os.path.exists(gguf_path):
-        print("⏭️  تخطي اختبار الذكاء المركّب — النموذج غير متاح")
+        print("⏭️  تخطي اختبار الذكاء المركّب — النموذج النصي غير متاح")
         return
 
     try:
@@ -120,43 +164,55 @@ def test_compound_brain(gguf_path: str, out_dir: str):
         return
 
     from omega.core.external_brain import ExternalBrain, ExternalBrainConfig
-    from omega.reasoning.tree_of_thought import TreeOfThought, ExternalBrainAdapter
+    from omega.core.vision_brain import VisionBrain, VisionBrainConfig
+    from omega.core.compound_brain import CompoundBrain
     from omega.memory.persistent import OmegaPersistentMemory
 
-    print("\n🧠 بناء الذكاء المركّب: 14B + شجرة تفكير + ذاكرة...")
-    n_gpu_layers = -1 if torch.cuda.is_available() else 0  # -1 = كل الطبقات على GPU
+    print("\n🧠 بناء الذكاء المركّب الهجين: 14B نصي + رؤية/فيديو + شجرة تفكير + ذاكرة...")
+    n_gpu_layers = -1 if torch.cuda.is_available() else 0
 
-    brain = ExternalBrain(ExternalBrainConfig(
-        model_path=gguf_path,
-        n_ctx=4096,
-        n_gpu_layers=n_gpu_layers,
-        max_tokens=300,
+    text_brain = ExternalBrain(ExternalBrainConfig(
+        model_path=gguf_path, n_ctx=4096, n_gpu_layers=n_gpu_layers, max_tokens=300,
     ))
+
+    vision_brain = None
+    if vision_path and os.path.exists(vision_path):
+        mmproj_guess = os.path.join(os.path.dirname(vision_path), "mmproj-MiniCPM-V-4.6-f16.gguf")
+        if os.path.exists(mmproj_guess):
+            vision_brain = VisionBrain(VisionBrainConfig(
+                model_path=vision_path,
+                clip_model_path=mmproj_guess,
+                chat_handler_name=os.environ.get("AION_VISION_HANDLER", "MiniCPMv26ChatHandler"),
+                n_gpu_layers=n_gpu_layers,
+            ))
+            print("✅ موديل الرؤية جاهز للدمج")
+        else:
+            print(f"⚠️  ملف mmproj غير موجود — الرؤية ستكون معطّلة")
+    else:
+        print("⏭️  موديل الرؤية غير متاح — الاختبار سيكون نصي فقط")
 
     mem_path = os.path.join(out_dir, "compound_memory.db")
     memory = OmegaPersistentMemory(mem_path)
 
-    tot = TreeOfThought(
-        brain=ExternalBrainAdapter(brain, system_prompt="أنت محرك استدلال دقيق."),
-        breadth=2, keep_top=2, max_depth=2, memory=memory,
-    )
+    compound = CompoundBrain(text_brain=text_brain, vision_brain=vision_brain, memory=memory)
 
     test_problem = "إزاي أحل مشكلة Gradle sync failed في Android Studio؟"
-    print(f"❓ سؤال تجريبي: {test_problem}")
-    result = tot.solve(test_problem)
+    print(f"❓ سؤال تجريبي (نصي): {test_problem}")
+    result = compound.think_only(test_problem)
 
     print(f"✅ الإجابة: {result['answer'][:200]}")
     print(f"   الثقة: {result['confidence']}")
     print(f"   إحصائيات: {result['stats']}")
 
     with open(os.path.join(out_dir, "compound_brain_test.json"), 'w', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+        json.dump({"text_only_result": result,
+                   "vision_available": vision_brain is not None}, f, ensure_ascii=False, indent=2)
 
     memory.close()
-    print("✅ الذكاء المركّب يعمل بنجاح على Kaggle GPU")
+    print(f"✅ الذكاء المركّب الهجين يعمل | رؤية متاحة: {vision_brain is not None}")
 
 
-
+def main():
     # ── إعداد الجهاز: GPU إذا توفر ──────────────────────────
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"الجهاز المستخدم: {device}")
@@ -306,7 +362,8 @@ def test_compound_brain(gguf_path: str, out_dir: str):
         print("  المرحلة الإضافية: نموذج DeepSeek-14B + الذكاء المركّب")
         print("="*55)
         gguf_path = download_deepseek_14b(out_dir)
-        test_compound_brain(gguf_path, out_dir)
+        vision_path = download_vision_model(out_dir)
+        test_compound_brain(gguf_path, vision_path, out_dir)
 
 
 if __name__ == '__main__':
