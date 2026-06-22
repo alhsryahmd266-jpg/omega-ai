@@ -1,0 +1,5 @@
+=== Poll started Mon Jun 22 20:52:24 UTC 2026 ===
+[0 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
+[60 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.ERROR"
+ERROR: kernel failed
+=== Poll ended Mon Jun 22 20:53:25 UTC 2026 elapsed=60s ===
