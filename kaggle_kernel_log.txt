@@ -1,35 +1,34 @@
-[{"stream_name":"stderr","time":0.871662794,"data":"Cloning into '/kaggle/working/omega-ai'...\n"}
-,{"stream_name":"stderr","time":6.845690977,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":6.845726172,"data":"    Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.\n"}
-,{"stream_name":"stderr","time":6.845735254,"data":"    Minimum and Maximum cuda capability supported by this version of PyTorch is\n"}
-,{"stream_name":"stderr","time":6.845738012,"data":"    (7.0) - (12.0)\n"}
-,{"stream_name":"stderr","time":6.8457404969999995,"data":"    \n"}
-,{"stream_name":"stderr","time":6.845742803,"data":"  queued_call()\n"}
-,{"stream_name":"stderr","time":6.845745174,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":6.845747946,"data":"    Please install PyTorch with a following CUDA\n"}
-,{"stream_name":"stderr","time":6.845750331,"data":"    configurations:  12.6 following instructions at\n"}
-,{"stream_name":"stderr","time":6.845752669,"data":"    https://pytorch.org/get-started/locally/\n"}
-,{"stream_name":"stderr","time":6.845755004,"data":"    \n"}
-,{"stream_name":"stderr","time":6.845757261,"data":"  queued_call()\n"}
-,{"stream_name":"stderr","time":6.845936355,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":6.8459510439999995,"data":"Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.\n"}
-,{"stream_name":"stderr","time":6.8459770330000005,"data":"The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\n"}
-,{"stream_name":"stderr","time":6.845990658,"data":"If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n"}
-,{"stream_name":"stderr","time":6.845994929,"data":"\n"}
-,{"stream_name":"stderr","time":6.845998472,"data":"  queued_call()\n"}
-,{"stream_name":"stdout","time":6.8475438539999995,"data":"⚠️  GPU capability sm_60 \u003c sm_70 — تثبيت PyTorch متوافق...\n"}
-,{"stream_name":"stderr","time":9.097665543,"data":"ERROR: Could not find a version that satisfies the requirement torch==2.0.1 (from versions: none)\n"}
-,{"stream_name":"stderr","time":9.098070281,"data":"ERROR: No matching distribution found for torch==2.0.1\n"}
-,{"stream_name":"stdout","time":9.161922011,"data":"⚠️  فحص CUDA compat فشل: Command '['pip', 'install', '-q', '--force-reinstall', 'torch==2.0.1', '--index-url', 'https://download.pytorch.org/whl/cu117']' returned non-zero exit status 1.\n"}
-,{"stream_name":"stdout","time":9.177766871,"data":"الجهاز المستخدم: cuda\n"}
-,{"stream_name":"stdout","time":9.177787346,"data":"GPU: Tesla P100-PCIE-16GB\n"}
-,{"stream_name":"stdout","time":9.177792198,"data":"VRAM: 17.1GB\n"}
-,{"stream_name":"stdout","time":9.383328463,"data":"تم تحميل 0 ملف من kaggle-gpu-v1.0.13\n"}
-,{"stream_name":"stderr","time":66.556399842,"data":"Killed\n"}
-,{"stream_name":"stderr","time":68.927262755,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
-,{"stream_name":"stderr","time":68.92729673,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
-,{"stream_name":"stderr","time":69.238262153,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
-,{"stream_name":"stderr","time":69.238290155,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
-,{"stream_name":"stderr","time":70.474891824,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
-,{"stream_name":"stderr","time":71.743858267,"data":"[NbConvertApp] Writing 345198 bytes to __results__.html\n"}
+[{"stream_name":"stderr","time":0.796880103,"data":"Cloning into '/kaggle/working/omega-ai'...\n"}
+,{"stream_name":"stderr","time":7.056499259,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":7.056538175,"data":"    Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.\n"}
+,{"stream_name":"stderr","time":7.056543669,"data":"    Minimum and Maximum cuda capability supported by this version of PyTorch is\n"}
+,{"stream_name":"stderr","time":7.056547059,"data":"    (7.0) - (12.0)\n"}
+,{"stream_name":"stderr","time":7.056550343,"data":"    \n"}
+,{"stream_name":"stderr","time":7.056553684,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":7.056557066,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":7.056560498,"data":"    Please install PyTorch with a following CUDA\n"}
+,{"stream_name":"stderr","time":7.056563829,"data":"    configurations:  12.6 following instructions at\n"}
+,{"stream_name":"stderr","time":7.056567496,"data":"    https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":7.056571023,"data":"    \n"}
+,{"stream_name":"stderr","time":7.05657485,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":7.056578463,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":7.056582218,"data":"Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.\n"}
+,{"stream_name":"stderr","time":7.056586059,"data":"The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\n"}
+,{"stream_name":"stderr","time":7.056589732,"data":"If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":7.056593874,"data":"\n"}
+,{"stream_name":"stderr","time":7.056597392,"data":"  queued_call()\n"}
+,{"stream_name":"stdout","time":7.057966086,"data":"⚠️  Tesla P100-PCIE-16GB (sm_60) غير متوافق مع PyTorch الحالي.\n"}
+,{"stream_name":"stdout","time":7.058016625,"data":"   سيتم التشغيل على CPU بدلاً من ذلك.\n"}
+,{"stream_name":"stdout","time":7.058021794,"data":"✅ CUDA معطّل — سيعمل الكود على CPU\n"}
+,{"stream_name":"stdout","time":7.075095819,"data":"الجهاز المستخدم: cuda\n"}
+,{"stream_name":"stdout","time":7.075123552,"data":"GPU: Tesla P100-PCIE-16GB\n"}
+,{"stream_name":"stdout","time":7.07513393,"data":"VRAM: 17.1GB\n"}
+,{"stream_name":"stdout","time":7.403871265,"data":"تم تحميل 0 ملف من kaggle-gpu-v1.0.14\n"}
+,{"stream_name":"stderr","time":65.094307911,"data":"Killed\n"}
+,{"stream_name":"stderr","time":67.465821963,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":67.465853964,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":67.780172782,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":67.780203294,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":69.000691182,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":70.235900505,"data":"[NbConvertApp] Writing 345556 bytes to __results__.html\n"}
 ]
