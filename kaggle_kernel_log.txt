@@ -1,35 +1,86 @@
-[{"stream_name":"stderr","time":0.948610468,"data":"Cloning into '/kaggle/working/omega-ai'...\n"}
-,{"stream_name":"stderr","time":7.573291677,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":7.573354753,"data":"    Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.\n"}
-,{"stream_name":"stderr","time":7.573363088,"data":"    Minimum and Maximum cuda capability supported by this version of PyTorch is\n"}
-,{"stream_name":"stderr","time":7.573368852,"data":"    (7.0) - (12.0)\n"}
-,{"stream_name":"stderr","time":7.573373955,"data":"    \n"}
-,{"stream_name":"stderr","time":7.573379033,"data":"  queued_call()\n"}
-,{"stream_name":"stderr","time":7.573386681,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":7.57339561,"data":"    Please install PyTorch with a following CUDA\n"}
-,{"stream_name":"stderr","time":7.573399193,"data":"    configurations:  12.6 following instructions at\n"}
-,{"stream_name":"stderr","time":7.573402631,"data":"    https://pytorch.org/get-started/locally/\n"}
-,{"stream_name":"stderr","time":7.573406225,"data":"    \n"}
-,{"stream_name":"stderr","time":7.573409568,"data":"  queued_call()\n"}
-,{"stream_name":"stderr","time":7.573679019,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":7.573704049,"data":"Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.\n"}
-,{"stream_name":"stderr","time":7.573730366,"data":"The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\n"}
-,{"stream_name":"stderr","time":7.573737121,"data":"If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n"}
-,{"stream_name":"stderr","time":7.573743358,"data":"\n"}
-,{"stream_name":"stderr","time":7.573748396,"data":"  queued_call()\n"}
-,{"stream_name":"stdout","time":7.57530531,"data":"⚠️  Tesla P100-PCIE-16GB (sm_60) غير متوافق مع PyTorch الحالي.\n"}
-,{"stream_name":"stdout","time":7.575343673,"data":"   سيتم التشغيل على CPU بدلاً من ذلك.\n"}
-,{"stream_name":"stdout","time":7.575347787,"data":"✅ CUDA معطّل — سيعمل الكود على CPU\n"}
-,{"stream_name":"stdout","time":7.593164024,"data":"⚠️  GPU (sm_60) قديم — سيتم التشغيل على CPU\n"}
-,{"stream_name":"stdout","time":7.593207212,"data":"الجهاز المستخدم: cpu\n"}
-,{"stream_name":"stdout","time":7.593212505,"data":"GPU: Tesla P100-PCIE-16GB\n"}
-,{"stream_name":"stdout","time":7.593231879,"data":"VRAM: 17.1GB\n"}
-,{"stream_name":"stdout","time":7.759284169,"data":"تم تحميل 0 ملف من kaggle-gpu-v1.0.15\n"}
-,{"stream_name":"stderr","time":72.867784363,"data":"Killed\n"}
-,{"stream_name":"stderr","time":75.699669564,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
-,{"stream_name":"stderr","time":75.699716959,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
-,{"stream_name":"stderr","time":76.021001407,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
-,{"stream_name":"stderr","time":76.021030558,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
-,{"stream_name":"stderr","time":77.435147748,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
-,{"stream_name":"stderr","time":78.905393715,"data":"[NbConvertApp] Writing 347540 bytes to __results__.html\n"}
+[{"stream_name":"stderr","time":1.2842814900000001,"data":"Cloning into '/kaggle/working/omega-ai'...\n"}
+,{"stream_name":"stderr","time":8.884873257,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":8.884914093,"data":"    Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.\n"}
+,{"stream_name":"stderr","time":8.884921735,"data":"    Minimum and Maximum cuda capability supported by this version of PyTorch is\n"}
+,{"stream_name":"stderr","time":8.884927116,"data":"    (7.0) - (12.0)\n"}
+,{"stream_name":"stderr","time":8.884932414,"data":"    \n"}
+,{"stream_name":"stderr","time":8.884936921,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":8.884941847,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":8.884946356,"data":"    Please install PyTorch with a following CUDA\n"}
+,{"stream_name":"stderr","time":8.884950836,"data":"    configurations:  12.6 following instructions at\n"}
+,{"stream_name":"stderr","time":8.884955393,"data":"    https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":8.884960717,"data":"    \n"}
+,{"stream_name":"stderr","time":8.884965163,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":8.88521736,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":8.885235217,"data":"Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.\n"}
+,{"stream_name":"stderr","time":8.885240861,"data":"The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\n"}
+,{"stream_name":"stderr","time":8.885246525,"data":"If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":8.885251864,"data":"\n"}
+,{"stream_name":"stderr","time":8.88525649,"data":"  queued_call()\n"}
+,{"stream_name":"stdout","time":8.886994328,"data":"⚠️  Tesla P100-PCIE-16GB (sm_60) غير متوافق مع PyTorch الحالي.\n"}
+,{"stream_name":"stdout","time":8.887045054,"data":"   سيتم التشغيل على CPU بدلاً من ذلك.\n"}
+,{"stream_name":"stdout","time":8.887052254,"data":"✅ CUDA معطّل — سيعمل الكود على CPU\n"}
+,{"stream_name":"stdout","time":8.904319243,"data":"⚠️  GPU (sm_60) قديم — سيتم التشغيل على CPU\n"}
+,{"stream_name":"stdout","time":8.90434041,"data":"الجهاز المستخدم: cpu\n"}
+,{"stream_name":"stdout","time":8.90434648,"data":"GPU: Tesla P100-PCIE-16GB\n"}
+,{"stream_name":"stdout","time":8.904351824999999,"data":"VRAM: 17.1GB\n"}
+,{"stream_name":"stdout","time":9.127942716,"data":"تم تحميل 0 ملف من kaggle-gpu-v1.0.16\n"}
+,{"stream_name":"stdout","time":10.602036652,"data":"\n"}
+,{"stream_name":"stdout","time":10.602086686,"data":"╔══════════════════════════════════════════╗\n"}
+,{"stream_name":"stdout","time":10.602093198,"data":"║           AION v1.0 Ready                ║\n"}
+,{"stream_name":"stdout","time":10.602097038,"data":"╠══════════════════════════════════════════╣\n"}
+,{"stream_name":"stdout","time":10.602100968,"data":"║  Total params:    0.09B                ║\n"}
+,{"stream_name":"stdout","time":10.60210491,"data":"║  Layers:        8                      ║\n"}
+,{"stream_name":"stdout","time":10.602124906,"data":"║  SSM layers:    2                       ║\n"}
+,{"stream_name":"stdout","time":10.602127909,"data":"║  Global MoE:    every 4 layers (2 total)  ║\n"}
+,{"stream_name":"stdout","time":10.60213071,"data":"║  Tok experts:   8→2 active              ║\n"}
+,{"stream_name":"stdout","time":10.602133367,"data":"║  Seq experts:   4→2 active               ║\n"}
+,{"stream_name":"stdout","time":10.602136064,"data":"║  LoRA rank:     16                      ║\n"}
+,{"stream_name":"stdout","time":10.602142719,"data":"║  Context:       1024                  ║\n"}
+,{"stream_name":"stdout","time":10.60214563,"data":"╚══════════════════════════════════════════╝\n"}
+,{"stream_name":"stdout","time":10.608108411,"data":"عدد العينات: 77\n"}
+,{"stream_name":"stdout","time":16.98423102,"data":"Tokenizer saved → /kaggle/working/checkpoints/tokenizer.json\n"}
+,{"stream_name":"stdout","time":22.964135322,"data":"\n"}
+,{"stream_name":"stdout","time":22.964181315,"data":"بدء التدريب لمدة 120.0 دقيقة على cpu...\n"}
+,{"stream_name":"stderr","time":22.964149375,"data":"/kaggle/src/script.py:318: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.\n"}
+,{"stream_name":"stderr","time":22.96420329,"data":"  scaler = torch.cuda.amp.GradScaler() if torch.cuda.is_available() else None\n"}
+,{"stream_name":"stderr","time":23.182512577,"data":"/kaggle/src/script.py:342: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.\n"}
+,{"stream_name":"stderr","time":23.182548965,"data":"  with torch.cuda.amp.autocast():\n"}
+,{"stream_name":"stdout","time":7364.730266328,"data":"\n"}
+,{"stream_name":"stdout","time":7364.730324943,"data":"انتهى التدريب | خطوات=44 | متوسط الخطأ=8.4534 | الوقت=122.4 دقيقة\n"}
+,{"stream_name":"stdout","time":7365.066759632,"data":"\n"}
+,{"stream_name":"stdout","time":7365.066807861,"data":"النتائج محفوظة في /kaggle/working/checkpoints\n"}
+,{"stream_name":"stdout","time":7365.066815756,"data":"{\n"}
+,{"stream_name":"stdout","time":7365.066820401,"data":"  \"device\": \"cpu\",\n"}
+,{"stream_name":"stdout","time":7365.066829617,"data":"  \"avg_loss\": 8.453446431593461,\n"}
+,{"stream_name":"stdout","time":7365.066840167,"data":"  \"n_steps\": 44,\n"}
+,{"stream_name":"stdout","time":7365.066843691,"data":"  \"n_epochs\": 3,\n"}
+,{"stream_name":"stdout","time":7365.06684695,"data":"  \"elapsed_min\": 122.36276712814967,\n"}
+,{"stream_name":"stdout","time":7365.066850242,"data":"  \"generation\": 1\n"}
+,{"stream_name":"stdout","time":7365.066853504,"data":"}\n"}
+,{"stream_name":"stdout","time":7365.066856542,"data":"\n"}
+,{"stream_name":"stdout","time":7365.066859634,"data":"=======================================================\n"}
+,{"stream_name":"stdout","time":7365.066862935,"data":"  المرحلة الإضافية: نموذج DeepSeek-14B + الذكاء المركّب\n"}
+,{"stream_name":"stdout","time":7365.066866676,"data":"=======================================================\n"}
+,{"stream_name":"stdout","time":7370.237716013,"data":"⬇️  جاري تحميل النموذج من Hugging Face (~9GB، يستغرق دقائق)...\n"}
+,{"stream_name":"stdout","time":7370.698444702,"data":"⚠️  تحميل تلقائي فشل (401 Client Error. (Request ID: Root=1-6a39c1d2-1072cdd3795b03b920a41097;8664bc89-9a7a-42c2-b63b-4d7b305a36b0)\n"}
+,{"stream_name":"stdout","time":7370.698508657,"data":"\n"}
+,{"stream_name":"stdout","time":7370.698528191,"data":"Repository Not Found for url: https://huggingface.co/TheDrummer/DeepSeek-R1-Distill-Qwen-14B-Uncensored-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-14B-Uncensored-Q4_K_M.gguf.\n"}
+,{"stream_name":"stdout","time":7370.698533437,"data":"Please make sure you specified the correct `repo_id` and `repo_type`.\n"}
+,{"stream_name":"stdout","time":7370.698537693,"data":"If you are trying to access a private or gated repo, make sure you are authenticated and your token has the required permissions.\n"}
+,{"stream_name":"stdout","time":7370.698542272,"data":"For more details, see https://huggingface.co/docs/huggingface_hub/authentication\n"}
+,{"stream_name":"stdout","time":7370.698546622,"data":"Invalid username or password.)\n"}
+,{"stream_name":"stdout","time":7370.698550583,"data":"   حدّد AION_VISION_REPO_ID / AION_MODEL_FILENAME الصحيحين كمتغيرات بيئة في الـ workflow، أو نزّله يدوياً على Kaggle كـ dataset واربطه بالـ kernel.\n"}
+,{"stream_name":"stdout","time":7370.698560831,"data":"⬇️  جاري تحميل موديل الرؤية MiniCPM-V-4.6 (~0.8GB)...\n"}
+,{"stream_name":"stdout","time":7370.764263165,"data":"⚠️  تحميل موديل الرؤية فشل (404 Client Error. (Request ID: Root=1-6a39c1d3-758ae18c20a7f16f05c45fe3;bb1a8a49-70b7-4e1f-97f8-6e6da3a2af48)\n"}
+,{"stream_name":"stdout","time":7370.764291654,"data":"\n"}
+,{"stream_name":"stdout","time":7370.764295232,"data":"Entry Not Found for url: https://huggingface.co/ggml-org/MiniCPM-V-4.6-GGUF/resolve/main/Model-4.6-Q8_0.gguf.)\n"}
+,{"stream_name":"stdout","time":7370.764297922,"data":"   حدّد AION_VISION_REPO_ID / AION_VISION_FILENAME الصحيحين، أو راجع huggingface.co/ggml-org/MiniCPM-V-4.6-GGUF للأسماء الدقيقة\n"}
+,{"stream_name":"stdout","time":7370.764300837,"data":"⏭️  تخطي اختبار الذكاء المركّب — النموذج النصي غير متاح\n"}
+,{"stream_name":"stderr","time":7375.99730485,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":7375.997346218,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":7376.287048161,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":7376.287095771,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":7376.929982846,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":7378.276981472,"data":"[NbConvertApp] Writing 347739 bytes to __results__.html\n"}
 ]
