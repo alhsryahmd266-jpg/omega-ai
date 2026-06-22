@@ -239,8 +239,19 @@ def test_compound_brain(gguf_path: str, vision_path: str, out_dir: str):
 
 
 def main():
-    # ── إعداد الجهاز: GPU إذا توفر ──────────────────────────
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # ── إعداد الجهاز: GPU فقط لو متوافق (sm_70+) ──────────────
+    use_cuda = False
+    if __import__('torch').cuda.is_available():
+        try:
+            cap_major = __import__('torch').cuda.get_device_capability(0)[0]
+            if cap_major >= 7:
+                use_cuda = True
+                print(f"✅ GPU متوافق (sm_{cap_major*10}) — سيُستخدم CUDA")
+            else:
+                print(f"⚠️  GPU (sm_{cap_major*10}) قديم — سيتم التشغيل على CPU")
+        except Exception:
+            pass
+    device = __import__('torch').device('cuda' if use_cuda else 'cpu')
     print(f"الجهاز المستخدم: {device}")
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
