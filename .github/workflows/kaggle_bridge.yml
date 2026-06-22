@@ -75,21 +75,22 @@ jobs:
           SLUG="ahmedxdx/aion-gpu-training"
           MAX_WAIT=18000
           ELAPSED=0
-          : > ../kaggle_poll_log.txt
+          echo "=== Poll started $(date -u) ===" > kaggle_poll_log.txt
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            STATUS=$(kaggle kernels status "$SLUG" 2>&1 || echo "unknown")
-            echo "[$ELAPSED s] Status: $STATUS" | tee -a ../kaggle_poll_log.txt
-            if echo "$STATUS" | grep -qi "complete"; then
-              echo "Kernel finished successfully" | tee -a ../kaggle_poll_log.txt
+            RAW=$(kaggle kernels status "$SLUG" 2>&1 || echo "status_error")
+            echo "[$ELAPSED s] $RAW" | tee -a kaggle_poll_log.txt
+            if echo "$RAW" | grep -qi "complete"; then
+              echo "DONE: kernel finished" | tee -a kaggle_poll_log.txt
               break
             fi
-            if echo "$STATUS" | grep -qi "error\|cancelacled\|failed"; then
-              echo "WARNING: Kernel reported an error state" | tee -a ../kaggle_poll_log.txt
+            if echo "$RAW" | grep -qi "error\|failed\|cancel"; then
+              echo "ERROR: kernel failed" | tee -a kaggle_poll_log.txt
               break
             fi
             sleep 60
             ELAPSED=$((ELAPSED + 60))
           done
+          echo "=== Poll ended $(date -u) elapsed=${ELAPSED}s ===" >> kaggle_poll_log.txt
 
       - name: Commit poll diagnostic log
         if: always()
@@ -97,8 +98,8 @@ jobs:
           git config user.name "debug-bot"
           git config user.email "debug@bot.com"
           git add kaggle_poll_log.txt 2>/dev/null || true
-          git commit -m "debug: kaggle poll log" || echo "no changes"
-          git push || echo "push failed or nothing to push"
+          git diff --staged --quiet || git commit -m "debug: kaggle poll log"
+          git push || echo "nothing to push"
 
       - name: Download kernel output
         run: |
