@@ -31,23 +31,26 @@ if not os.path.exists(REPO_DIR):
 # ── إصلاح توافق CUDA: P100 (sm_60) يحتاج PyTorch 2.0.x ──────
 # بعض GPUs على Kaggle (P100) قديمة وتحتاج نسخة PyTorch أقدم
 def fix_pytorch_cuda_compat():
+    """
+    P100 على Kaggle (CUDA sm_60) غير متوافق مع PyTorch 2.x الحديث.
+    الحل: نشتغل على CPU — أبطأ لكن يكمل بدل ما يُقتل.
+    لو الـ kernel على T4 (sm_75+) هيشتغل GPU تلقائياً.
+    """
     import torch
     if not torch.cuda.is_available():
         return
     try:
-        # تحقق من capability
         cap = torch.cuda.get_device_capability(0)
         major = cap[0]
         if major < 7:
-            print(f"⚠️  GPU capability sm_{major*10} < sm_70 — تثبيت PyTorch متوافق...")
-            subprocess.run([
-                "pip", "install", "-q", "--force-reinstall",
-                "torch==2.0.1", "--index-url",
-                "https://download.pytorch.org/whl/cu117"
-            ], check=True)
-            print("✅ PyTorch 2.0.1 (cu117) ثُبّت — يدعم sm_60")
+            name = torch.cuda.get_device_name(0)
+            print(f"⚠️  {name} (sm_{major*10}) غير متوافق مع PyTorch الحالي.")
+            print("   سيتم التشغيل على CPU بدلاً من ذلك.")
+            # نخلي cuda.is_available يرجع False بتعطيل CUDA
+            os.environ['CUDA_VISIBLE_DEVICES'] = ''
+            print("✅ CUDA معطّل — سيعمل الكود على CPU")
     except Exception as e:
-        print(f"⚠️  فحص CUDA compat فشل: {e}")
+        print(f"⚠️  فحص CUDA compat: {e}")
 
 fix_pytorch_cuda_compat()
 
