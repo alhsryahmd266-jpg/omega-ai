@@ -264,14 +264,15 @@ def main():
     download_latest_checkpoint(out_dir)
 
     # ── إعدادات أكبر لأن عندنا GPU حقيقي دلوقتي ─────────────
-    if torch.cuda.is_available():
-        cfg = get_config('intensive')   # ممكن نزود الحجم أكتر لاحقاً
-        max_minutes = float(os.environ.get('AION_MAX_MINUTES', '240'))  # 4 ساعات
+    if use_cuda:
+        cfg = get_config('intensive')
+        max_minutes = float(os.environ.get('AION_MAX_MINUTES', '240'))
         batch_size = 16
     else:
-        cfg = get_config('nano')
-        max_minutes = 5.0
-        batch_size = 2
+        # CPU mode: استخدم small config عشان الـ RAM يكفي
+        cfg = get_config('small')
+        max_minutes = float(os.environ.get('AION_MAX_MINUTES', '120'))
+        batch_size = 4
 
     config_path = os.path.join(out_dir, 'config.json')
     if os.path.exists(config_path):
