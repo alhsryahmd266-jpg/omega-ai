@@ -28,6 +28,29 @@ REPO_DIR = os.path.join(WORK_DIR, "omega-ai")
 if not os.path.exists(REPO_DIR):
     subprocess.run(["git", "clone", "--depth", "1", REPO_URL, REPO_DIR], check=True)
 
+# ── إصلاح توافق CUDA: P100 (sm_60) يحتاج PyTorch 2.0.x ──────
+# بعض GPUs على Kaggle (P100) قديمة وتحتاج نسخة PyTorch أقدم
+def fix_pytorch_cuda_compat():
+    import torch
+    if not torch.cuda.is_available():
+        return
+    try:
+        # تحقق من capability
+        cap = torch.cuda.get_device_capability(0)
+        major = cap[0]
+        if major < 7:
+            print(f"⚠️  GPU capability sm_{major*10} < sm_70 — تثبيت PyTorch متوافق...")
+            subprocess.run([
+                "pip", "install", "-q", "--force-reinstall",
+                "torch==2.0.1", "--index-url",
+                "https://download.pytorch.org/whl/cu117"
+            ], check=True)
+            print("✅ PyTorch 2.0.1 (cu117) ثُبّت — يدعم sm_60")
+    except Exception as e:
+        print(f"⚠️  فحص CUDA compat فشل: {e}")
+
+fix_pytorch_cuda_compat()
+
 sys.path.insert(0, REPO_DIR)
 
 import torch
