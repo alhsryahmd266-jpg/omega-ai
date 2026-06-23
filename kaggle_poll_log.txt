@@ -1,4 +1,4 @@
-=== Poll started Mon Jun 22 21:12:05 UTC 2026 ===
+=== Poll started Tue Jun 23 06:38:43 UTC 2026 ===
 [0 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
 [60 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
 [120 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
@@ -118,9 +118,6 @@
 [6960 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
 [7020 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
 [7080 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
-[7140 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
-[7200 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
-[7260 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.RUNNING"
-[7320 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.COMPLETE"
+[7140 s] ahmedxdx/aion-gpu-training has status "KernelWorkerStatus.COMPLETE"
 DONE: kernel finished
-=== Poll ended Mon Jun 22 23:15:25 UTC 2026 elapsed=7320s ===
+=== Poll ended Tue Jun 23 08:38:48 UTC 2026 elapsed=7140s ===
