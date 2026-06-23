@@ -1,0 +1,8 @@
+{
+  "device": "cpu",
+  "avg_loss": 0.21523803985224654,
+  "n_steps": 11001,
+  "n_epochs": 551,
+  "elapsed_min": 120.00556370814641,
+  "generation": 1
+}
