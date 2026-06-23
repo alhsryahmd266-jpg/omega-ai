@@ -1,11 +1,7 @@
 Output file downloaded to kaggle_output/checkpoints/aion_best.pt
 Output file downloaded to kaggle_output/checkpoints/config.json
-Output file downloaded to kaggle_output/checkpoints/deepseek_14b/.cache/huggingface/.gitignore
-Output file downloaded to kaggle_output/checkpoints/deepseek_14b/.cache/huggingface/CACHEDIR.TAG
 Output file downloaded to kaggle_output/checkpoints/kaggle_result.json
 Output file downloaded to kaggle_output/checkpoints/tokenizer.json
-Output file downloaded to kaggle_output/checkpoints/vision_minicpm/.cache/huggingface/.gitignore
-Output file downloaded to kaggle_output/checkpoints/vision_minicpm/.cache/huggingface/CACHEDIR.TAG
 Output file downloaded to kaggle_output/omega-ai/.git/HEAD
 Output file downloaded to kaggle_output/omega-ai/.git/config
 Output file downloaded to kaggle_output/omega-ai/.git/description
@@ -27,8 +23,8 @@ Output file downloaded to kaggle_output/omega-ai/.git/info/exclude
 Output file downloaded to kaggle_output/omega-ai/.git/logs/HEAD
 Output file downloaded to kaggle_output/omega-ai/.git/logs/refs/heads/main
 Output file downloaded to kaggle_output/omega-ai/.git/logs/refs/remotes/origin/HEAD
-Output file downloaded to kaggle_output/omega-ai/.git/objects/pack/pack-a7d797440d5a1b97105c5f6cbfd95bc018416c29.idx
-Output file downloaded to kaggle_output/omega-ai/.git/objects/pack/pack-a7d797440d5a1b97105c5f6cbfd95bc018416c29.pack
+Output file downloaded to kaggle_output/omega-ai/.git/objects/pack/pack-cc52d6b9dd7e53643ac908efd6c0f6af23a121c2.idx
+Output file downloaded to kaggle_output/omega-ai/.git/objects/pack/pack-cc52d6b9dd7e53643ac908efd6c0f6af23a121c2.pack
 Output file downloaded to kaggle_output/omega-ai/.git/packed-refs
 Output file downloaded to kaggle_output/omega-ai/.git/refs/heads/main
 Output file downloaded to kaggle_output/omega-ai/.git/refs/remotes/origin/HEAD
@@ -90,18 +86,14 @@ Output file downloaded to kaggle_output/omega-ai/scripts/train_omega.py
 Output file downloaded to kaggle_output/omega-ai/scripts/validate_merged.py
 Kernel log downloaded to kaggle_output/aion-gpu-training.log 
 === Files downloaded ===
-total 28
-drwxr-xr-x  4 runner runner  4096 Jun 22 23:15 .
-drwxr-xr-x 10 runner runner  4096 Jun 22 23:15 ..
--rw-r--r--  1 runner runner 10241 Jun 22 23:15 aion-gpu-training.log
-drwxr-xr-x  4 runner runner  4096 Jun 22 23:15 checkpoints
-drwxr-xr-x  9 runner runner  4096 Jun 22 23:15 omega-ai
-  kaggle_output/checkpoints/deepseek_14b/.cache/huggingface/CACHEDIR.TAG
-  kaggle_output/checkpoints/deepseek_14b/.cache/huggingface/.gitignore
+total 48
+drwxr-xr-x  4 runner runner  4096 Jun 23 08:39 .
+drwxr-xr-x 10 runner runner  4096 Jun 23 08:38 ..
+-rw-r--r--  1 runner runner 32145 Jun 23 08:39 aion-gpu-training.log
+drwxr-xr-x  2 runner runner  4096 Jun 23 08:38 checkpoints
+drwxr-xr-x  9 runner runner  4096 Jun 23 08:39 omega-ai
   kaggle_output/checkpoints/config.json
   kaggle_output/checkpoints/aion_best.pt
-  kaggle_output/checkpoints/vision_minicpm/.cache/huggingface/CACHEDIR.TAG
-  kaggle_output/checkpoints/vision_minicpm/.cache/huggingface/.gitignore
   kaggle_output/checkpoints/kaggle_result.json
   kaggle_output/checkpoints/tokenizer.json
   kaggle_output/omega-ai/kaggle_download_log.txt
@@ -171,8 +163,8 @@ drwxr-xr-x  9 runner runner  4096 Jun 22 23:15 omega-ai
   kaggle_output/omega-ai/.git/hooks/post-update.sample
   kaggle_output/omega-ai/.git/hooks/pre-merge-commit.sample
   kaggle_output/omega-ai/.git/hooks/pre-push.sample
-  kaggle_output/omega-ai/.git/objects/pack/pack-a7d797440d5a1b97105c5f6cbfd95bc018416c29.pack
-  kaggle_output/omega-ai/.git/objects/pack/pack-a7d797440d5a1b97105c5f6cbfd95bc018416c29.idx
+  kaggle_output/omega-ai/.git/objects/pack/pack-cc52d6b9dd7e53643ac908efd6c0f6af23a121c2.pack
+  kaggle_output/omega-ai/.git/objects/pack/pack-cc52d6b9dd7e53643ac908efd6c0f6af23a121c2.idx
   kaggle_output/omega-ai/.git/refs/remotes/origin/HEAD
   kaggle_output/omega-ai/.git/refs/heads/main
   kaggle_output/omega-ai/kaggle_poll_log.txt
