@@ -81,29 +81,29 @@ jobs:
           echo "=== Poll started $(date -u) ===" > kaggle_poll_log.txt
 
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            # استخدم Kaggle REST API مباشرة بدل CLI المكسور
             RAW=$(curl -s \
               -H "Authorization: Bearer $KAGGLE_KEY" \
-              "https://www.kaggle.com/api/v1/kernels/$SLUG" 2>&1 || echo "api_error")
+              "https://www.kaggle.com/api/v1/kernels/$SLUG" 2>&1 || echo "{}")
             STATUS=$(echo "$RAW" | python3 -c "
 import sys,json
 try:
     d=json.loads(sys.stdin.read())
-    print(d.get('currentRunningVersion',{}).get('status', d.get('status','unknown')))
+    s=d.get('currentRunningVersion',{}).get('status', d.get('status','unknown'))
+    print(str(s).lower())
 except:
     print('parse_error')
 " 2>/dev/null || echo "unknown")
 
             echo "[$ELAPSED s] Status: $STATUS" | tee -a kaggle_poll_log.txt
 
-            case "$STATUS" in
-              *complete*|*Complete*|*success*|*Success*)
-                echo "DONE: kernel finished" | tee -a kaggle_poll_log.txt
-                break ;;
-              *error*|*Error*|*failed*|*Failed*|*cancel*)
-                echo "ERROR: kernel failed" | tee -a kaggle_poll_log.txt
-                break ;;
-            esac
+            if echo "$STATUS" | grep -qi "complete\|success"; then
+              echo "DONE: kernel finished" | tee -a kaggle_poll_log.txt
+              break
+            fi
+            if echo "$STATUS" | grep -qi "error\|failed\|cancel"; then
+              echo "ERROR: kernel failed" | tee -a kaggle_poll_log.txt
+              break
+            fi
 
             sleep 60
             ELAPSED=$((ELAPSED + 60))
