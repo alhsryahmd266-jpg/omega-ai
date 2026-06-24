@@ -4,11 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       max_minutes:
-        description: 'Training minutes on Kaggle GPU'
-        default: '240'
+        description: 'Training minutes'
+        default: '120'
         required: false
   schedule:
-    # كل 12 ساعة - يستغل حصة Kaggle الأسبوعية (30 ساعة GPU)
     - cron: '0 */12 * * *'
 
 permissions:
@@ -16,7 +15,7 @@ permissions:
 
 jobs:
   kaggle-train:
-    name: Push, Run, and Pull from Kaggle GPU
+    name: Push Run Pull Kaggle GPU
     runs-on: ubuntu-latest
     timeout-minutes: 340
 
@@ -36,124 +35,102 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
           if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
-            echo "::error::KAGGLE_USERNAME or KAGGLE_KEY secrets are not set."
+            echo "::error::KAGGLE_USERNAME or KAGGLE_KEY not set"
             exit 1
           fi
-          # الصيغة الجديدة لـ Kaggle CLI: access_token file (مش kaggle.json القديم)
           mkdir -p ~/.kaggle
           echo "$KAGGLE_KEY" > ~/.kaggle/access_token
           chmod 600 ~/.kaggle/access_token
-          # كمان نحتفظ بالصيغة القديمة احتياطياً لو نسخة مختلفة بتتطلبها
           echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
           echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
-          echo "KAGGLE_USERNAME=$KAGGLE_USERNAME" >> "$GITHUB_ENV"
-          # اختبار فوري قبل المتابعة
-          kaggle kernels list --mine 2>&1 | head -5 || echo "تحذير: الاختبار الأولي فشل، هنحاول المتابعة"
 
       - name: Push training kernel to Kaggle
         env:
-          AION_MAX_MINUTES: ${{ github.event.inputs.max_minutes || '240' }}
+          AION_MAX_MINUTES: ${{ github.event.inputs.max_minutes || '120' }}
         run: |
           cd kaggle_kernel
           kaggle kernels push -p . > ../kaggle_push_log.txt 2>&1 || true
           cat ../kaggle_push_log.txt
-          echo "Kernel pushed, waiting for it to start..."
           sleep 30
 
-      - name: Commit diagnostic log (always, even on failure)
+      - name: Commit push log
         if: always()
         run: |
           git config user.name "debug-bot"
           git config user.email "debug@bot.com"
           git add kaggle_push_log.txt 2>/dev/null || true
-          git commit -m "debug: kaggle push log" || echo "no changes"
-          git push || echo "push failed or nothing to push"
+          git diff --staged --quiet || git commit -m "debug: push log"
+          git push || true
 
-      - name: Poll until Kaggle kernel finishes
+      - name: Poll until kernel finishes
         env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
           SLUG="ahmedxdx/aion-gpu-training"
           MAX_WAIT=18000
           ELAPSED=0
-          echo "=== Poll started $(date -u) ===" > kaggle_poll_log.txt
-
+          echo "Poll started $(date -u)" > kaggle_poll_log.txt
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            RAW=$(curl -s \
-              -H "Authorization: Bearer $KAGGLE_KEY" \
-              "https://www.kaggle.com/api/v1/kernels/$SLUG" 2>&1 || echo "{}")
-            STATUS=$(echo "$RAW" | python3 -c "
-import sys,json
-try:
-    d=json.loads(sys.stdin.read())
-    s=d.get('currentRunningVersion',{}).get('status', d.get('status','unknown'))
-    print(str(s).lower())
-except:
-    print('parse_error')
-" 2>/dev/null || echo "unknown")
-
-            echo "[$ELAPSED s] Status: $STATUS" | tee -a kaggle_poll_log.txt
-
+            STATUS=$(curl -s -H "Authorization: Bearer $KAGGLE_KEY" \
+              "https://www.kaggle.com/api/v1/kernels/$SLUG" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('currentRunningVersion',{}).get('status', d.get('status','unknown'))).lower())" 2>/dev/null || echo "unknown")
+            echo "[$ELAPSED s] $STATUS" | tee -a kaggle_poll_log.txt
             if echo "$STATUS" | grep -qi "complete\|success"; then
-              echo "DONE: kernel finished" | tee -a kaggle_poll_log.txt
+              echo "DONE" | tee -a kaggle_poll_log.txt
               break
             fi
             if echo "$STATUS" | grep -qi "error\|failed\|cancel"; then
-              echo "ERROR: kernel failed" | tee -a kaggle_poll_log.txt
+              echo "KERNEL_ERROR" | tee -a kaggle_poll_log.txt
               break
             fi
-
             sleep 60
-            ELAPSED=$((ELAPSED + 60))
+            ELAPSED=$((ELAPSED+60))
           done
-          echo "=== Poll ended $(date -u) elapsed=${ELAPSED}s ===" >> kaggle_poll_log.txt
+          echo "Poll ended $(date -u) elapsed=${ELAPSED}s" >> kaggle_poll_log.txt
 
-      - name: Commit poll diagnostic log
+      - name: Commit poll log
         if: always()
         run: |
           git config user.name "debug-bot"
           git config user.email "debug@bot.com"
           git add kaggle_poll_log.txt 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "debug: kaggle poll log"
-          git push || echo "nothing to push"
+          git diff --staged --quiet || git commit -m "debug: poll log"
+          git push || true
 
       - name: Download kernel output
         run: |
           mkdir -p kaggle_output
           kaggle kernels output "ahmedxdx/aion-gpu-training" -p kaggle_output/ > kaggle_download_log.txt 2>&1 || true
           cat kaggle_download_log.txt
-          echo "=== Files downloaded ===" >> kaggle_download_log.txt
-          ls -la kaggle_output/ >> kaggle_download_log.txt 2>&1 || echo "no files" >> kaggle_download_log.txt
-          find kaggle_output -type f -exec echo "  {}" \; >> kaggle_download_log.txt
-          cat kaggle_download_log.txt
+          ls -la kaggle_output/ 2>/dev/null || true
+          find kaggle_output -name "*.log" -exec cp {} kaggle_kernel_log.txt \; 2>/dev/null || true
 
-      - name: Commit download diagnostic log
+      - name: Commit download log
         if: always()
         run: |
           git config user.name "debug-bot"
           git config user.email "debug@bot.com"
-          # انسخ الـ kernel log للريبو عشان نقدر نقراه
-          cp kaggle_output/aion-gpu-training.log kaggle_kernel_log.txt 2>/dev/null || echo "no kernel log" > kaggle_kernel_log.txt
           git add kaggle_download_log.txt kaggle_kernel_log.txt 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "debug: kaggle download + kernel log"
-          git push || echo "nothing to push"
+          git diff --staged --quiet || git commit -m "debug: download log"
+          git push || true
 
-      - name: Merge GPU checkpoint into repo
+      - name: Merge GPU checkpoint
         run: |
           mkdir -p checkpoints
-          find kaggle_output -name "*.pt" -exec cp {} checkpoints/ \;
-          find kaggle_output -name "config.json" -exec cp {} checkpoints/ \;
-          find kaggle_output -name "tokenizer.json" -exec cp {} checkpoints/ \;
-          find kaggle_output -name "kaggle_result.json" -exec cp {} checkpoints/ \;
+          find kaggle_output -name "*.pt" -exec cp {} checkpoints/ \; 2>/dev/null || true
+          find kaggle_output -name "config.json" -exec cp {} checkpoints/ \; 2>/dev/null || true
+          find kaggle_output -name "tokenizer.json" -exec cp {} checkpoints/ \; 2>/dev/null || true
+          find kaggle_output -name "kaggle_result.json" -exec cp {} checkpoints/ \; 2>/dev/null || true
+          find kaggle_output -name "hybrid_system_test.json" -exec cp {} checkpoints/ \; 2>/dev/null || true
           echo "=== Result ==="
-          cat checkpoints/kaggle_result.json 2>/dev/null || echo "No result file found"
+          cat checkpoints/kaggle_result.json 2>/dev/null || echo "no result"
 
-      - name: Validate downloaded checkpoint
+      - name: Validate checkpoint
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu -q
-          python3 scripts/validate_merged.py || echo "Validation skipped (checkpoint may use different config)"
+          pip install numpy -q
+          python3 scripts/validate_merged.py || echo "Validation skipped"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -167,22 +144,15 @@ except:
         with:
           tag_name: "kaggle-gpu-v1.0.${{ github.run_number }}"
           name: "AION Kaggle-GPU Generation ${{ github.run_number }}"
-          body: |
-            # AION trained on Kaggle GPU - Run ${{ github.run_number }}
-
-            تدريب حقيقي على GPU مجاني (T4/P100) عبر Kaggle API،
-            بتنسيق GitHub Actions كجسر (bridge) لأن سيرفرات GitHub
-            عندها انترنت كامل بلا قيود.
-
-            راجع kaggle_result.json في الـ artifacts للتفاصيل.
+          body: "AION trained on Kaggle GPU via GitHub bridge"
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Commit checkpoint back to repo
+      - name: Commit checkpoint back
         run: |
-          git config user.name "AION-Kaggle-Bridge"
+          git config user.name "AION-Bridge"
           git config user.email "bridge@aion.ai"
           git add checkpoints/ 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Kaggle GPU generation ${{ github.run_number }}"
-          git push || echo "No changes to push"
+          git push || true
