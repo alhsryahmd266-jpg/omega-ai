@@ -1,6 +1,6 @@
 {
   "id": "ahmedxdx/aion-gpu-training",
-  "title": "AION Compound Brain - Hybrid System",
+  "title": "AION GPU Training",
   "code_file": "aion_kaggle_train.py",
   "language": "python",
   "kernel_type": "script",
