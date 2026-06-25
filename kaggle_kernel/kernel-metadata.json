@@ -8,7 +8,9 @@
   "enable_gpu": true,
   "enable_tpu": false,
   "enable_internet": true,
-  "dataset_sources": [],
+  "dataset_sources": [
+    "ahmedxdx/deepseek-r1-qwen-14b-uncensored-gguf-20260619"
+  ],
   "competition_sources": [],
   "kernel_sources": [],
   "model_sources": []

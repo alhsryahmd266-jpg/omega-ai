@@ -1,0 +1,36 @@
+=== كل الـ datasets على حساب ahmedxdx ===
+ref                                                     title                                                size  lastUpdated                 downloadCount  voteCount  usabilityRating  
+------------------------------------------------------  ---------------------------------------------  ----------  --------------------------  -------------  ---------  ---------------  
+ahmedxdx/deepseek-r1-qwen-14b-uncensored-gguf-20260619  DeepSeek-R1-Qwen-14B-Uncensored-GGUF-ahmedxdx  8813218721  2026-06-20 01:00:12.193000              1          0  0.25             
+ahmedxdx/deepseek-r1-qwen-14b-uncensored-gguf           DeepSeek-R1-Qwen-14B-Uncensored-GGUF                 6393  2026-06-20 00:51:52.537000              0          0  0.25             
+
+=== كل الـ kernels على الحساب ===
+ref                                                      title                                           author  lastRunTime                 totalVotes  
+-------------------------------------------------------  ----------------------------------------------  ------  --------------------------  ----------  
+ahmedxdx/aion-compound-brain-hybrid-system               AION Compound Brain - Hybrid System             ahmed   2026-06-24 00:31:05.690000           0  
+ahmedxdx/gpu-diagnostic-test                             GPU Diagnostic Test                             ahmed   2026-06-20 04:04:58.267000           0  
+ahmedxdx/deepseek-r1-32b-advanced-ai-system              DeepSeek R1 32B Advanced AI System              ahmed   2026-06-20 04:02:39.943000           0  
+ahmedxdx/shadow-core-cyber-agent                         shadow-core-cyber-agent                         ahmed   2026-06-20 01:01:19.590000           0  
+ahmedxdx/deepseek-r1-cyber-agent                         deepseek-r1-cyber-agent                         ahmed   2026-06-19 06:23:19.687000           0  
+ahmedxdx/deepseek-r1-super-coder                         deepseek-r1-super-coder                         ahmed   2026-06-19 06:21:02.793000           0  
+ahmedxdx/notebook10cf0b9c2c                              notebook10cf0b9c2c                              ahmed   2026-06-21 03:31:53.117000           0  
+ahmedxdx/synthetic-intelligence-ultimate                 synthetic-intelligence-ultimate                 ahmed   2026-06-18 01:33:28.007000           0  
+ahmedxdx/deepseek-smart-fine-tuning-with-error-recovery  DeepSeek Smart Fine-tuning with Error Recovery  ahmed   2026-06-18 00:43:18.023000           0  
+                                                         [Private Notebook]                                      2010-04-01 00:00:00                  0  
+ahmedxdx/finetune-deepseek-synthetic                     Finetune DeepSeek Synthetic                     ahmed   2026-06-18 00:40:56.570000           0  
+ahmedxdx/deepseek-synthetic-intelligence-builder         DeepSeek Synthetic Intelligence Builder         ahmed   2026-06-18 00:38:20.987000           0  
+ahmedxdx/project-aether-coder                            Project Aether Coder                            ahmed   2026-06-17 19:16:08.063000           0  
+ahmedxdx/notebook40f58bad9c                              notebook40f58bad9c                              ahmed   2026-06-17 05:15:39.080000           0  
+ahmedxdx/notebook4212cb7442                              notebook4212cb7442                              ahmed   2026-06-17 03:06:50.480000           0  
+ahmedxdx/notebook0c6624db74                              notebook0c6624db74                              ahmed   2026-06-17 02:51:13.160000           0  
+ahmedxdx/notebookf54ac842f9                              notebookf54ac842f9                              ahmed   2026-06-20 09:42:15.197000           0  
+
+=== البحث عن DeepSeek تحديداً ===
+ahmedxdx/deepseek-r1-qwen-14b-uncensored-gguf-20260619  DeepSeek-R1-Qwen-14B-Uncensored-GGUF-ahmedxdx  8813218721  2026-06-20 01:00:12.193000              1          0  0.25             
+ahmedxdx/deepseek-r1-qwen-14b-uncensored-gguf           DeepSeek-R1-Qwen-14B-Uncensored-GGUF                 6393  2026-06-20 00:51:52.537000              0          0  0.25             
+ahmedxdx/deepseek-r1-32b-advanced-ai-system              DeepSeek R1 32B Advanced AI System              ahmed   2026-06-20 04:02:39.943000           0  
+ahmedxdx/deepseek-r1-cyber-agent                         deepseek-r1-cyber-agent                         ahmed   2026-06-19 06:23:19.687000           0  
+ahmedxdx/deepseek-r1-super-coder                         deepseek-r1-super-coder                         ahmed   2026-06-19 06:21:02.793000           0  
+ahmedxdx/deepseek-smart-fine-tuning-with-error-recovery  DeepSeek Smart Fine-tuning with Error Recovery  ahmed   2026-06-18 00:43:18.023000           0  
+ahmedxdx/finetune-deepseek-synthetic                     Finetune DeepSeek Synthetic                     ahmed   2026-06-18 00:40:56.570000           0  
+ahmedxdx/deepseek-synthetic-intelligence-builder         DeepSeek Synthetic Intelligence Builder         ahmed   2026-06-18 00:38:20.987000           0  
