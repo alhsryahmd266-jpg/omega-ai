@@ -50,8 +50,19 @@ jobs:
           AION_MAX_MINUTES: ${{ github.event.inputs.max_minutes || '120' }}
         run: |
           cd kaggle_kernel
-          kaggle kernels push -p . 2>&1 | tee ../kaggle_push_log.txt
-          echo "Pushed at $(date -u)"
+          kaggle kernels push -p . > ../kaggle_push_log.txt 2>&1
+          EXIT=$?
+          cat ../kaggle_push_log.txt
+          if grep -qi "409\|conflict\|does not resolve" ../kaggle_push_log.txt; then
+            echo "::error::Kaggle 409 conflict — title/id mismatch"
+            cat ../kaggle_push_log.txt
+            exit 1
+          fi
+          if [ $EXIT -ne 0 ]; then
+            echo "::error::kaggle push failed with exit $EXIT"
+            exit $EXIT
+          fi
+          echo "✅ Kernel pushed at $(date -u)"          echo "Pushed at $(date -u)"
 
       - name: Wait for kernel to finish
         env:
