@@ -1,0 +1,194 @@
+name: AION Auto-Connect All
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Kaggle CLI
+        run: pip install kaggle -q
+
+      - name: Configure credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+          chmod 600 ~/.kaggle/access_token
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
+
+      - name: Discover DeepSeek dataset slug
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          echo "=== كل الـ datasets على حساب $KAGGLE_USERNAME ===" > discovery.txt
+          kaggle datasets list --mine 2>&1 | tee -a discovery.txt || true
+
+          echo "" >> discovery.txt
+          echo "=== كل الـ kernels على الحساب ===" >> discovery.txt
+          kaggle kernels list --mine 2>&1 | tee -a discovery.txt || true
+
+          echo "" >> discovery.txt
+          echo "=== البحث عن DeepSeek تحديداً ===" >> discovery.txt
+          kaggle datasets list --mine 2>&1 | grep -i "deepseek\|14b\|qwen\|gguf" | tee -a discovery.txt || echo "لم يُعثر عليه في datasets" >> discovery.txt
+          kaggle kernels list --mine 2>&1 | grep -i "deepseek\|14b\|qwen\|gguf" | tee -a discovery.txt || echo "لم يُعثر عليه في kernels" >> discovery.txt
+
+          cat discovery.txt
+
+      - name: Extract slugs and build metadata
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          python3 << 'PYEOF'
+          import subprocess, json, re, os
+
+          username = os.environ.get('KAGGLE_USERNAME', 'ahmedxdx')
+
+          # جيب قائمة الـ datasets
+          ds_raw = subprocess.run(['kaggle', 'datasets', 'list', '--mine', '--csv'],
+                                  capture_output=True, text=True).stdout
+          kn_raw = subprocess.run(['kaggle', 'kernels', 'list', '--mine', '--csv'],
+                                  capture_output=True, text=True).stdout
+
+          print("=== Datasets (CSV) ===")
+          print(ds_raw[:2000])
+          print("\n=== Kernels (CSV) ===")
+          print(kn_raw[:2000])
+
+          # ابحث عن DeepSeek
+          deepseek_slug = None
+          minicpm_slug = None
+
+          for line in ds_raw.split('\n'):
+              low = line.lower()
+              if any(k in low for k in ['deepseek', '14b', 'qwen']) and not deepseek_slug:
+                  parts = line.split(',')
+                  if parts:
+                      slug = parts[0].strip().strip('"')
+                      if '/' in slug:
+                          deepseek_slug = slug
+                          print(f"✅ DeepSeek dataset: {slug}")
+              if 'minicpm' in low and not minicpm_slug:
+                  parts = line.split(',')
+                  if parts:
+                      slug = parts[0].strip().strip('"')
+                      if '/' in slug:
+                          minicpm_slug = slug
+                          print(f"✅ MiniCPM dataset: {slug}")
+
+          # ابنِ kernel-metadata.json محدّث
+          metadata = {
+              "id": "ahmedxdx/aion-gpu-training",
+              "title": "AION Compound Brain - Hybrid System",
+              "code_file": "aion_kaggle_train.py",
+              "language": "python",
+              "kernel_type": "script",
+              "is_private": True,
+              "enable_gpu": True,
+              "enable_tpu": False,
+              "enable_internet": True,
+              "dataset_sources": [],
+              "competition_sources": [],
+              "kernel_sources": [],
+              "model_sources": []
+          }
+
+          if deepseek_slug:
+              metadata["dataset_sources"].append(deepseek_slug)
+              print(f"✅ أُضيف للـ metadata: {deepseek_slug}")
+          else:
+              print("⚠️  لم يُعثر على DeepSeek dataset — سيتم التحميل عبر الإنترنت")
+
+          if minicpm_slug:
+              metadata["dataset_sources"].append(minicpm_slug)
+              print(f"✅ أُضيف للـ metadata: {minicpm_slug}")
+
+          with open('kaggle_kernel/kernel-metadata.json', 'w') as f:
+              json.dump(metadata, f, indent=2)
+          print("\nkernel-metadata.json محدّث:")
+          print(json.dumps(metadata, indent=2))
+
+          # احفظ الـ slug في env file للاستخدام لاحقاً
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              if deepseek_slug:
+                  f.write(f"DEEPSEEK_SLUG={deepseek_slug}\n")
+          PYEOF
+
+      - name: Commit discovery + updated metadata
+        run: |
+          git config user.name "AION-AutoConnect"
+          git config user.email "autoconnect@aion.ai"
+          git add discovery.txt kaggle_kernel/kernel-metadata.json
+          git diff --staged --quiet || git commit -m "auto: connect DeepSeek dataset to AION kernel"
+          git push || true
+
+      - name: Push connected kernel to Kaggle
+        run: |
+          echo "=== Kernel metadata بعد الربط ==="
+          cat kaggle_kernel/kernel-metadata.json
+
+          cd kaggle_kernel
+          kaggle kernels push -p . 2>&1 | tee ../kaggle_push_log.txt
+          cat ../kaggle_push_log.txt
+
+      - name: Wait for connected kernel (120 min training)
+        run: |
+          echo "بدأ الكيرنل المتصل بـ DeepSeek..."
+          echo "Wait: $(( (120 + 20) * 60 ))s"
+          sleep $(( (120 + 20) * 60 ))
+
+      - name: Download results
+        run: |
+          mkdir -p kaggle_output
+          for i in 1 2 3; do
+            kaggle kernels output "ahmedxdx/aion-gpu-training" -p kaggle_output/ && break || sleep 60
+          done
+          find kaggle_output -type f | head -20
+
+      - name: Merge and release
+        run: |
+          mkdir -p checkpoints
+          find kaggle_output -name "*.pt" -exec cp {} checkpoints/ \;
+          find kaggle_output -name "*.json" -exec cp {} checkpoints/ \;
+          find kaggle_output -name "*.log" -exec cp {} kaggle_kernel_log.txt \;
+          echo "=== Hybrid System Result ==="
+          cat checkpoints/hybrid_system_test.json 2>/dev/null || echo "No hybrid result yet"
+          cat checkpoints/kaggle_result.json 2>/dev/null || echo "No training result"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aion-hybrid-connected-${{ github.run_number }}
+          path: checkpoints/
+          retention-days: 90
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "hybrid-v1.0.${{ github.run_number }}"
+          name: "AION Hybrid System - Connected Gen ${{ github.run_number }}"
+          body: "DeepSeek-14B + MiniCPM-V + AION compound brain - all connected and trained"
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit everything back
+        run: |
+          git config user.name "AION-AutoConnect"
+          git config user.email "autoconnect@aion.ai"
+          git add checkpoints/ kaggle_push_log.txt kaggle_kernel_log.txt 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Hybrid system connected gen ${{ github.run_number }}"
+          git push || true
