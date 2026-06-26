@@ -1,0 +1,84 @@
+name: GVR Debug Kaggle Push
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup
+        run: pip install kaggle -q
+
+      - name: Configure Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"${KAGGLE_USERNAME}\",\"key\":\"${KAGGLE_KEY}\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "=== Kaggle Config ==="
+          cat ~/.kaggle/kaggle.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Username: {d[\"username\"]}'); print(f'Key: {d[\"key\"][:8]}...')"
+          echo "=== Kaggle API Test ==="
+          kaggle kernels list --mine 2>&1 | head -20
+
+      - name: Prepare GVR kernel
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p gvr_push
+          cp kaggle_kernel/gvr_kaggle_train.py gvr_push/
+          
+          cat > gvr_push/kernel-metadata.json << EOF
+          {
+            "id": "${KAGGLE_USERNAME}/gvr-gpu-training",
+            "title": "GVR Architecture GPU Training",
+            "code_file": "gvr_kaggle_train.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_internet": true,
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": []
+          }
+          EOF
+          
+          echo "=== Metadata ==="
+          cat gvr_push/kernel-metadata.json
+
+      - name: Push GVR kernel (verbose)
+        run: |
+          echo "=== Pushing kernel ==="
+          cd gvr_push
+          kaggle kernels push -p . 2>&1
+          echo "Exit code: $?"
+
+      - name: Verify on Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          echo "=== Checking kernel status ==="
+          sleep 10
+          kaggle kernels status ${KAGGLE_USERNAME}/gvr-gpu-training 2>&1 || echo "Kernel not found"
+          echo "=== Listing my kernels ==="
+          kaggle kernels list --mine 2>&1 | head -15
+
+      - name: Write result
+        run: |
+          cat > debug_result.txt << EOF
+          Debug completed at $(date)
+          EOF
+          git config user.email "bot@bot.com"
+          git config user.name "Bot"
+          git add debug_result.txt
+          git commit -m "GVR Debug result" 2>/dev/null || true
+          git push 2>/dev/null || true
