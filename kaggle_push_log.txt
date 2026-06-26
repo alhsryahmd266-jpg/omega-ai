@@ -1,2 +1,1 @@
-409 Client Error: Conflict for url: https://api.kaggle.com/v1/kernels.KernelsApiService/SaveKernel
-Your kernel title does not resolve to the specified id. This may result in surprising behavior. We suggest making your title something that resolves to the specified id. See https://en.wikipedia.org/wiki/Clean_URL#Slug for more information on how slugs are determined.
+Kernel version 2 successfully pushed.  Please check progress at https://www.kaggle.com/code/ahmedxdx/aion-gpu-training

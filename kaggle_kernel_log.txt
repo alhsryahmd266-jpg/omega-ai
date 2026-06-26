@@ -1,70 +1,88 @@
-[{"stream_name":"stdout","time":0.766963785,"data":"Cloning AION repo...\n"}
-,{"stream_name":"stderr","time":0.804713231,"data":"Cloning into '/kaggle/working/omega-ai'...\n"}
-,{"stream_name":"stderr","time":7.496691098,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":7.496756049,"data":"    Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.\n"}
-,{"stream_name":"stderr","time":7.49676402,"data":"    Minimum and Maximum cuda capability supported by this version of PyTorch is\n"}
-,{"stream_name":"stderr","time":7.496769611,"data":"    (7.0) - (12.0)\n"}
-,{"stream_name":"stderr","time":7.496774638,"data":"    \n"}
-,{"stream_name":"stderr","time":7.496779525,"data":"  queued_call()\n"}
-,{"stream_name":"stderr","time":7.496784683,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":7.496795832,"data":"    Please install PyTorch with a following CUDA\n"}
-,{"stream_name":"stderr","time":7.496799605,"data":"    configurations:  12.6 following instructions at\n"}
-,{"stream_name":"stderr","time":7.496803154,"data":"    https://pytorch.org/get-started/locally/\n"}
-,{"stream_name":"stderr","time":7.496806622,"data":"    \n"}
-,{"stream_name":"stderr","time":7.496809943,"data":"  queued_call()\n"}
-,{"stream_name":"stderr","time":7.497057781,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
-,{"stream_name":"stderr","time":7.497068087,"data":"Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.\n"}
-,{"stream_name":"stderr","time":7.497073417,"data":"The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\n"}
-,{"stream_name":"stderr","time":7.497078433,"data":"If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n"}
-,{"stream_name":"stderr","time":7.497083769,"data":"\n"}
-,{"stream_name":"stderr","time":7.497088472,"data":"  queued_call()\n"}
-,{"stream_name":"stdout","time":7.498652258,"data":"⚠️  GPU sm_60 قديم — CPU mode\n"}
-,{"stream_name":"stdout","time":7.498666878,"data":"============================================================\n"}
-,{"stream_name":"stdout","time":7.498672866,"data":"  AION Compound Brain — النظام الهجين الكامل\n"}
-,{"stream_name":"stdout","time":7.49868495,"data":"============================================================\n"}
-,{"stream_name":"stdout","time":7.49870296,"data":"GPU: Tesla P100-PCIE-16GB (sm_60)\n"}
-,{"stream_name":"stdout","time":7.498709195,"data":"⚠️  GPU قديم (sm_60\u003csm_70) — CPU mode\n"}
-,{"stream_name":"stdout","time":7.498726312,"data":"الجهاز: cpu\n"}
-,{"stream_name":"stdout","time":7.498732665,"data":"\n"}
-,{"stream_name":"stdout","time":7.49873818,"data":"🔍 بحث عن ملفات GGUF في /kaggle/input/ ...\n"}
-,{"stream_name":"stdout","time":7.500587253,"data":"⚠️  لم يتم العثور على ملفات GGUF\n"}
-,{"stream_name":"stdout","time":7.500619889,"data":"   تأكد إنك أضفت الـ DeepSeek dataset للـ kernel\n"}
-,{"stream_name":"stdout","time":7.540161482,"data":"✨ Generated 100/100 quality samples\n"}
-,{"stream_name":"stdout","time":7.540193084,"data":"📊 بيانات التدريب: 177 عينة\n"}
-,{"stream_name":"stdout","time":9.003103147,"data":"\n"}
-,{"stream_name":"stdout","time":9.003146093,"data":"╔══════════════════════════════════════════╗\n"}
-,{"stream_name":"stdout","time":9.003184875,"data":"║           AION v1.0 Ready                ║\n"}
-,{"stream_name":"stdout","time":9.003190342,"data":"╠══════════════════════════════════════════╣\n"}
-,{"stream_name":"stdout","time":9.003195119,"data":"║  Total params:    0.09B                ║\n"}
-,{"stream_name":"stdout","time":9.003199159,"data":"║  Layers:        8                      ║\n"}
-,{"stream_name":"stdout","time":9.003203076,"data":"║  SSM layers:    2                       ║\n"}
-,{"stream_name":"stdout","time":9.003207296,"data":"║  Global MoE:    every 4 layers (2 total)  ║\n"}
-,{"stream_name":"stdout","time":9.003211496,"data":"║  Tok experts:   8→2 active              ║\n"}
-,{"stream_name":"stdout","time":9.003215779,"data":"║  Seq experts:   4→2 active               ║\n"}
-,{"stream_name":"stdout","time":9.003219935,"data":"║  LoRA rank:     16                      ║\n"}
-,{"stream_name":"stdout","time":9.003224004,"data":"║  Context:       1024                  ║\n"}
-,{"stream_name":"stdout","time":9.003228284,"data":"╚══════════════════════════════════════════╝\n"}
-,{"stream_name":"stdout","time":9.009453283,"data":"🧠 AION: 86.2M params على cpu\n"}
-,{"stream_name":"stdout","time":15.502234756,"data":"Tokenizer saved → /kaggle/working/checkpoints/tokenizer.json\n"}
-,{"stream_name":"stdout","time":21.36703395,"data":"\n"}
-,{"stream_name":"stdout","time":21.367079516,"data":"🏋️  تدريب لمدة 120 دقيقة ...\n"}
-,{"stream_name":"stdout","time":7307.44955581,"data":"\n"}
-,{"stream_name":"stdout","time":7307.449622184,"data":"✅ التدريب انتهى | epochs=2 | steps=78 | avg_loss=8.6461 | 121.4min\n"}
-,{"stream_name":"stdout","time":7307.796432618,"data":"{\n"}
-,{"stream_name":"stdout","time":7307.796466998,"data":"  \"device\": \"cpu\",\n"}
-,{"stream_name":"stdout","time":7307.796473033,"data":"  \"avg_loss\": 8.646136687352108,\n"}
-,{"stream_name":"stdout","time":7307.796477732,"data":"  \"n_steps\": 78,\n"}
-,{"stream_name":"stdout","time":7307.796485903,"data":"  \"n_epochs\": 2,\n"}
-,{"stream_name":"stdout","time":7307.796489854,"data":"  \"elapsed_min\": 121.43470876614252,\n"}
-,{"stream_name":"stdout","time":7307.796493076,"data":"  \"generation\": 1\n"}
-,{"stream_name":"stdout","time":7307.796498705,"data":"}\n"}
-,{"stream_name":"stdout","time":7307.849442384,"data":"\n"}
-,{"stream_name":"stdout","time":7307.849475924,"data":"ℹ️  لم يتم العثور على GGUF — أضف DeepSeek كـ dataset للـ kernel\n"}
-,{"stream_name":"stdout","time":7307.849481593,"data":"   أو فعّل AION_FETCH_14B=true لتحميله تلقائياً (يحتاج ~9GB وقت)\n"}
-,{"stream_name":"stderr","time":7312.723719679,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
-,{"stream_name":"stderr","time":7312.723756412,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
-,{"stream_name":"stderr","time":7312.986333282,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
-,{"stream_name":"stderr","time":7312.986372326,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
-,{"stream_name":"stderr","time":7313.688697282,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
-,{"stream_name":"stderr","time":7315.046368342,"data":"[NbConvertApp] Writing 340769 bytes to __results__.html\n"}
+[{"stream_name":"stdout","time":0.786161775,"data":"Cloning AION repo...\n"}
+,{"stream_name":"stderr","time":0.836596617,"data":"Cloning into '/kaggle/working/omega-ai'...\n"}
+,{"stream_name":"stdout","time":7.4569778,"data":"=======================================================\n"}
+,{"stream_name":"stdout","time":7.457020834,"data":"  AION v2 — المحسّن بـ compile + BF16 + data++\n"}
+,{"stream_name":"stdout","time":7.457025991,"data":"=======================================================\n"}
+,{"stream_name":"stderr","time":7.522016433,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":7.522054402,"data":"    Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.\n"}
+,{"stream_name":"stderr","time":7.522058364,"data":"    Minimum and Maximum cuda capability supported by this version of PyTorch is\n"}
+,{"stream_name":"stderr","time":7.522061395,"data":"    (7.0) - (12.0)\n"}
+,{"stream_name":"stderr","time":7.522064142,"data":"    \n"}
+,{"stream_name":"stderr","time":7.522067068,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":7.522069781,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":7.522075796,"data":"    Please install PyTorch with a following CUDA\n"}
+,{"stream_name":"stderr","time":7.522078585,"data":"    configurations:  12.6 following instructions at\n"}
+,{"stream_name":"stderr","time":7.522081321,"data":"    https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":7.522084071,"data":"    \n"}
+,{"stream_name":"stderr","time":7.522086581,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":7.522476559,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":7.522493053,"data":"Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.\n"}
+,{"stream_name":"stderr","time":7.522498596,"data":"The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\n"}
+,{"stream_name":"stderr","time":7.522504123,"data":"If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":7.522509277,"data":"\n"}
+,{"stream_name":"stderr","time":7.522514308,"data":"  queued_call()\n"}
+,{"stream_name":"stdout","time":7.524123709,"data":"GPU: Tesla P100-PCIE-16GB (sm_60)\n"}
+,{"stream_name":"stdout","time":7.524138443,"data":"⚠️  sm_60 قديم — CPU mode\n"}
+,{"stream_name":"stdout","time":7.52414465,"data":"\n"}
+,{"stream_name":"stdout","time":7.524148918,"data":"🔍 بحث عن نماذج GGUF...\n"}
+,{"stream_name":"stdout","time":7.5315784709999996,"data":"  📦 deepseek-r1-distill-qwen-14b-uncensored.q4_k_m.gguf (8.37GB)\n"}
+,{"stream_name":"stdout","time":7.531609159,"data":"✅ نموذج نصي: DeepSeek-R1-Distill-Qwen-14B-Uncensored.Q4_K_M.gguf\n"}
+,{"stream_name":"stdout","time":9.024220676,"data":"\n"}
+,{"stream_name":"stdout","time":9.024259748,"data":"╔══════════════════════════════════════════╗\n"}
+,{"stream_name":"stdout","time":9.024334259,"data":"║           AION v1.0 Ready                ║\n"}
+,{"stream_name":"stdout","time":9.024338837,"data":"╠══════════════════════════════════════════╣\n"}
+,{"stream_name":"stdout","time":9.024343355,"data":"║  Total params:    0.09B                ║\n"}
+,{"stream_name":"stdout","time":9.024371439,"data":"║  Layers:        8                      ║\n"}
+,{"stream_name":"stdout","time":9.024379546,"data":"║  SSM layers:    2                       ║\n"}
+,{"stream_name":"stdout","time":9.024382233,"data":"║  Global MoE:    every 4 layers (2 total)  ║\n"}
+,{"stream_name":"stdout","time":9.024385347,"data":"║  Tok experts:   8→2 active              ║\n"}
+,{"stream_name":"stdout","time":9.024387918,"data":"║  Seq experts:   4→2 active               ║\n"}
+,{"stream_name":"stdout","time":9.024390573,"data":"║  LoRA rank:     16                      ║\n"}
+,{"stream_name":"stdout","time":9.024393142,"data":"║  Context:       1024                  ║\n"}
+,{"stream_name":"stdout","time":9.024395776,"data":"╚══════════════════════════════════════════╝\n"}
+,{"stream_name":"stdout","time":9.030779381,"data":"\n"}
+,{"stream_name":"stdout","time":9.030814988,"data":"🧠 AION: 86.2M params | device=cpu\n"}
+,{"stream_name":"stdout","time":9.030821102,"data":"   vocab=16000 | dim=512 | layers=8\n"}
+,{"stream_name":"stdout","time":18.62571029,"data":"⚡ torch.compile(reduce-overhead): مفعّل\n"}
+,{"stream_name":"stdout","time":18.626511574,"data":"  ✅ training_data.json: +77 عينة\n"}
+,{"stream_name":"stdout","time":18.636120523,"data":"✨ Generated 300/300 quality samples\n"}
+,{"stream_name":"stdout","time":18.636150804,"data":"  ✅ DataGenerator: +300 عينة\n"}
+,{"stream_name":"stdout","time":18.637999298,"data":"📊 إجمالي البيانات: 334 عينة فريدة\n"}
+,{"stream_name":"stdout","time":25.360490515,"data":"Tokenizer saved → /kaggle/working/checkpoints/tokenizer.json\n"}
+,{"stream_name":"stdout","time":25.360534372,"data":"✅ Tokenizer جديد | vocab=3005\n"}
+,{"stream_name":"stdout","time":26.891229364,"data":"\n"}
+,{"stream_name":"stdout","time":26.891269209,"data":"╔══════════════════════════════════════════╗\n"}
+,{"stream_name":"stdout","time":26.891297977,"data":"║           AION v1.0 Ready                ║\n"}
+,{"stream_name":"stdout","time":26.891302924,"data":"╠══════════════════════════════════════════╣\n"}
+,{"stream_name":"stdout","time":26.891307617,"data":"║  Total params:    0.09B                ║\n"}
+,{"stream_name":"stdout","time":26.891311578,"data":"║  Layers:        8                      ║\n"}
+,{"stream_name":"stdout","time":26.891317256,"data":"║  SSM layers:    2                       ║\n"}
+,{"stream_name":"stdout","time":26.891325359,"data":"║  Global MoE:    every 4 layers (2 total)  ║\n"}
+,{"stream_name":"stdout","time":26.891328942,"data":"║  Tok experts:   8→2 active              ║\n"}
+,{"stream_name":"stdout","time":26.891331593,"data":"║  Seq experts:   4→2 active               ║\n"}
+,{"stream_name":"stdout","time":26.891334353,"data":"║  LoRA rank:     16                      ║\n"}
+,{"stream_name":"stdout","time":26.891336945,"data":"║  Context:       1024                  ║\n"}
+,{"stream_name":"stdout","time":26.891339707,"data":"╚══════════════════════════════════════════╝\n"}
+,{"stream_name":"stdout","time":26.949155093999998,"data":"⚡ EMA: مفعّل (decay=0.999)\n"}
+,{"stream_name":"stdout","time":26.949219505,"data":"\n"}
+,{"stream_name":"stdout","time":26.949245414,"data":"🏋️  بدء التدريب | 120 دقيقة | batch=4 | accum=8\n"}
+,{"stream_name":"stderr","time":146.210858645,"data":"Traceback (most recent call last):\n"}
+,{"stream_name":"stderr","time":146.210907974,"data":"  File \"/kaggle/src/script.py\", line 604, in \u003cmodule\u003e\n"}
+,{"stream_name":"stderr","time":146.211380264,"data":"    train_aion(device, use_cuda, use_bf16, max_minutes=max_min)\n"}
+,{"stream_name":"stderr","time":146.211493378,"data":"  File \"/kaggle/src/script.py\", line 292, in train_aion\n"}
+,{"stream_name":"stderr","time":146.211771337,"data":"    loss = smoothed_loss(logits, y) / accum\n"}
+,{"stream_name":"stderr","time":146.211938355,"data":"           ^^^^^^^^^^^^^^^^^^^^^^^^\n"}
+,{"stream_name":"stderr","time":146.211948833,"data":"  File \"/kaggle/src/script.py\", line 112, in smoothed_loss\n"}
+,{"stream_name":"stderr","time":146.212165517,"data":"    nll_loss = F.nll_loss(log_prob, targets_flat, reduction=\"mean\")\n"}
+,{"stream_name":"stderr","time":146.212329917,"data":"               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"}
+,{"stream_name":"stderr","time":146.212341191,"data":"  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/functional.py\", line 3179, in nll_loss\n"}
+,{"stream_name":"stderr","time":146.213068391,"data":"    return torch._C._nn.nll_loss_nd(\n"}
+,{"stream_name":"stderr","time":146.213092577,"data":"           ^^^^^^^^^^^^^^^^^^^^^^^^^\n"}
+,{"stream_name":"stderr","time":146.213109354,"data":"IndexError: Target -1 is out of bounds.\n"}
+,{"stream_name":"stderr","time":150.919318203,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":150.919373888,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":151.227122903,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":151.227152561,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":151.961069155,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":153.475511877,"data":"[NbConvertApp] Writing 393723 bytes to __results__.html\n"}
 ]
