@@ -1,0 +1,11 @@
+{
+  "username_set": true,
+  "username_len": 8,
+  "key_set": true,
+  "key_len": 37,
+  "kaggle_test": {
+    "status": 404,
+    "ok": false,
+    "response_preview": "\r\n\r\n<!DOCTYPE html>\r\n<html lang=\"en\">\r\n\r\n<head>\r\n  <title>Kaggle: Your Home for Data Science</title>\r\n  <meta charset=\"utf-8\" />\r\n    <meta name=\"robots\" content=\"index, follow\" />\r\n  <meta name=\"description\" content=\"Discover what actually works in AI. Join millions of builders, researchers, and la"
+  }
+}
