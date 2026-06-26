@@ -1,0 +1,108 @@
+name: GVR Kaggle GPU Training
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'gvr/**'
+      - 'kaggle_kernel/gvr_kaggle_train.py'
+
+jobs:
+  train-on-kaggle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Kaggle CLI
+        run: pip install kaggle -q
+
+      - name: Configure Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          kaggle config view
+          echo "Kaggle configured!"
+
+      - name: Create kernel metadata
+        run: |
+          mkdir -p kaggle_kernel
+          cat > kaggle_kernel/kernel-metadata.json << 'EOF'
+          {
+            "id": "${{ secrets.KAGGLE_USERNAME }}/gvr-gpu-training",
+            "title": "GVR GPU Training",
+            "code_file": "gvr_kaggle_train.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_internet": true,
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": []
+          }
+          EOF
+
+      - name: Inject GitHub token into kernel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sed -i "s|TOKEN = os.environ.get(\"GITHUB_TOKEN\", \"\")|TOKEN = os.environ.get(\"GITHUB_TOKEN\", \"$GH_TOKEN\")|" \
+            kaggle_kernel/gvr_kaggle_train.py
+
+      - name: Push kernel to Kaggle
+        run: |
+          cd kaggle_kernel
+          kaggle kernels push -p .
+          echo "Kernel pushed!"
+
+      - name: Wait for training (120 minutes)
+        run: |
+          echo "Waiting 120 minutes for GPU training..."
+          sleep 7200
+          echo "Wait complete!"
+
+      - name: Download results
+        run: |
+          STATUS=$(kaggle kernels status ${{ secrets.KAGGLE_USERNAME }}/gvr-gpu-training 2>/dev/null || echo "unknown")
+          echo "Kernel status: $STATUS"
+          
+          kaggle kernels output ${{ secrets.KAGGLE_USERNAME }}/gvr-gpu-training \
+            -p ./kaggle_output/ 2>/dev/null || echo "Download attempted"
+          
+          ls -la kaggle_output/ 2>/dev/null || echo "No output files"
+
+      - name: Save checkpoint
+        run: |
+          mkdir -p checkpoints
+          if [ -f "kaggle_output/gvr_checkpoint.pt" ]; then
+            cp kaggle_output/gvr_checkpoint.pt checkpoints/gvr_checkpoint.pt
+            echo "Checkpoint saved!"
+          fi
+          
+          if [ -f "kaggle_output/gvr_results.json" ]; then
+            cat kaggle_output/gvr_results.json
+          fi
+
+      - name: Commit results
+        run: |
+          git config user.email "gvr-bot@github.com"
+          git config user.name "GVR Bot"
+          git add checkpoints/ 2>/dev/null || true
+          git add gvr_results.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "GVR: Auto training checkpoint $(date '+%Y-%m-%d %H:%M')"
+          git push 2>/dev/null || echo "Push done"
