@@ -1,0 +1,239 @@
+name: GVR Train on Kaggle GPU
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */8 * * *'
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        run: pip install requests -q
+
+      - name: Connect & Push to Kaggle
+        env:
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 - << 'EOF'
+          import requests, os, json, base64, time
+
+          key      = os.environ.get("KAGGLE_KEY", "")
+          username = os.environ.get("KAGGLE_USERNAME", "")
+          pat      = os.environ.get("GH_PAT", "")
+
+          print(f"Key length: {len(key)}")
+          print(f"Key prefix: {key[:8]}...")
+
+          # جرب طرق الاتصال المختلفة
+          results = {}
+
+          # طريقة 1: Bearer token (KGAT_ style)
+          headers_bearer = {
+              "Authorization": f"Bearer {key}",
+              "Content-Type": "application/json"
+          }
+          r1 = requests.get(
+              "https://www.kaggle.com/api/v1/kernels",
+              headers=headers_bearer,
+              params={"mine": True, "pageSize": 3},
+              timeout=30
+          )
+          results["bearer"] = r1.status_code
+          print(f"Bearer auth: {r1.status_code}")
+          if r1.status_code == 200:
+              print("✅ Bearer works!")
+              print(r1.text[:200])
+
+          # طريقة 2: Basic auth
+          r2 = requests.get(
+              "https://www.kaggle.com/api/v1/kernels",
+              auth=(username, key),
+              params={"mine": True, "pageSize": 3},
+              timeout=30
+          )
+          results["basic"] = r2.status_code
+          print(f"Basic auth: {r2.status_code}")
+          if r2.status_code == 200:
+              print("✅ Basic works!")
+              print(r2.text[:200])
+
+          # طريقة 3: kaggle.json format
+          import subprocess
+          import os as _os
+          _os.makedirs(os.path.expanduser("~/.kaggle"), exist_ok=True)
+          with open(os.path.expanduser("~/.kaggle/kaggle.json"), "w") as f:
+              json.dump({"username": username, "key": key}, f)
+          _os.chmod(os.path.expanduser("~/.kaggle/kaggle.json"), 0o600)
+
+          r3 = subprocess.run(
+              ["pip", "install", "kaggle", "-q"],
+              capture_output=True, text=True
+          )
+          r4 = subprocess.run(
+              ["kaggle", "kernels", "list", "--mine"],
+              capture_output=True, text=True
+          )
+          results["kaggle_cli"] = r4.returncode
+          print(f"Kaggle CLI: returncode={r4.returncode}")
+          print(r4.stdout[:200])
+          print(r4.stderr[:200])
+
+          # اختر أحسن طريقة
+          working_method = None
+          if results["bearer"] == 200:
+              working_method = "bearer"
+              auth_headers = headers_bearer
+          elif results["basic"] == 200:
+              working_method = "basic"
+          elif results["kaggle_cli"] == 0:
+              working_method = "cli"
+
+          print(f"\nWorking method: {working_method}")
+
+          # لو حاجة شغّالة - ارفع الـ GVR kernel
+          if working_method in ["bearer", "basic"]:
+              with open("kaggle_kernel/gvr_kaggle_train.py") as f:
+                  code = f.read()
+
+              payload = {
+                  "newTitle": "GVR GPU Training",
+                  "text": code,
+                  "language": "python",
+                  "kernelType": "script",
+                  "isPrivate": True,
+                  "enableGpu": True,
+                  "enableInternet": True,
+              }
+
+              if working_method == "bearer":
+                  push_r = requests.post(
+                      "https://www.kaggle.com/api/v1/kernels",
+                      headers=auth_headers,
+                      json=payload
+                  )
+              else:
+                  push_r = requests.post(
+                      "https://www.kaggle.com/api/v1/kernels",
+                      auth=(username, key),
+                      json=payload
+                  )
+
+              print(f"Push: {push_r.status_code}")
+              print(push_r.text[:300])
+              results["push"] = push_r.status_code
+              results["push_response"] = push_r.text[:300]
+
+          elif working_method == "cli":
+              import shutil
+              _os.makedirs("kaggle_push", exist_ok=True)
+              shutil.copy("kaggle_kernel/gvr_kaggle_train.py", "kaggle_push/")
+              with open("kaggle_push/kernel-metadata.json", "w") as f:
+                  json.dump({
+                      "id": f"{username}/gvr-gpu-training",
+                      "title": "GVR GPU Training",
+                      "code_file": "gvr_kaggle_train.py",
+                      "language": "python",
+                      "kernel_type": "script",
+                      "is_private": True,
+                      "enable_gpu": True,
+                      "enable_internet": True,
+                      "dataset_sources": [],
+                      "competition_sources": [],
+                      "kernel_sources": []
+                  }, f)
+              push_r = subprocess.run(
+                  ["kaggle", "kernels", "push", "-p", "kaggle_push"],
+                  capture_output=True, text=True
+              )
+              print(f"CLI Push: {push_r.returncode}")
+              print(push_r.stdout[:300])
+              print(push_r.stderr[:300])
+              results["push"] = push_r.returncode
+              results["push_stdout"] = push_r.stdout[:200]
+
+          # احفظ النتيجة
+          content = base64.b64encode(json.dumps(results, indent=2).encode()).decode()
+          check = requests.get(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/kaggle_connect_result.json",
+              headers={"Authorization": f"token {pat}"}
+          )
+          body = {"message": "GVR: Kaggle connection result", "content": content}
+          if check.status_code == 200:
+              body["sha"] = check.json()["sha"]
+
+          save = requests.put(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/kaggle_connect_result.json",
+              headers={"Authorization": f"token {pat}"},
+              json=body
+          )
+          print(f"\nSaved result: {save.status_code}")
+          EOF
+
+      - name: Wait for GPU training (130 min)
+        env:
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          echo "Waiting for Kaggle GPU training..."
+          sleep 7800
+
+      - name: Download & Save checkpoint
+        env:
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 - << 'EOF'
+          import requests, os, json, base64
+
+          key      = os.environ.get("KAGGLE_KEY", "")
+          username = os.environ.get("KAGGLE_USERNAME", "")
+          pat      = os.environ.get("GH_PAT", "")
+
+          # جرب تنزيل النتائج
+          for auth_type in ["bearer", "basic"]:
+              if auth_type == "bearer":
+                  headers = {"Authorization": f"Bearer {key}"}
+                  r = requests.get(
+                      f"https://www.kaggle.com/api/v1/kernels/{username}/gvr-gpu-training/output",
+                      headers=headers
+                  )
+              else:
+                  r = requests.get(
+                      f"https://www.kaggle.com/api/v1/kernels/{username}/gvr-gpu-training/output",
+                      auth=(username, key)
+                  )
+
+              print(f"{auth_type}: {r.status_code}")
+              if r.status_code == 200:
+                  print("✅ Got output!")
+                  print(r.text[:200])
+                  break
+
+          result = {"download_status": r.status_code, "response": r.text[:200]}
+          content = base64.b64encode(json.dumps(result, indent=2).encode()).decode()
+
+          check = requests.get(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/checkpoints/gvr_training_done.json",
+              headers={"Authorization": f"token {pat}"}
+          )
+          body = {"message": "GVR: Training done", "content": content}
+          if check.status_code == 200:
+              body["sha"] = check.json()["sha"]
+
+          requests.put(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/checkpoints/gvr_training_done.json",
+              headers={"Authorization": f"token {pat}"},
+              json=body
+          )
+          print("Done!")
+          EOF
