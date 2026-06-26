@@ -1,0 +1,94 @@
+name: GVR Direct API Push
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push-via-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests -q
+
+      - name: Push via Kaggle API directly
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 << 'PYEOF'
+          import requests, os, json, base64, time
+
+          username = os.environ["KAGGLE_USERNAME"]
+          key      = os.environ["KAGGLE_KEY"]
+          gh_token = os.environ["GITHUB_TOKEN"]
+          auth = (username, key)
+
+          print(f"Username: {username}")
+          print(f"Key: {key[:8]}...")
+
+          # 1. اقرأ الـ kernel code
+          with open("kaggle_kernel/gvr_kaggle_train.py") as f:
+              code = f.read()
+
+          # inject GitHub token
+          code = code.replace(
+              'TOKEN = os.environ.get("GITHUB_TOKEN", "")',
+              f'TOKEN = "{gh_token}"'
+          )
+
+          # 2. جرب Kaggle Kernels API v1
+          api = "https://www.kaggle.com/api/v1"
+
+          # Check if kernel exists
+          r = requests.get(f"{api}/kernels/{username}/gvr-gpu-training", auth=auth)
+          print(f"Kernel check: {r.status_code}")
+          print(r.text[:200])
+
+          # 3. Push kernel
+          payload = {
+              "newTitle": "GVR GPU Training",
+              "text": code,
+              "language": "python",
+              "kernelType": "script",
+              "isPrivate": True,
+              "enableGpu": True,
+              "enableInternet": True,
+          }
+
+          if r.status_code == 200:
+              # Update existing
+              push_r = requests.post(f"{api}/kernels", auth=auth, json=payload)
+          else:
+              # Create new
+              push_r = requests.post(f"{api}/kernels", auth=auth, json=payload)
+
+          print(f"Push status: {push_r.status_code}")
+          print(push_r.text[:500])
+
+          # 4. Save result
+          result = {
+              "push_status": push_r.status_code,
+              "push_response": push_r.text[:300],
+              "username": username,
+          }
+          with open("kaggle_push_result.json", "w") as f:
+              json.dump(result, f, indent=2)
+          PYEOF
+
+      - name: Commit result
+        run: |
+          git config user.email "bot@bot.com"
+          git config user.name "GVR Bot"
+          git add kaggle_push_result.json
+          git diff --cached --quiet || git commit -m "GVR API push result"
+          git push
