@@ -1,8 +1,6 @@
 {
-  "Qwen/Qwen2.5-7B-Instruct": {
-    "status": "ok",
-    "answer_preview": "",
-    "score": -1.0,
-    "iterations": 3
-  }
+  "strategy": "download_pretrained",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "status": "starting",
+  "ts": "2026-06-28 19:23:24"
 }
