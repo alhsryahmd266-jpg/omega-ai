@@ -8,7 +8,7 @@ on:
 jobs:
   gvr-pretrained:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install
+      - name: Install base
         run: pip install torch requests huggingface_hub -q
 
       - name: Run GVR with Pre-trained Model
