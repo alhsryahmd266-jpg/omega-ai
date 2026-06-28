@@ -1,7 +1,8 @@
 {
   "status": "success",
+  "device": "cpu",
   "size_mb": 117.3,
   "upload": 404,
   "url": "https://huggingface.co/ahmedxg/gvr-model",
-  "ts": "2026-06-28 02:33"
+  "ts": "2026-06-28 03:53"
 }
