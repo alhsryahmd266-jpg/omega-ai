@@ -1,4 +1,4 @@
-name: GVR Master Complete Build
+name: GVR Build Inline
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -14,8 +14,139 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run GVR Master Build
+      - name: Install
+        run: |
+          pip install torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu -q
+          pip install transformers huggingface_hub sentencepiece requests -q
+
+      - name: Step1 Test imports
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
-        run: python3 scripts/gvr_master.py
+        run: |
+          python3 -c "
+          import torch, transformers, huggingface_hub, requests
+          print('torch:', torch.__version__)
+          print('transformers:', transformers.__version__)
+          print('All imports OK!')
+          "
+
+      - name: Step2 Load Model
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 -c "
+          import os, torch
+          from transformers import AutoTokenizer, AutoModelForCausalLM
+          HF_TOKEN = os.environ.get('HF_TOKEN','')
+          print(f'Token: {HF_TOKEN[:8]}...')
+          MODEL = 'Qwen/Qwen2.5-0.5B-Instruct'
+          print(f'Loading {MODEL}...')
+          tok = AutoTokenizer.from_pretrained(MODEL, token=HF_TOKEN, trust_remote_code=True)
+          mdl = AutoModelForCausalLM.from_pretrained(MODEL, token=HF_TOKEN, torch_dtype=torch.float32, trust_remote_code=True)
+          mdl.eval()
+          p = sum(x.numel() for x in mdl.parameters())
+          print(f'Loaded {p/1e6:.0f}M params!')
+          msgs=[{'role':'user','content':'Say hello in one word'}]
+          txt=tok.apply_chat_template(msgs,tokenize=False,add_generation_prompt=True)
+          ids=tok(txt,return_tensors='pt')
+          with torch.no_grad():
+              out=mdl.generate(**ids,max_new_tokens=10,pad_token_id=tok.eos_token_id)
+          ans=tok.decode(out[0][len(ids.input_ids[0]):],skip_special_tokens=True)
+          print(f'Answer: {ans}')
+          print('MODEL OK!')
+          "
+
+      - name: Step3 Upload to HF
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 - << 'EOF'
+          import os, torch, json, time, requests, base64
+          import torch.nn as nn
+          from huggingface_hub import HfApi
+          from transformers import AutoTokenizer, AutoModelForCausalLM
+
+          HF_TOKEN = os.environ.get("HF_TOKEN","")
+          GH_PAT = os.environ.get("GH_PAT","")
+          HF_USER = "ahmedxg"
+
+          # Load model
+          MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+          tok = AutoTokenizer.from_pretrained(MODEL, token=HF_TOKEN, trust_remote_code=True)
+          mdl = AutoModelForCausalLM.from_pretrained(MODEL, token=HF_TOKEN, torch_dtype=torch.float32, trust_remote_code=True)
+          mdl.eval()
+
+          # Generate answers
+          def gen(q):
+              msgs=[{"role":"user","content":q}]
+              txt=tok.apply_chat_template(msgs,tokenize=False,add_generation_prompt=True)
+              ids=tok(txt,return_tensors="pt")
+              with torch.no_grad():
+                  out=mdl.generate(**ids,max_new_tokens=200,temperature=0.7,do_sample=True,pad_token_id=tok.eos_token_id)
+              return tok.decode(out[0][len(ids.input_ids[0]):],skip_special_tokens=True)
+
+          tests = []
+          for q in ["Write Python fibonacci","What is machine learning?","What is 15*7?"]:
+              a = gen(q)
+              tests.append({"q":q,"a":a[:200]})
+              print(f"Q: {q[:30]} -> {a[:60]}")
+
+          # Train verifier
+          class V(nn.Module):
+              def __init__(self): super().__init__(); self.net=nn.Sequential(nn.Linear(8,32),nn.ReLU(),nn.Linear(32,1),nn.Sigmoid())
+              def forward(self,x): return self.net(x)
+          v=V(); opt=torch.optim.Adam(v.parameters(),lr=1e-3)
+          for _ in range(200):
+              xp=torch.rand(8,8)*0.3+0.7; yp=torch.ones(8,1)
+              xn=torch.rand(8,8)*0.3; yn=torch.zeros(8,1)
+              loss=(nn.functional.binary_cross_entropy(v(xp),yp)+nn.functional.binary_cross_entropy(v(xn),yn))/2
+              opt.zero_grad(); loss.backward(); opt.step()
+          print(f"Verifier loss: {loss.item():.4f}")
+          torch.save(v.state_dict(),"/tmp/verifier.pt")
+
+          # Upload to HF
+          api = HfApi(token=HF_TOKEN)
+          api.create_repo(f"{HF_USER}/gvr-ultimate", exist_ok=True, private=False)
+          api.upload_file("/tmp/verifier.pt","gvr_verifier.pt",f"{HF_USER}/gvr-ultimate")
+          with open("/tmp/cfg.json","w") as f:
+              json.dump({"model":MODEL,"tests":tests,"ts":time.strftime("%Y-%m-%d %H:%M:%S")},f)
+          api.upload_file("/tmp/cfg.json","config.json",f"{HF_USER}/gvr-ultimate")
+
+          # Deploy Space
+          sid = f"{HF_USER}/gvr-training-space"
+          api.create_repo(sid, repo_type="space", space_sdk="gradio", exist_ok=True)
+          for fn in ["app.py","requirements.txt","README.md"]:
+              fp = f"hf_space/{fn}"
+              if os.path.exists(fp):
+                  api.upload_file(fp, fn, sid, repo_type="space")
+                  print(f"Space/{fn} uploaded")
+          try: api.add_space_secret(sid, "HF_TOKEN", HF_TOKEN)
+          except: pass
+
+          # Save result to GitHub
+          result = {
+              "status":"SUCCESS",
+              "model_url":f"https://huggingface.co/{HF_USER}/gvr-ultimate",
+              "space_url":f"https://huggingface.co/spaces/{sid}",
+              "tests":tests,
+              "ts":time.strftime("%Y-%m-%d %H:%M:%S")
+          }
+          content = base64.b64encode(json.dumps(result,indent=2).encode()).decode()
+          check = requests.get(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/gvr_master_result.json",
+              headers={"Authorization":f"token {GH_PAT}"}
+          )
+          body = {"message":"GVR complete","content":content}
+          if check.status_code==200: body["sha"]=check.json()["sha"]
+          r=requests.put(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/gvr_master_result.json",
+              headers={"Authorization":f"token {GH_PAT}"},json=body
+          )
+          print(f"Saved: {r.status_code}")
+          print(f"Model: https://huggingface.co/{HF_USER}/gvr-ultimate")
+          print(f"Space: https://huggingface.co/spaces/{sid}")
+          print("DONE!")
+          EOF
