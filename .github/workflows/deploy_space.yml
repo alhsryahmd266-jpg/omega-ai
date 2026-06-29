@@ -1,0 +1,100 @@
+name: Deploy GVR Space to HuggingFace
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'hf_space/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install HF Hub
+        run: pip install huggingface_hub requests -q
+
+      - name: Deploy Space to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 - << 'EOF'
+          import requests, os, json, base64, time
+          from huggingface_hub import HfApi
+
+          hf = os.environ.get("HF_TOKEN","")
+          pat = os.environ.get("GH_PAT","")
+          HF_USER = "ahmedxg"
+          SPACE_ID = f"{HF_USER}/gvr-training-space"
+
+          api = HfApi(token=hf)
+
+          # إنشاء Space
+          try:
+              api.create_repo(
+                  repo_id=SPACE_ID,
+                  repo_type="space",
+                  space_sdk="gradio",
+                  exist_ok=True,
+                  private=False
+              )
+              print(f"Space ready: {SPACE_ID}")
+          except Exception as e:
+              print(f"Space note: {e}")
+
+          # رفع الملفات
+          files = {
+              "README.md":        "hf_space/README.md",
+              "app.py":           "hf_space/app.py",
+              "requirements.txt": "hf_space/requirements.txt",
+          }
+
+          for dest, src in files.items():
+              if os.path.exists(src):
+                  api.upload_file(
+                      path_or_fileobj=src,
+                      path_in_repo=dest,
+                      repo_id=SPACE_ID,
+                      repo_type="space",
+                      commit_message=f"Deploy {dest}"
+                  )
+                  print(f"✅ {dest}")
+              else:
+                  print(f"❌ {src} not found")
+
+          # أضف HF_TOKEN كـ secret في الـ Space
+          try:
+              api.add_space_secret(SPACE_ID, "HF_TOKEN", hf)
+              print("✅ HF_TOKEN secret added to Space")
+          except Exception as e:
+              print(f"Secret note: {e}")
+
+          result = {
+              "status": "deployed",
+              "space_url": f"https://huggingface.co/spaces/{SPACE_ID}",
+              "ts": time.strftime("%Y-%m-%d %H:%M:%S")
+          }
+          print(f"\n🚀 Space URL: https://huggingface.co/spaces/{SPACE_ID}")
+
+          # حفظ على GitHub
+          content = base64.b64encode(json.dumps(result,indent=2).encode()).decode()
+          check = requests.get(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/hf_space_result.json",
+              headers={"Authorization":f"token {pat}"}
+          )
+          body = {"message":"Space deployed","content":content}
+          if check.status_code==200: body["sha"]=check.json()["sha"]
+          requests.put(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/hf_space_result.json",
+              headers={"Authorization":f"token {pat}"},json=body
+          )
+          EOF
