@@ -1,14 +1,10 @@
-name: GVR-Ultimate Master Build
+name: GVR Master Complete Build
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
 
 jobs:
-
-  # ─── Job 1: Build & Train ─────────────────
-  build-and-train:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -18,30 +14,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install
-        run: |
-          pip install torch==2.1.0 -q
-          pip install transformers accelerate sentencepiece -q
-          pip install huggingface_hub requests -q
-
-      - name: Train & Upload
+      - name: Run GVR Master Build
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
-        run: python3 scripts/gvr_pretrained.py
-
-  # ─── Job 2: Deploy Space ──────────────────
-  deploy-space:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: build-and-train
-
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install huggingface_hub requests -q
-
-      - name: Deploy to HF Space
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: python3 scripts/deploy_space.py
+        run: python3 scripts/gvr_master.py
