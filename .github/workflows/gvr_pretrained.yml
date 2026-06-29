@@ -1,14 +1,12 @@
-name: GVR Pretrained - HF Inference API
+name: GVR-Ultimate Build
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
 
 jobs:
-  gvr-pretrained:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -16,10 +14,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install base
-        run: pip install torch requests huggingface_hub -q
+      - name: Setup
+        run: |
+          pip install torch==2.1.0 requests huggingface_hub -q
+          pip install transformers accelerate sentencepiece bitsandbytes -q
 
-      - name: Run GVR with Pre-trained Model
+      - name: Build GVR-Ultimate
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
