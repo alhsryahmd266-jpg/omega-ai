@@ -105,7 +105,12 @@ try:
     api = HfApi(token=HF_TOKEN)
 
     api.create_repo(f"{HF_USER}/gvr-ultimate", exist_ok=True, private=False)
-    api.upload_file("/tmp/verifier.pt", "gvr_verifier.pt", f"{HF_USER}/gvr-ultimate")
+    api.upload_file(
+        path_or_fileobj="/tmp/verifier.pt",
+        path_in_repo="gvr_verifier.pt",
+        repo_id=f"{HF_USER}/gvr-ultimate",
+        repo_type="model",
+    )
 
     cfg = {
         "backbone": MODEL,
@@ -115,7 +120,12 @@ try:
     }
     with open("/tmp/cfg.json", "w") as f:
         json.dump(cfg, f, indent=2)
-    api.upload_file("/tmp/cfg.json", "config.json", f"{HF_USER}/gvr-ultimate")
+    api.upload_file(
+        path_or_fileobj="/tmp/cfg.json",
+        path_in_repo="config.json",
+        repo_id=f"{HF_USER}/gvr-ultimate",
+        repo_type="model",
+    )
 
     readme = (
         "# GVR-Ultimate\n\n"
@@ -126,7 +136,12 @@ try:
     )
     with open("/tmp/README.md", "w") as f:
         f.write(readme)
-    api.upload_file("/tmp/README.md", "README.md", f"{HF_USER}/gvr-ultimate")
+    api.upload_file(
+        path_or_fileobj="/tmp/README.md",
+        path_in_repo="README.md",
+        repo_id=f"{HF_USER}/gvr-ultimate",
+        repo_type="model",
+    )
     print(f"Model uploaded: https://huggingface.co/{HF_USER}/gvr-ultimate")
 
     # ---- Deploy Space ----
@@ -136,7 +151,12 @@ try:
         for fn in ["app.py", "requirements.txt", "README.md"]:
             fp = f"hf_space/{fn}"
             if os.path.exists(fp):
-                api.upload_file(fp, fn, sid, repo_type="space")
+                api.upload_file(
+                    path_or_fileobj=fp,
+                    path_in_repo=fn,
+                    repo_id=sid,
+                    repo_type="space",
+                )
                 print(f"Space/{fn} uploaded")
         try:
             api.add_space_secret(sid, "HF_TOKEN", HF_TOKEN)
