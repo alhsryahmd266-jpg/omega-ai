@@ -18,7 +18,7 @@ jobs:
         run: |
           pip install torch transformers huggingface_hub sentencepiece requests accelerate -q
           python3 -c "import torch; print('torch:', torch.__version__)"
-          python3 -c "from transformers import AutoModelForCausalLM; print('transformers import OK')"
+          python3 -c "from transformers import AutoModelForCausalLM; print('transformers OK')"
 
       - name: Build GVR-Ultimate
         env:
