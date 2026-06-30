@@ -3,4 +3,3 @@ transformers
 accelerate
 sentencepiece
 huggingface_hub
-audioop-lts
