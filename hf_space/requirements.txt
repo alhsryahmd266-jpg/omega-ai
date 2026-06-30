@@ -1,5 +1,5 @@
+huggingface_hub<0.26
 torch
 transformers
 accelerate
 sentencepiece
-huggingface_hub
