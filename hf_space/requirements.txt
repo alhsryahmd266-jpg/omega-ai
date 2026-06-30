@@ -1,8 +1,5 @@
-gradio==4.44.1
 torch
 transformers
 accelerate
 sentencepiece
 huggingface_hub
-spaces
-audioop-lts
