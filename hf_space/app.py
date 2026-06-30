@@ -10,7 +10,6 @@ import time
 import subprocess
 import sys
 
-# ZeroGPU decorator
 try:
     import spaces
     HAS_ZERO_GPU = True
@@ -18,16 +17,12 @@ except:
     HAS_ZERO_GPU = False
 
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
-MODEL_ID  = "Qwen/Qwen2.5-7B-Instruct"  # 7B على A10G (24GB VRAM)
+MODEL_ID  = "Qwen/Qwen2.5-7B-Instruct"
 
 def install_deps():
     subprocess.run([sys.executable, "-m", "pip", "install",
-        "transformers", "accelerate", "sentencepiece",
         "huggingface_hub", "-q"], capture_output=True)
 
-install_deps()
-
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from huggingface_hub import HfApi
 
 model = None
@@ -36,8 +31,8 @@ tokenizer = None
 def load_model():
     global model, tokenizer
     if model is not None:
-        return "✅ Already loaded"
-    
+        return "Already loaded"
+    from transformers import AutoTokenizer, AutoModelForCausalLM
     print(f"Loading {MODEL_ID}...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
@@ -48,9 +43,16 @@ def load_model():
     )
     model.eval()
     params = sum(p.numel() for p in model.parameters())
-    return f"✅ Loaded {params/1e9:.1f}B params on {next(model.parameters()).device}"
+    return f"Loaded {params/1e9:.1f}B params"
 
-@spaces.GPU(duration=120) if HAS_ZERO_GPU else lambda f: f
+
+def _gpu_decorator(duration=120):
+    if HAS_ZERO_GPU:
+        return spaces.GPU(duration=duration)
+    return lambda f: f
+
+
+@_gpu_decorator(120)
 def generate_answer(question: str, use_cot: bool = True) -> str:
     global model, tokenizer
     if model is None:
@@ -80,13 +82,13 @@ def generate_answer(question: str, use_cot: bool = True) -> str:
     new_tokens = outputs[0][len(inputs.input_ids[0]):]
     return tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-@spaces.GPU(duration=300) if HAS_ZERO_GPU else lambda f: f
+
+@_gpu_decorator(300)
 def run_gvr_training(progress=gr.Progress()):
-    """تدريب GVR Verifier على A10G GPU"""
     import torch.nn as nn
     import torch.nn.functional as F
 
-    progress(0, desc="Starting GVR Training on A10G GPU...")
+    progress(0, desc="Starting GVR Training...")
 
     class GVRVerifier(nn.Module):
         def __init__(self):
@@ -107,15 +109,12 @@ def run_gvr_training(progress=gr.Progress()):
         log.append(f"GPU: {torch.cuda.get_device_name(0)}")
         log.append(f"VRAM: {torch.cuda.get_device_properties(0).total_memory/1e9:.1f}GB")
 
-    # بيانات تدريب
     training_data = []
     for _ in range(500):
-        # positive examples
         training_data.append((
             torch.tensor([0.8,0.9,1.0,1.0,0.8,1.0,1.0,0.9], dtype=torch.float),
             torch.tensor([1.0])
         ))
-        # negative examples
         training_data.append((
             torch.tensor([0.2,0.1,0.0,0.0,0.1,0.0,0.0,0.1], dtype=torch.float),
             torch.tensor([0.0])
@@ -123,9 +122,9 @@ def run_gvr_training(progress=gr.Progress()):
 
     progress(0.2, desc="Training Verifier...")
     losses = []
+    import random
     for epoch in range(50):
         epoch_loss = 0
-        import random
         random.shuffle(training_data)
         for x, y in training_data:
             x, y = x.to(device), y.to(device)
@@ -142,54 +141,53 @@ def run_gvr_training(progress=gr.Progress()):
             progress(0.2 + epoch/50*0.6, desc=f"Epoch {epoch}/50 loss={avg:.4f}")
 
     progress(0.8, desc="Saving to HuggingFace...")
-
-    # حفظ
     torch.save(verifier.state_dict(), "/tmp/gvr_verifier_gpu.pt")
 
     try:
         api = HfApi(token=HF_TOKEN)
         api.create_repo("ahmedxg/gvr-ultimate", exist_ok=True)
         api.upload_file(
-            "/tmp/gvr_verifier_gpu.pt",
-            "gvr_verifier_gpu.pt",
-            "ahmedxg/gvr-ultimate"
+            path_or_fileobj="/tmp/gvr_verifier_gpu.pt",
+            path_in_repo="gvr_verifier_gpu.pt",
+            repo_id="ahmedxg/gvr-ultimate",
         )
-        log.append("✅ Uploaded to huggingface.co/ahmedxg/gvr-ultimate")
+        log.append("Uploaded to huggingface.co/ahmedxg/gvr-ultimate")
     except Exception as e:
         log.append(f"Upload: {e}")
 
     progress(1.0, desc="Done!")
     return "\n".join(log)
 
-# Gradio UI
-with gr.Blocks(title="GVR-Ultimate Training Space", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 🚀 GVR-Ultimate Training Space")
-    gr.Markdown("**Generate → Verify → Refine** | Qwen2.5-7B + ZeroGPU (A10G)")
 
-    with gr.Tab("🎯 Chat with GVR"):
+with gr.Blocks(title="GVR-Ultimate Training Space", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# GVR-Ultimate Training Space")
+    gr.Markdown("**Generate -> Verify -> Refine** | Qwen2.5-7B + ZeroGPU (A10G)")
+
+    with gr.Tab("Chat with GVR"):
         question = gr.Textbox(label="Question", placeholder="Ask anything...")
         cot = gr.Checkbox(label="Use Chain-of-Thought", value=True)
         answer = gr.Textbox(label="GVR Answer", lines=10)
-        ask_btn = gr.Button("Ask GVR ⚡", variant="primary")
+        ask_btn = gr.Button("Ask GVR", variant="primary")
         ask_btn.click(generate_answer, inputs=[question, cot], outputs=answer)
 
-    with gr.Tab("🏋️ Train Verifier on GPU"):
-        gr.Markdown("Trains GVR Verifier on A10G GPU and saves to HuggingFace")
-        train_btn = gr.Button("Start Training on A10G GPU 🔥", variant="primary")
+    with gr.Tab("Train Verifier on GPU"):
+        gr.Markdown("Trains GVR Verifier on GPU and saves to HuggingFace")
+        train_btn = gr.Button("Start Training on GPU", variant="primary")
         train_log = gr.Textbox(label="Training Log", lines=15)
         train_btn.click(run_gvr_training, outputs=train_log)
 
-    with gr.Tab("ℹ️ Info"):
+    with gr.Tab("Info"):
         gr.Markdown(f"""
         ## Architecture
-        - **Backbone**: {MODEL_ID} (18T tokens)
-        - **Tools**: Chain-of-Thought, Self-Consistency, ReAct, Code Executor
-        - **Verifier**: GVR Quality Scorer
-        - **Hardware**: A10G GPU (ZeroGPU)
+        - Backbone: {MODEL_ID} (18T tokens)
+        - Tools: Chain-of-Thought, Self-Consistency, ReAct, Code Executor
+        - Verifier: GVR Quality Scorer
+        - Hardware: ZeroGPU
 
         ## Links
-        - 📦 Model: [ahmedxg/gvr-ultimate](https://huggingface.co/ahmedxg/gvr-ultimate)
-        - 💻 Code: [omega-ai](https://github.com/alhsryahmd266-jpg/omega-ai)
+        - Model: https://huggingface.co/ahmedxg/gvr-ultimate
+        - Code: https://github.com/alhsryahmd266-jpg/omega-ai
         """)
 
-demo.launch()
+if __name__ == "__main__":
+    demo.launch(server_name="0.0.0.0", server_port=7860)
