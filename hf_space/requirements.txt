@@ -1,8 +1,8 @@
-gradio==4.44.0
-torch>=2.1.0
-transformers>=4.45.0
-accelerate>=0.25.0
-sentencepiece>=0.1.99
-huggingface_hub>=0.20.0
+gradio==4.44.1
+torch
+transformers
+accelerate
+sentencepiece
+huggingface_hub
 spaces
-audioop-lts; python_version>="3.13"
+audioop-lts
