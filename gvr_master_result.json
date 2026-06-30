@@ -1,6 +1,22 @@
 {
-  "status": "ERROR",
-  "error": "HfApi.upload_file() takes 1 positional argument but 4 were given",
-  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/omega-ai/omega-ai/scripts/gvr_build.py\", line 108, in <module>\n    api.upload_file(\"/tmp/verifier.pt\", \"gvr_verifier.pt\", f\"{HF_USER}/gvr-ultimate\")\n  File \"/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py\", line 88, in _inner_fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/huggingface_hub/hf_api.py\", line 2131, in _inner\n    return fn(self, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: HfApi.upload_file() takes 1 positional argument but 4 were given\n",
-  "ts": "2026-06-30 03:02:44"
+  "status": "SUCCESS",
+  "model_url": "https://huggingface.co/ahmedxg/gvr-ultimate",
+  "space_url": "https://huggingface.co/spaces/ahmedxg/gvr-training-space",
+  "params_M": 494.032768,
+  "verifier_loss": 0.0034509089309722185,
+  "tests": [
+    {
+      "q": "Write a Python fibonacci function with memoization",
+      "a": "Certainly! Memoization is a technique used to optimize recursive functions by storing the results of expensive function calls and reusing them when the same inputs occur again. Here's how you can implement a Fibonacci function using memoization in Py"
+    },
+    {
+      "q": "What is machine learning? Explain simply",
+      "a": "Machine learning is a subset of artificial intelligence that involves the development of algorithms and statistical models that allow computers to learn from and make predictions or decisions based on data without being explicitly programmed. In othe"
+    },
+    {
+      "q": "Calculate fifteen times seven plus twenty three",
+      "a": "To calculate fifteen times seven plus twenty-three, you simply perform the multiplication and addition:\n\n15 × 7 = 105\n105 + 23 = 128\n\nSo, fifteen times seven plus twenty-three equals 128."
+    }
+  ],
+  "ts": "2026-06-30 03:06:02"
 }
