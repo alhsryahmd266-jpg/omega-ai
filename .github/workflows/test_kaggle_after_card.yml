@@ -1,0 +1,15 @@
+name: Test Kaggle After Card
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install requests kaggle -q
+      - env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python3 scripts/test_kaggle_now.py
