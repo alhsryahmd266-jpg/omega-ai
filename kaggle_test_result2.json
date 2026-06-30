@@ -1,0 +1,20 @@
+{
+  "username": "ahmedxdx",
+  "key_len": 37,
+  "ts": "2026-06-30 20:56:57",
+  "tests": {
+    "basic_auth": {
+      "status": 404,
+      "preview": "\r\n\r\n<!DOCTYPE html>\r\n<html lang=\"en\">\r\n\r\n<head>\r\n  <title>Kaggle: Your Home for Data Science</title>\r\n  <meta charset=\"utf-8\" />\r\n    <meta name=\"robots\" content=\"index, follow\" />\r\n  <meta name=\"desc"
+    },
+    "bearer": {
+      "status": 404,
+      "preview": "\r\n\r\n<!DOCTYPE html>\r\n<html lang=\"en\">\r\n\r\n<head>\r\n  <title>Kaggle: Your Home for Data Science</title>\r\n  <meta charset=\"utf-8\" />\r\n    <meta name=\"robots\" content=\"index, follow\" />\r\n  <meta name=\"desc"
+    },
+    "kaggle_cli": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/home/runner/.local/bin/kaggle\", line 5, in <module>\n    from kaggle.cli import main\n  File \"/home/runner/.local/lib/python3.12/site-packages/kaggle/__init__"
+    }
+  }
+}
