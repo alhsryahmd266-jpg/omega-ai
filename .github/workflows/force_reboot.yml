@@ -1,0 +1,14 @@
+name: Force Reboot Space
+on:
+  workflow_dispatch:
+jobs:
+  reboot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install huggingface_hub requests -q
+      - env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python3 scripts/force_reboot.py
