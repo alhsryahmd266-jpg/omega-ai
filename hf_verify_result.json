@@ -1,0 +1,17 @@
+{
+  "model_files": [
+    ".gitattributes",
+    "README.md",
+    "config.json",
+    "gvr_verifier.pt"
+  ],
+  "space_files": [
+    ".gitattributes",
+    "README.md",
+    "app.py",
+    "requirements.txt"
+  ],
+  "space_stage": "RUNTIME_ERROR",
+  "model_check": 200,
+  "space_check": 200
+}
