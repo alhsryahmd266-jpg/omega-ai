@@ -1,0 +1,23 @@
+{
+  "username": "ahmedxdx",
+  "tests": {
+    "competitions_list": {
+      "rc": 0,
+      "out": "Warning: Looks like you're using an outdated API Version, please consider updating (server 2.2.2 / client 1.6.17)\nref                                                                              deadl",
+      "err": ""
+    },
+    "api_datasets": {
+      "status": 404,
+      "out": "\r\n\r\n<!DOCTYPE html>\r\n<html lang=\"en\">\r\n\r\n<head>\r\n  <title>Kaggle: Your Home for Data Science</title>\r\n  <meta charset=\"utf-8\" />\r\n    <meta name=\"robots\" content=\"index, follow\" />\r\n  <meta name=\"desc"
+    },
+    "user_profile": {
+      "status": 404,
+      "out": "\r\n\r\n<!DOCTYPE html>\r\n<html lang=\"en\">\r\n\r\n<head>\r\n  <title>Kaggle: Your Home for Data Science</title>\r\n  <meta charset=\"utf-8\" />\r\n    <meta name=\"robots\" content=\"index, follow\" />\r\n  <meta name=\"desc"
+    },
+    "kernels_list": {
+      "rc": 0,
+      "out": "Warning: Looks like you're using an outdated API Version, please consider updating (server 2.2.2 / client 1.6.17)\nref                                                      title                        ",
+      "err": ""
+    }
+  }
+}
