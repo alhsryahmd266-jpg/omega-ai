@@ -1,17 +1,13 @@
 {
-  "id": "ahmedxdx/aion-gpu-training",
-  "title": "AION GPU Training",
-  "code_file": "aion_kaggle_train.py",
+  "id": "ahmedxdx/gvr-gpu-training",
+  "title": "GVR GPU Training v2",
+  "code_file": "gvr_kaggle_train.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
   "enable_gpu": true,
-  "enable_tpu": false,
   "enable_internet": true,
-  "dataset_sources": [
-    "ahmedxdx/deepseek-r1-qwen-14b-uncensored-gguf-20260619"
-  ],
+  "dataset_sources": [],
   "competition_sources": [],
-  "kernel_sources": [],
-  "model_sources": []
+  "kernel_sources": []
 }
