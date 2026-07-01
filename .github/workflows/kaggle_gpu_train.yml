@@ -1,0 +1,124 @@
+name: GVR Kaggle GPU Training
+
+on:
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Kaggle CLI
+        run: pip install kaggle==1.6.17 requests -q
+
+      - name: Configure Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"${KAGGLE_USERNAME}\",\"key\":\"${KAGGLE_KEY}\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "Kaggle configured for: $KAGGLE_USERNAME"
+          kaggle competitions list --page 1 2>&1 | head -3
+
+      - name: Inject HF Token into kernel
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          mkdir -p kaggle_push
+          sed "s/HF_TOKEN = os.environ.get(\"HF_TOKEN\", \"\")/HF_TOKEN = \"${HF_TOKEN}\"/" \
+            kaggle_kernel/gvr_kaggle_train.py > kaggle_push/gvr_kaggle_train.py
+          echo "Kernel ready"
+
+      - name: Create kernel metadata
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          cat > kaggle_push/kernel-metadata.json << EOF
+          {
+            "id": "${KAGGLE_USERNAME}/gvr-gpu-training",
+            "title": "GVR GPU Training",
+            "code_file": "gvr_kaggle_train.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_internet": true,
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": []
+          }
+          EOF
+          cat kaggle_push/kernel-metadata.json
+
+      - name: Push kernel to Kaggle
+        run: |
+          cd kaggle_push
+          kaggle kernels push -p . 2>&1
+          echo "Kernel pushed!"
+
+      - name: Wait for GPU training (130 min)
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          echo "Waiting for Kaggle GPU training to complete..."
+          echo "Kernel: https://kaggle.com/${KAGGLE_USERNAME}/gvr-gpu-training"
+          for i in $(seq 1 26); do
+            sleep 300
+            echo "[$i/26] $(date) - Checking..."
+            STATUS=$(kaggle kernels status ${KAGGLE_USERNAME}/gvr-gpu-training 2>/dev/null | tail -1 || echo "checking...")
+            echo "Status: $STATUS"
+            if echo "$STATUS" | grep -q "complete\|error\|cancel"; then
+              echo "Training finished!"
+              break
+            fi
+          done
+
+      - name: Download results
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          mkdir -p kaggle_output
+          kaggle kernels output ${KAGGLE_USERNAME}/gvr-gpu-training -p kaggle_output/ 2>&1 || echo "Download attempted"
+          ls -la kaggle_output/ 2>/dev/null || echo "No files"
+
+          python3 - << 'EOF'
+          import os, json, requests, base64
+
+          pat = os.environ.get("GH_PAT","")
+          result = {"status": "completed", "ts": __import__("time").strftime("%Y-%m-%d %H:%M:%S")}
+
+          if os.path.exists("kaggle_output/gvr_config.json"):
+              with open("kaggle_output/gvr_config.json") as f:
+                  result["training"] = json.load(f)
+              print("Config found!", json.dumps(result["training"], indent=2))
+          else:
+              result["note"] = "No output files found - check Kaggle kernel logs"
+              print("No config file - listing kaggle_output:")
+              for f in os.listdir("kaggle_output"):
+                  print(f"  {f}")
+
+          content = base64.b64encode(json.dumps(result, indent=2).encode()).decode()
+          check = requests.get(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/kaggle_gpu_result.json",
+              headers={"Authorization": f"token {pat}"}
+          )
+          body = {"message": "Kaggle GPU result", "content": content}
+          if check.status_code == 200:
+              body["sha"] = check.json()["sha"]
+          requests.put(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/kaggle_gpu_result.json",
+              headers={"Authorization": f"token {pat}"}, json=body
+          )
+          print("Result saved!")
+          EOF
