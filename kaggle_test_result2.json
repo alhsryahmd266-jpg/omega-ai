@@ -1,7 +1,7 @@
 {
   "username": "ahmedxdx",
-  "key_len": 37,
-  "ts": "2026-06-30 20:56:57",
+  "key_len": 32,
+  "ts": "2026-07-01 09:50:50",
   "tests": {
     "basic_auth": {
       "status": 404,
