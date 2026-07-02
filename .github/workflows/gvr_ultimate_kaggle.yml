@@ -1,0 +1,114 @@
+name: GVR-Ultimate Kaggle GPU
+
+on:
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        run: pip install kaggle==1.6.17 requests -q
+
+      - name: Configure Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"${KAGGLE_USERNAME}\",\"key\":\"${KAGGLE_KEY}\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          kaggle competitions list --page 1 2>&1 | head -2
+          echo "Kaggle ready for: $KAGGLE_USERNAME"
+
+      - name: Prepare kernel
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          mkdir -p kaggle_push
+          cp kaggle_kernel/kernel-metadata.json kaggle_push/
+          python3 - << 'EOF'
+          with open("kaggle_kernel/gvr_kaggle_train.py") as f:
+              code = f.read()
+          import os
+          hf = os.environ.get("HF_TOKEN","")
+          code = code.replace(
+              'HF_TOKEN = os.environ.get("HF_TOKEN", "")',
+              f'HF_TOKEN = "{hf}"'
+          )
+          with open("kaggle_push/gvr_kaggle_train.py","w") as f:
+              f.write(code)
+          print("Kernel prepared with HF_TOKEN injected")
+          EOF
+
+      - name: Push to Kaggle GPU
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          cd kaggle_push
+          kaggle kernels push -p . 2>&1
+          echo "Pushed! https://kaggle.com/${KAGGLE_USERNAME}/gvr-gpu-training"
+
+      - name: Monitor GPU training
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          echo "Training on Kaggle GPU..."
+          for i in $(seq 1 28); do
+            sleep 300
+            STATUS=$(kaggle kernels status ${KAGGLE_USERNAME}/gvr-gpu-training 2>&1 | tail -1)
+            echo "[$(date '+%H:%M')] Step $i/28 | $STATUS"
+            if echo "$STATUS" | grep -qiE "complete|error|cancel"; then
+              echo "Done!"
+              break
+            fi
+          done
+
+      - name: Download & Save
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          mkdir -p kaggle_output
+          kaggle kernels output ${KAGGLE_USERNAME}/gvr-gpu-training -p kaggle_output/ 2>&1
+          ls -la kaggle_output/ || true
+
+          python3 - << 'EOF'
+          import os,json,requests,base64,time
+
+          pat = os.environ.get("GH_PAT","")
+          result = {"ts": time.strftime("%Y-%m-%d %H:%M:%S")}
+
+          if os.path.exists("kaggle_output/gvr_config.json"):
+              with open("kaggle_output/gvr_config.json") as f:
+                  cfg = json.load(f)
+              result["status"] = "SUCCESS"
+              result["model"]  = cfg.get("reasoning_model","?")
+              result["params"] = cfg.get("reasoning_params_B","?")
+              result["verifier_loss"] = cfg.get("verifier_best_loss","?")
+              result["tools"]  = cfg.get("tools",[])
+              result["tests"]  = cfg.get("test_results",[])
+              print("SUCCESS!")
+              print(json.dumps(result, indent=2, ensure_ascii=False)[:500])
+          else:
+              result["status"] = "NO_OUTPUT"
+              result["files"]  = os.listdir("kaggle_output") if os.path.exists("kaggle_output") else []
+              print("No output found:", result["files"])
+
+          content = base64.b64encode(json.dumps(result,indent=2,ensure_ascii=False).encode()).decode()
+          check = requests.get(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/gvr_ultimate_result.json",
+              headers={"Authorization":f"token {pat}"}
+          )
+          body = {"message":"GVR-Ultimate result","content":content}
+          if check.status_code==200: body["sha"]=check.json()["sha"]
+          requests.put(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/gvr_ultimate_result.json",
+              headers={"Authorization":f"token {pat}"},json=body
+          )
+          print("Result saved to GitHub!")
+          EOF
