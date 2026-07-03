@@ -1,0 +1,33 @@
+me":"stderr","time":6.484107979,"data":"    \n"}
+,{"stream_name":"stderr","time":6.484111465,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":6.484115015,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":6.484124591,"data":"    Please install PyTorch with a following CUDA\n"}
+,{"stream_name":"stderr","time":6.484127228,"data":"    configurations:  12.6 following instructions at\n"}
+,{"stream_name":"stderr","time":6.484129645,"data":"    https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":6.484132035,"data":"    \n"}
+,{"stream_name":"stderr","time":6.484134372,"data":"  queued_call()\n"}
+,{"stream_name":"stderr","time":6.484355523,"data":"/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning: \n"}
+,{"stream_name":"stderr","time":6.484366829,"data":"Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.\n"}
+,{"stream_name":"stderr","time":6.484370831,"data":"The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.\n"}
+,{"stream_name":"stderr","time":6.484374772,"data":"If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/\n"}
+,{"stream_name":"stderr","time":6.484378767,"data":"\n"}
+,{"stream_name":"stderr","time":6.484382296,"data":"  queued_call()\n"}
+,{"stream_name":"stdout","time":6.486072153,"data":"GPU[0]: Tesla P100-PCIE-16GB | 17.1GB\n"}
+,{"stream_name":"stdout","time":6.486083602,"data":"Total VRAM: 17.1GB\n"}
+,{"stream_name":"stdout","time":13.07935828,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 60.7/60.7 MB 32.7 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":13.079422347,"data":"\n"}
+,{"stream_name":"stdout","time":32.631975204,"data":"\n"}
+,{"stream_name":"stdout","time":32.632011204,"data":"Using: DeepSeek-R1-14B (4-bit) + Qwen2-VL-2B\n"}
+,{"stream_name":"stdout","time":32.632027926,"data":"\n"}
+,{"stream_name":"stdout","time":32.632032464,"data":"Loading reasoning model: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B\n"}
+,{"stream_name":"stderr","time":32.754204635,"data":"Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.\n"}
+,{"stream_name":"stderr","time":158.62689775,"data":"\rFetching 4 files:   0%|          | 0/4 [00:00\u003c?, ?it/s]\rFetching 4 files:  25%|██▌       | 1/4 [01:45\u003c05:16, 105.47s/it]\rFetching 4 files:  75%|███████▌  | 3/4 [01:57\u003c00:31, 31.79s/it] \rFetching 4 files: 100%|██████████| 4/4 [01:57\u003c00:00, 29.37s/it]\n"}
+,{"stream_name":"stderr","time":176.338874655,"data":"\rLoading weights:   0%|          | 0/579 [00:00\u003c?, ?it/s]\rLoading weights:   0%|          | 1/579 [00:00\u003c00:00, 15087.42it/s, Materializing param=lm_head.weight]\rLoading weights:   0%|          | 1/579 [00:00\u003c00:00, 3905.31it/s, Materializing param=lm_head.weight] \rLoading weights:   0%|          | 2/579 [00:09\u003c45:27,  4.73s/it, Materializing param=lm_head.weight]  \rLoading weights:   0%|          | 2/579 [00:09\u003c45:27,  4.73s/it, Materializing param=model.embed_tokens.weight]\rLoading weights:   0%|          | 2/579 [00:09\u003c45:27,  4.73s/it, Materializing param=model.embed_tokens.weight]\rLoading weights:   1%|          | 3/579 [00:15\u003c51:07,  5.33s/it, Materializing param=model.embed_tokens.weight]\rLoading weights:   1%|          | 3/579 [00:15\u003c51:07,  5.33s/it, Materializing param=model.layers.0.input_layernorm.weight]\rLoading weights:   1%|          | 3/579 [00:15\u003c51:07,  5.33s/it, Materializing param=model.layers.0.input_layernorm.weight]\rLoading weights:   1%|          | 4/579 [00:15\u003c51:02,  5.33s/it, Materializing param=model.layers.0.mlp.down_proj.weight]  \rLoading weights:   1%|          | 4/579 [00:15\u003c51:02,  5.33s/it, Materializing param=model.layers.0.mlp.down_proj.weight]Error named symbol not found at line 62 in file /src/csrc/ops.cu\n"}
+,{"stream_name":"stderr","time":176.611094187,"data":"Segmentation fault (core dumped)\n"}
+,{"stream_name":"stderr","time":178.787309652,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":178.787346327,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":179.041450737,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":179.041483953,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":179.690234544,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":181.060359341,"data":"[NbConvertApp] Writing 350730 bytes to __results__.html\n"}
+]
