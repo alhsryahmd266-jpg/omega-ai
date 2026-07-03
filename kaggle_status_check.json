@@ -1,0 +1,9 @@
+{
+  "status_raw": "ahmedxdx/gvr-gpu-training has status \"KernelWorkerStatus.ERROR\"",
+  "download_rc": 0,
+  "download_out": "Kernel log downloaded to /tmp/kout/gvr-gpu-training.log \n",
+  "download_err": "",
+  "files": [
+    "/tmp/kout/gvr-gpu-training.log"
+  ]
+}
