@@ -1,0 +1,15 @@
+name: Read Kaggle Log
+on:
+  workflow_dispatch:
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install kaggle requests -q
+      - env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python3 scripts/read_log.py
