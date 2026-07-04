@@ -1,6 +1,6 @@
 {
   "id": "ahmedxdx/gvr-gpu-training",
-  "title": "GVR Ultimate - DeepSeek R1 + All Tools",
+  "title": "GVR-Ultimate v3 - DeepSeek R1 14B",
   "code_file": "gvr_kaggle_train.py",
   "language": "python",
   "kernel_type": "script",
