@@ -1,300 +1,652 @@
 """
-GVR-Ultimate System on Kaggle GPU
-DeepSeek-R1-Distill-Qwen-14B (reasoning) + Qwen2-VL-2B (vision+Arabic)
-+ GVR Loop + Code Executor + Web Search + Terminal + Memory
+GVR-ULTIMATE v3.0
+=================
+Backbone   : DeepSeek-R1-Distill-Qwen-14B Q4_K_M (~8.4 GB) via llama-cpp-python
+Vision     : Qwen2-VL-2B-Instruct (float16)
+Hardware   : TPU v5e-8 / P100 GPU / CPU  (auto-detect)
+Tools      : Code Executor · Terminal · Web Search · Memory
+Intelligence: GVR Loop · Tree of Thoughts · Self-Consistency · ReAct · CoT
 """
-import os, sys, json, time, subprocess, torch, requests, re, ast, tempfile
-import torch.nn as nn, torch.nn.functional as F
 
-HF_TOKEN = os.environ.get("HF_TOKEN", "")
-HF_USER  = "ahmedxg"
-OUT_DIR  = "/kaggle/working"
+import os, sys, json, time, re, ast, math, hashlib
+import subprocess, tempfile, threading, requests, base64
 
-def run(cmd):
+# ─── paths ────────────────────────────────────────────────────────────────────
+OUT_DIR   = "/kaggle/working"
+HF_TOKEN  = os.environ.get("HF_TOKEN", "")
+GH_PAT    = os.environ.get("GH_PAT", "")
+HF_USER   = "ahmedxg"
+GGUF_REPO = "bartowski/DeepSeek-R1-Distill-Qwen-14B-GGUF"
+GGUF_FILE = "DeepSeek-R1-Distill-Qwen-14B-Q4_K_M.gguf"
+VISION_ID = "Qwen/Qwen2-VL-2B-Instruct"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 0. INSTALL DEPENDENCIES
+# ─────────────────────────────────────────────────────────────────────────────
+def shell(cmd, check=False):
     r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if r.stdout: print(r.stdout[:300])
-    if r.stderr and r.returncode != 0: print("ERR:", r.stderr[:200])
+    if r.stdout: print(r.stdout[-400:])
+    if r.stderr and r.returncode != 0: print("ERR:", r.stderr[-300:])
     return r
 
 print("="*60)
-print("GVR-ULTIMATE — DeepSeek-R1-14B + Qwen2-VL-2B + All Tools")
+print("GVR-ULTIMATE v3.0 — Starting")
 print("="*60)
 
-# Hardware
-device = "cuda" if torch.cuda.is_available() else "cpu"
-if device == "cuda":
-    n_gpus = torch.cuda.device_count()
-    total_vram = sum(torch.cuda.get_device_properties(i).total_memory for i in range(n_gpus)) / 1e9
-    for i in range(n_gpus):
-        p = torch.cuda.get_device_properties(i)
-        print(f"GPU[{i}]: {p.name} | {p.total_memory/1e9:.1f}GB")
-    print(f"Total VRAM: {total_vram:.1f}GB")
-else:
-    total_vram = 0
-    print("CPU mode")
+# Detect hardware
+import torch
+try:
+    import torch_xla.core.xla_model as xm
+    DEVICE = xm.xla_device()
+    HW = "TPU"
+    print(f"Hardware: TPU (torch_xla)")
+except Exception:
+    if torch.cuda.is_available():
+        DEVICE = torch.device("cuda")
+        n_gpus = torch.cuda.device_count()
+        total_vram = sum(torch.cuda.get_device_properties(i).total_memory
+                         for i in range(n_gpus)) / 1e9
+        HW = f"GPU ({n_gpus}x, {total_vram:.0f}GB)"
+        print(f"Hardware: {HW}")
+        for i in range(n_gpus):
+            p = torch.cuda.get_device_properties(i)
+            print(f"  GPU[{i}]: {p.name} | {p.total_memory/1e9:.1f}GB | sm_{p.major}{p.minor}")
+    else:
+        DEVICE = torch.device("cpu")
+        HW = "CPU"
+        print("Hardware: CPU")
 
-run("pip install transformers accelerate sentencepiece huggingface_hub bitsandbytes -q")
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-from huggingface_hub import HfApi
-
-# ── اختار النموذج حسب الـ VRAM ──────────────────────────
-if total_vram >= 28:
-    REASONING_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
-    VISION_MODEL    = "Qwen/Qwen2-VL-2B-Instruct"
-    use_4bit = False
-    print("\nUsing: DeepSeek-R1-14B + Qwen2-VL-2B (Full FP16)")
-elif total_vram >= 14:
-    REASONING_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
-    VISION_MODEL    = "Qwen/Qwen2-VL-2B-Instruct"
-    use_4bit = True
-    print("\nUsing: DeepSeek-R1-14B (4-bit) + Qwen2-VL-2B")
-elif total_vram >= 8:
-    REASONING_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
-    VISION_MODEL    = "Qwen/Qwen2-VL-2B-Instruct"
-    use_4bit = True
-    print("\nUsing: DeepSeek-R1-7B (4-bit) + Qwen2-VL-2B")
-else:
-    REASONING_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-    VISION_MODEL    = None
-    use_4bit = False
-    print("\nUsing: DeepSeek-R1-1.5B (fallback)")
-
-# ── Load Reasoning Model ─────────────────────────────────
-print(f"\nLoading reasoning model: {REASONING_MODEL}")
-if use_4bit:
-    bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
-    r_tok = AutoTokenizer.from_pretrained(REASONING_MODEL, trust_remote_code=True)
-    r_mdl = AutoModelForCausalLM.from_pretrained(
-        REASONING_MODEL, quantization_config=bnb, device_map="auto", trust_remote_code=True
+# Install llama-cpp-python with correct backend (no bitsandbytes = no segfault)
+print("\nInstalling llama-cpp-python...")
+if HW.startswith("GPU"):
+    cuda_ver = torch.version.cuda or "12.1"
+    shell(
+        f"CMAKE_ARGS='-DGGML_CUDA=on' pip install llama-cpp-python "
+        f"--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121 -q 2>/dev/null || "
+        f"pip install llama-cpp-python -q"
     )
+elif HW == "TPU":
+    shell("pip install llama-cpp-python -q")  # CPU inference on TPU pod
 else:
-    r_tok = AutoTokenizer.from_pretrained(REASONING_MODEL, trust_remote_code=True)
-    r_mdl = AutoModelForCausalLM.from_pretrained(
-        REASONING_MODEL, torch_dtype=torch.float16, device_map="auto", trust_remote_code=True
+    shell("pip install llama-cpp-python -q")
+
+shell("pip install transformers accelerate sentencepiece huggingface_hub -q")
+
+from llama_cpp import Llama
+from huggingface_hub import HfApi, hf_hub_download
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. DOWNLOAD GGUF MODEL
+# ─────────────────────────────────────────────────────────────────────────────
+print(f"\nDownloading {GGUF_FILE} from {GGUF_REPO}...")
+gguf_path = f"{OUT_DIR}/{GGUF_FILE}"
+
+if not os.path.exists(gguf_path):
+    try:
+        gguf_path = hf_hub_download(
+            repo_id=GGUF_REPO,
+            filename=GGUF_FILE,
+            token=HF_TOKEN or None,
+            cache_dir=OUT_DIR,
+            local_dir=OUT_DIR,
+        )
+        print(f"✅ Downloaded: {gguf_path}")
+    except Exception as e:
+        print(f"Primary download failed ({e}), trying wget...")
+        url = f"https://huggingface.co/{GGUF_REPO}/resolve/main/{GGUF_FILE}"
+        if HF_TOKEN:
+            shell(f'wget -q --header="Authorization: Bearer {HF_TOKEN}" -O "{gguf_path}" "{url}"')
+        else:
+            shell(f'wget -q -O "{gguf_path}" "{url}"')
+
+size_gb = os.path.getsize(gguf_path) / 1e9 if os.path.exists(gguf_path) else 0
+print(f"Model size: {size_gb:.2f} GB")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. LOAD MODELS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Determine GPU layers for llama.cpp
+if HW.startswith("GPU"):
+    n_gpu_layers = -1   # offload all layers to GPU
+elif HW == "TPU":
+    n_gpu_layers = 0    # CPU inference (TPU pod has large RAM)
+else:
+    n_gpu_layers = 0
+
+print(f"\nLoading DeepSeek-R1-14B GGUF (n_gpu_layers={n_gpu_layers})...")
+llm = Llama(
+    model_path=gguf_path,
+    n_gpu_layers=n_gpu_layers,
+    n_ctx=8192,           # 8K context window
+    n_batch=512,
+    verbose=False,
+    flash_attn=True,      # Flash Attention 2 if supported
+)
+print(f"✅ DeepSeek-R1-14B loaded")
+
+# Vision model (Qwen2-VL-2B) - lightweight, works on any hardware
+print(f"\nLoading vision model: {VISION_ID}...")
+try:
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    v_tok = AutoTokenizer.from_pretrained(VISION_ID, trust_remote_code=True)
+    v_mdl = AutoModelForCausalLM.from_pretrained(
+        VISION_ID, torch_dtype=torch.float16,
+        device_map="auto", trust_remote_code=True
     )
-r_mdl.eval()
-r_params = sum(p.numel() for p in r_mdl.parameters()) / 1e9
-print(f"✅ Reasoning model: {r_params:.1f}B params")
+    v_mdl.eval()
+    HAS_VISION = True
+    print(f"✅ Vision model loaded")
+except Exception as e:
+    HAS_VISION = False
+    print(f"Vision model skipped: {e}")
 
-# ── Tools ─────────────────────────────────────────────────
-ALLOWED_CMDS = {"ls","pwd","echo","cat","wc","grep","head","tail",
-                "python3","date","whoami","df","free","uname","sort","uniq"}
 
-def run_terminal(cmd: str) -> str:
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. CORE GENERATION (DeepSeek-R1 style with <think> support)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def generate(prompt: str, temp=0.7, max_tokens=1024, stop=None) -> str:
+    """Core generation via llama-cpp-python (GGUF, no bitsandbytes)"""
+    msgs = [{"role": "user", "content": prompt}]
+    out = llm.create_chat_completion(
+        messages=msgs,
+        temperature=temp,
+        max_tokens=max_tokens,
+        stop=stop or [],
+        stream=False,
+    )
+    return out["choices"][0]["message"]["content"].strip()
+
+
+def generate_stream(prompt: str, temp=0.7, max_tokens=512):
+    """Streaming generation (shows thinking process)"""
+    msgs = [{"role": "user", "content": prompt}]
+    full = ""
+    for chunk in llm.create_chat_completion(
+        messages=msgs, temperature=temp, max_tokens=max_tokens, stream=True
+    ):
+        delta = chunk["choices"][0]["delta"].get("content", "")
+        full += delta
+        print(delta, end="", flush=True)
+    print()
+    return full.strip()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. TOOLS
+# ─────────────────────────────────────────────────────────────────────────────
+
+ALLOWED_CMDS = {
+    "ls", "pwd", "echo", "cat", "wc", "grep", "head", "tail",
+    "python3", "date", "whoami", "df", "free", "uname", "sort",
+    "uniq", "find", "stat", "du", "env", "printenv", "which",
+}
+
+def tool_terminal(cmd: str) -> str:
     cmd = cmd.strip()
-    deny = ["rm ","sudo","curl","wget","chmod 777","/etc/passwd","&&","||",";","|","`","$("]
+    deny = ["rm ", "sudo", "curl", "wget", "chmod 777", "/etc/shadow",
+            "/etc/passwd", "&&", "||", ";", "|", "`", "$(", ">{", ">/",
+            "dd ", "mkfs", "shutdown", "reboot", "kill -9"]
     for d in deny:
-        if d in cmd: return f"❌ Blocked: '{d}'"
-    first = cmd.split()[0] if cmd.split() else ""
-    if first not in ALLOWED_CMDS:
-        return f"❌ '{first}' not allowed"
+        if d in cmd:
+            return f"❌ Blocked: contains '{d}'"
+    parts = cmd.split()
+    if not parts or parts[0] not in ALLOWED_CMDS:
+        return f"❌ '{parts[0] if parts else '?'}' not in allowed commands: {sorted(ALLOWED_CMDS)}"
     try:
-        r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=5, cwd="/tmp")
-        return r.stdout[:800] or r.stderr[:400] or "OK"
-    except subprocess.TimeoutExpired:
-        return "❌ Timeout"
-
-def run_code(code: str) -> str:
-    forbidden = ["os.system","subprocess","__import__","socket","rmtree"]
-    for f in forbidden:
-        if f in code: return f"❌ Blocked: '{f}'"
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp:
-            tmp.write(code); tmp_path = tmp.name
-        r = subprocess.run([sys.executable, tmp_path], capture_output=True, text=True, timeout=8)
-        os.unlink(tmp_path)
-        return (r.stdout or "") + (r.stderr if r.returncode != 0 else "")[:800]
+        r = subprocess.run(
+            parts, capture_output=True, text=True, timeout=8, cwd="/tmp"
+        )
+        out = (r.stdout + (r.stderr if r.returncode != 0 else "")).strip()
+        return out[:1200] or "✅ (no output)"
     except subprocess.TimeoutExpired:
         return "❌ Timeout (8s)"
+    except Exception as e:
+        return f"❌ {e}"
 
-def web_search(query: str) -> str:
+
+def tool_python(code: str) -> str:
+    code = code.replace("\\n", "\n")
+    forbidden = ["os.system", "subprocess.run", "subprocess.Popen",
+                 "__import__('os')", "socket.", "rmtree", "shutil.rmtree"]
+    for f in forbidden:
+        if f in code:
+            return f"❌ Blocked: '{f}' not permitted in sandbox"
     try:
-        r = requests.get("https://html.duckduckgo.com/html/",
-                         params={"q": query},
-                         headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-        titles = re.findall(r'class="result__a"[^>]*>(.*?)</a>', r.text)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp:
+            tmp.write(code)
+            tmp_path = tmp.name
+        r = subprocess.run(
+            [sys.executable, tmp_path],
+            capture_output=True, text=True, timeout=10
+        )
+        os.unlink(tmp_path)
+        out = r.stdout + (r.stderr if r.returncode != 0 else "")
+        return out.strip()[:1200] or "✅ ran (no output)"
+    except subprocess.TimeoutExpired:
+        return "❌ Timeout (10s)"
+    except Exception as e:
+        return f"❌ {e}"
+
+
+def tool_search(query: str) -> str:
+    try:
+        r = requests.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; GVR-Agent/3.0)"},
+            timeout=10,
+        )
+        clean = lambda s: re.sub(r"<[^>]+>", "", s).strip()
+        titles   = re.findall(r'class="result__a"[^>]*>(.*?)</a>', r.text)
         snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', r.text)
-        clean = lambda s: re.sub(r"<[^>]+>","",s).strip()
-        out = []
-        for t, s in zip(titles[:3], snippets[:3]):
-            out.append(f"• {clean(t)}: {clean(s)[:150]}")
-        return "\n".join(out) if out else "No results"
+        results  = []
+        for t, s in zip(titles[:4], snippets[:4]):
+            results.append(f"• {clean(t)}: {clean(s)[:180]}")
+        return "\n".join(results) if results else "No results found."
     except Exception as e:
         return f"Search error: {e}"
 
-# ── GVR Generate + Confidence ─────────────────────────────
-def generate(prompt: str, temp=0.7, max_t=512) -> tuple:
-    msgs = [{"role":"user","content":prompt}]
-    txt  = r_tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-    ids  = r_tok(txt, return_tensors="pt").to(r_mdl.device)
-    with torch.no_grad():
-        out = r_mdl.generate(
-            **ids, max_new_tokens=max_t, temperature=max(temp,0.01),
-            do_sample=temp>0.01, repetition_penalty=1.1,
-            pad_token_id=r_tok.eos_token_id,
-            output_scores=True, return_dict_in_generate=True,
-        )
-    new_toks = out.sequences[0][len(ids.input_ids[0]):]
-    answer   = r_tok.decode(new_toks, skip_special_tokens=True).strip()
-    confs    = [F.softmax(sc[0],dim=-1)[tid].item() for sc,tid in zip(out.scores,new_toks)]
-    return answer, sum(confs)/max(len(confs),1)
 
-# ── Agent ReAct Loop (التنفيذ الفعلي للأدوات) ────────────
-SYSTEM = """You are GVR-Agent with real tools.
-To use a tool write EXACTLY:
-TOOL: terminal <command>
-TOOL: python <code>
-TOOL: search <query>
+def tool_vision(image_path: str, question: str = "Describe this image") -> str:
+    if not HAS_VISION:
+        return "Vision model not loaded."
+    try:
+        from PIL import Image
+        import torch
+        img = Image.open(image_path).convert("RGB")
+        msgs = [{"role": "user", "content": [
+            {"type": "image", "image": img},
+            {"type": "text", "text": question},
+        ]}]
+        txt = v_tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        ids = v_tok(txt, return_tensors="pt").to(v_mdl.device)
+        with torch.no_grad():
+            out = v_mdl.generate(**ids, max_new_tokens=256, temperature=0.7)
+        return v_tok.decode(out[0][len(ids.input_ids[0]):], skip_special_tokens=True)
+    except Exception as e:
+        return f"Vision error: {e}"
 
-Otherwise write your final answer directly."""
 
-def agent_step(task: str, max_steps=4) -> dict:
-    history = f"Task: {task}\n"
-    steps_log = []
-    for step in range(max_steps):
-        prompt = SYSTEM + "\n\n" + history + "\nYour next action:"
-        response, conf = generate(prompt, temp=0.3, max_t=300)
-        m = re.search(r"TOOL:\s*(terminal|python|search)\s+(.+)", response, re.DOTALL)
-        if not m:
-            steps_log.append({"step":step+1,"type":"answer","content":response,"conf":round(conf,3)})
-            return {"answer":response,"steps":steps_log}
-        tool, arg = m.group(1), m.group(2).strip()
-        if tool=="terminal":   obs = run_terminal(arg)
-        elif tool=="python":   obs = run_code(arg.replace("\\n","\n"))
-        elif tool=="search":   obs = web_search(arg)
-        else:                  obs = "Unknown tool"
-        steps_log.append({"step":step+1,"type":f"tool:{tool}","content":f"{arg[:80]} → {obs[:100]}","conf":round(conf,3)})
-        history += f"\nAction: TOOL: {tool} {arg}\nObservation: {obs[:400]}\n"
+# Persistent memory (simple JSON-based)
+MEMORY_FILE = f"{OUT_DIR}/gvr_memory.json"
+_memory = {}
 
-    final, _ = generate(SYSTEM + "\n\n" + history + "\nFinal answer:", temp=0.3, max_t=400)
-    steps_log.append({"step":max_steps+1,"type":"final","content":final})
-    return {"answer":final,"steps":steps_log}
+def mem_save(key: str, value: str):
+    _memory[key] = {"value": value, "ts": time.strftime("%Y-%m-%d %H:%M:%S")}
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(_memory, f, indent=2, ensure_ascii=False)
 
-# ── GVR Verify ───────────────────────────────────────────
-def verify(question, answer, conf, second=None) -> float:
-    parts = [conf]
-    codes = re.findall(r"```python\n(.*?)```", answer, re.DOTALL)
-    if codes:
-        try: ast.parse(codes[0]); code_ok = 1.0
-        except: code_ok = 0.0
-        res = run_code(codes[0])
-        exec_ok = 0.0 if "Error" in res or "❌" in res else 1.0
-        parts += [code_ok, exec_ok, exec_ok]
+def mem_get(key: str) -> str:
+    return _memory.get(key, {}).get("value", f"No memory for '{key}'")
+
+def mem_list() -> str:
+    return "\n".join(f"• {k}: {v['value'][:60]}..." for k, v in _memory.items()) or "Memory is empty."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. VERIFY (real signals)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def verify(question: str, answer: str, second: str | None = None) -> dict:
+    signals = []
+
+    # signal 1: answer completeness (length heuristic — crude but real)
+    completeness = min(len(answer.split()) / 60, 1.0)
+    signals.append(completeness)
+
+    # signal 2: code execution success (hard signal)
+    py_blocks = re.findall(r"```python\n(.*?)```", answer, re.DOTALL)
+    if py_blocks:
+        ok = 0
+        for code in py_blocks:
+            out = tool_python(code)
+            if "Error" not in out and "❌" not in out:
+                ok += 1
+        exec_score = ok / len(py_blocks)
+        signals.extend([exec_score, exec_score])  # weight double
+
+    # signal 3: self-consistency vs second sample
     if second:
-        wa=set(answer.lower().split()); wb=set(second.lower().split())
-        if wa and wb: parts.append(len(wa&wb)/len(wa|wb))
-    return sum(parts)/len(parts)
+        wa = set(answer.lower().split())
+        wb = set(second.lower().split())
+        if wa and wb:
+            jaccard = len(wa & wb) / len(wa | wb)
+            signals.append(jaccard)
 
-# ── Full GVR Pipeline ────────────────────────────────────
-def gvr_full(question: str) -> dict:
+    # signal 4: no refusal or apology markers
+    bad = ["i cannot", "i can't", "i'm sorry", "i don't know", "as an ai"]
+    penalty = sum(1 for b in bad if b in answer.lower())
+    signals.append(max(0.0, 1.0 - penalty * 0.25))
+
+    score = sum(signals) / len(signals)
+    return {"score": round(score, 3), "n_signals": len(signals)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. TREE OF THOUGHTS (ToT)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def tree_of_thoughts(question: str, n_branches=3, depth=2) -> str:
+    """
+    Real ToT: generates multiple reasoning branches,
+    scores each, prunes weak branches, continues best ones.
+    """
+    print(f"\n[ToT] Branching into {n_branches} thoughts, depth={depth}")
+
+    # Root thoughts
+    branches = []
+    for i in range(n_branches):
+        thought = generate(
+            f"Start reasoning about this problem step by step (approach {i+1} of {n_branches}):\n{question}",
+            temp=0.6 + i * 0.15, max_tokens=300
+        )
+        score = verify(question, thought)["score"]
+        branches.append({"thought": thought, "score": score, "depth": 1})
+        print(f"  Branch {i+1}: score={score:.3f}")
+
+    # Prune: keep top half
+    branches.sort(key=lambda x: x["score"], reverse=True)
+    branches = branches[: max(1, n_branches // 2)]
+
+    # Deepen
+    for d in range(2, depth + 1):
+        new_branches = []
+        for b in branches:
+            continuation = generate(
+                f"Continue and complete this reasoning:\n{b['thought']}\n\nFinal answer:",
+                temp=0.5, max_tokens=400
+            )
+            combined = b["thought"] + "\n" + continuation
+            score = verify(question, combined)["score"]
+            new_branches.append({"thought": combined, "score": score, "depth": d})
+            print(f"  Depth {d} score={score:.3f}")
+        branches = sorted(new_branches, key=lambda x: x["score"], reverse=True)
+
+    best = branches[0]
+    print(f"[ToT] Best score: {best['score']:.3f}")
+    return best["thought"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. SELF-CONSISTENCY (SC)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def self_consistency(question: str, n=4) -> str:
+    """
+    Generate n answers at different temperatures,
+    find the most common answer by embedding-free word overlap.
+    """
+    answers = []
+    for i in range(n):
+        a = generate(question, temp=0.5 + i * 0.15, max_tokens=400)
+        answers.append(a)
+
+    # Score each answer against all others (mean pairwise similarity)
+    scores = []
+    for i, a in enumerate(answers):
+        wa = set(a.lower().split())
+        sim = []
+        for j, b in enumerate(answers):
+            if i == j: continue
+            wb = set(b.lower().split())
+            if wa or wb:
+                sim.append(len(wa & wb) / max(len(wa | wb), 1))
+        scores.append(sum(sim) / max(len(sim), 1))
+
+    best_idx = scores.index(max(scores))
+    print(f"[SC] n={n}, best idx={best_idx}, score={scores[best_idx]:.3f}")
+    return answers[best_idx]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. REACT AGENT LOOP
+# ─────────────────────────────────────────────────────────────────────────────
+
+AGENT_SYS = """You are GVR-Agent, an intelligent assistant with real tools.
+
+To use a tool, output EXACTLY ONE LINE in this format:
+TOOL: terminal <shell_command>
+TOOL: python <one-line python code, use \\n for newlines>
+TOOL: search <search query>
+TOOL: memory_save <key>|<value>
+TOOL: memory_get <key>
+
+If no tool is needed, output your final answer directly.
+Be precise and concise. The tool output is real."""
+
+
+def react_agent(task: str, max_steps=5) -> dict:
+    history = f"Task: {task}\n"
+    steps = []
+
+    for step in range(max_steps):
+        response = generate(
+            AGENT_SYS + "\n\n" + history + "\nYour next action:",
+            temp=0.2, max_tokens=300
+        )
+
+        # parse tool call
+        m = re.search(
+            r"TOOL:\s*(terminal|python|search|memory_save|memory_get)\s+(.+)",
+            response, re.DOTALL
+        )
+        if not m:
+            steps.append({"step": step+1, "type": "answer", "content": response})
+            return {"answer": response, "steps": steps}
+
+        tool, arg = m.group(1), m.group(2).strip()
+
+        if tool == "terminal":
+            obs = tool_terminal(arg)
+        elif tool == "python":
+            obs = tool_python(arg)
+        elif tool == "search":
+            obs = tool_search(arg)
+        elif tool == "memory_save":
+            parts = arg.split("|", 1)
+            mem_save(parts[0].strip(), parts[1].strip() if len(parts) > 1 else "")
+            obs = f"Saved '{parts[0].strip()}' to memory."
+        elif tool == "memory_get":
+            obs = mem_get(arg.strip())
+        else:
+            obs = "Unknown tool"
+
+        steps.append({"step": step+1, "type": f"tool:{tool}",
+                       "action": arg[:80], "observation": obs[:150]})
+        print(f"  [Step {step+1}] {tool}: {arg[:50]} → {obs[:80]}")
+        history += f"\nAction: TOOL: {tool} {arg}\nObservation: {obs}\n"
+
+    # forced final answer
+    final = generate(
+        AGENT_SYS + "\n\n" + history + "\nGive your final answer now (no tools):",
+        temp=0.3, max_tokens=500
+    )
+    steps.append({"step": max_steps+1, "type": "final", "content": final})
+    return {"answer": final, "steps": steps}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. FULL GVR PIPELINE (Generate → Verify → Refine)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def gvr_pipeline(question: str, use_tot=False, use_sc=False) -> dict:
+    """
+    Complete GVR loop with optional Tree of Thoughts and Self-Consistency.
+    """
     best_answer, best_score = "", -1.0
     trace = []
-    refine = ""
-    for it in range(3):
-        prompt  = refine + question
-        answer, conf = generate(prompt, temp=0.5+it*0.1)
-        second  = None
-        if it == 0:
-            second, _ = generate(question, temp=0.9, max_t=150)
-        score = verify(question, answer, conf, second)
-        trace.append({"iter":it+1,"score":round(score,3),"conf":round(conf,3),"preview":answer[:80]})
+    refine_prefix = ""
+
+    for iteration in range(3):
+        print(f"\n[GVR] Iteration {iteration+1}/3")
+
+        # choose generation strategy per iteration
+        if iteration == 0 and use_tot:
+            answer = tree_of_thoughts(question, n_branches=3, depth=2)
+        elif iteration == 0 and use_sc:
+            answer = self_consistency(question, n=3)
+        else:
+            prompt = refine_prefix + question
+            answer = generate(prompt, temp=0.5 + iteration * 0.1, max_tokens=600)
+
+        # second sample for consistency check
+        second = generate(question, temp=0.9, max_tokens=200) if iteration == 0 else None
+
+        v = verify(question, answer, second)
+        score = v["score"]
+        trace.append({"iter": iteration+1, "score": score,
+                       "n_signals": v["n_signals"], "preview": answer[:80]})
+        print(f"  Verify score: {score:.3f} ({v['n_signals']} signals)")
+
         if score > best_score:
             best_score, best_answer = score, answer
-        if score >= 0.65: break
-        issues = []
-        if conf < 0.45: issues.append("Be more precise.")
-        codes = re.findall(r"```python\n(.*?)```", answer, re.DOTALL)
-        if codes:
-            res = run_code(codes[0])
-            if "Error" in res or "❌" in res:
-                issues.append(f"Your code failed: {res[:120]}. Fix it.")
-        refine = "Previous attempt insufficient. " + " ".join(issues) + "\n\n"
-    return {"answer":best_answer, "score":round(best_score,3), "trace":trace}
 
-# ── Tests ────────────────────────────────────────────────
-print("\n=== GVR-Ultimate Tests ===")
-test_cases = [
-    {"type":"gvr",   "q":"Write Python quicksort with test cases"},
-    {"type":"gvr",   "q":"ما هو الذكاء الاصطناعي؟ اشرح ببساطة"},
-    {"type":"agent", "q":"What is today's date and list /tmp directory"},
-    {"type":"agent", "q":"Search for DeepSeek R1 model and summarize"},
-    {"type":"gvr",   "q":"Fibonacci sequence: write iterative + recursive, compare performance"},
+        if score >= 0.70:
+            print("  Threshold reached — stopping early")
+            break
+
+        # build targeted refinement hint
+        issues = []
+        py_blocks = re.findall(r"```python\n(.*?)```", answer, re.DOTALL)
+        if py_blocks:
+            out = tool_python(py_blocks[0])
+            if "Error" in out or "❌" in out:
+                issues.append(f"Your code has an error: {out[:120]}. Fix it.")
+        if not issues and score < 0.45:
+            issues.append("Be more thorough and precise in your reasoning.")
+
+        refine_prefix = (
+            "Your previous answer needs improvement. " + " ".join(issues) +
+            "\n\nRevised answer:\n\n"
+        )
+
+    return {
+        "question": question,
+        "answer": best_answer,
+        "score": round(best_score, 3),
+        "trace": trace,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. TEST SUITE
+# ─────────────────────────────────────────────────────────────────────────────
+
+print("\n" + "="*60)
+print("RUNNING GVR-ULTIMATE TEST SUITE")
+print("="*60)
+
+TEST_CASES = [
+    # Code + execution
+    {"q": "Write Python quicksort, test it on [5,2,8,1,9,3], print result", "mode": "gvr"},
+    # Arabic
+    {"q": "ما هو الذكاء الاصطناعي؟ اشرح ببساطة بالعربية", "mode": "gvr"},
+    # Math reasoning
+    {"q": "What is 23 × 47 + 89 − 15? Show step by step", "mode": "gvr"},
+    # Agent with tools
+    {"q": "What is today's date on this server? List files in /tmp", "mode": "agent"},
+    # Web search
+    {"q": "Search: DeepSeek R1 model capabilities and report findings", "mode": "agent"},
+    # Tree of Thoughts
+    {"q": "Explain transformer attention mechanism clearly with example", "mode": "tot"},
+    # Self-Consistency
+    {"q": "Write a Python binary search function with docstring", "mode": "sc"},
 ]
 
 results = []
-for tc in test_cases:
-    print(f"\n[{tc['type'].upper()}] {tc['q'][:60]}")
-    if tc["type"] == "gvr":
-        r = gvr_full(tc["q"])
-        print(f"Score: {r['score']:.3f} | Trace: {r['trace']}")
-        print(f"Answer: {r['answer'][:150]}")
-        results.append({"type":"gvr","q":tc["q"],"score":r["score"],"answer":r["answer"][:250],"trace":r["trace"]})
+for tc in TEST_CASES:
+    q    = tc["q"]
+    mode = tc["mode"]
+    print(f"\n{'─'*50}")
+    print(f"[{mode.upper()}] {q[:65]}")
+
+    t0 = time.time()
+    if mode == "gvr":
+        r = gvr_pipeline(q)
+        ans  = r["answer"]
+        meta = {"score": r["score"], "trace": r["trace"]}
+    elif mode == "tot":
+        ans  = gvr_pipeline(q, use_tot=True)["answer"]
+        meta = {"method": "tree_of_thoughts"}
+    elif mode == "sc":
+        ans  = gvr_pipeline(q, use_sc=True)["answer"]
+        meta = {"method": "self_consistency"}
+    elif mode == "agent":
+        r    = react_agent(q)
+        ans  = r["answer"]
+        meta = {"steps": r["steps"]}
     else:
-        r = agent_step(tc["q"])
-        print(f"Steps: {len(r['steps'])}")
-        print(f"Answer: {r['answer'][:150]}")
-        results.append({"type":"agent","q":tc["q"],"answer":r["answer"][:250],"steps":r["steps"]})
+        ans  = generate(q)
+        meta = {}
 
-# ── Train GVR Verifier on GPU ────────────────────────────
-print("\n=== Training GVR Verifier ===")
-class Verifier(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(8,512), nn.LayerNorm(512), nn.GELU(), nn.Dropout(0.1),
-            nn.Linear(512,256), nn.GELU(), nn.Linear(256,64), nn.GELU(), nn.Linear(64,1), nn.Sigmoid()
-        )
-    def forward(self,x): return self.net(x)
+    elapsed = time.time() - t0
+    print(f"Answer ({elapsed:.1f}s): {ans[:200]}")
+    results.append({"q": q, "mode": mode, "answer": ans[:400],
+                    "elapsed_s": round(elapsed, 1), **meta})
 
-ver = Verifier().to(device)
-opt = torch.optim.AdamW(ver.parameters(), lr=3e-4, weight_decay=0.01)
-sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=1e-3, total_steps=3000)
-best_loss = float('inf')
-for step in range(3000):
-    xp = torch.rand(64,8,device=device)*0.25+0.75; yp=torch.ones(64,1,device=device)
-    xn = torch.rand(64,8,device=device)*0.25;      yn=torch.zeros(64,1,device=device)
-    xh = torch.rand(64,8,device=device)*0.3+0.35;  yh=(xh.mean(1,keepdim=True)>0.55).float()
-    opt.zero_grad()
-    loss=(F.binary_cross_entropy(ver(xp),yp)+F.binary_cross_entropy(ver(xn),yn)+
-          1.5*F.binary_cross_entropy(ver(xh),yh))/3.5
-    loss.backward(); nn.utils.clip_grad_norm_(ver.parameters(),1.0); opt.step(); sched.step()
-    if loss.item()<best_loss: best_loss=loss.item()
-    if step%600==0: print(f"Step {step:4d} loss={loss.item():.4f} best={best_loss:.4f}")
 
-torch.save(ver.state_dict(), f"{OUT_DIR}/gvr_verifier.pt")
-print(f"✅ Verifier trained | best loss: {best_loss:.4f}")
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. SAVE EVERYTHING
+# ─────────────────────────────────────────────────────────────────────────────
 
-# ── Save & Upload ─────────────────────────────────────────
 config = {
-    "system": "GVR-Ultimate",
-    "reasoning_model": REASONING_MODEL,
-    "reasoning_params_B": round(r_params, 2),
-    "vision_model": VISION_MODEL,
-    "tools": ["terminal","python_executor","web_search","gvr_loop"],
-    "verifier_best_loss": best_loss,
+    "version": "3.0",
+    "reasoning_model": GGUF_REPO + "/" + GGUF_FILE,
+    "reasoning_size_gb": round(os.path.getsize(gguf_path) / 1e9, 2) if os.path.exists(gguf_path) else 0,
+    "vision_model": VISION_ID if HAS_VISION else None,
+    "hardware": HW,
+    "tools": ["terminal", "python_executor", "web_search", "memory", "vision"],
+    "intelligence": ["gvr_loop", "tree_of_thoughts", "self_consistency",
+                     "react_agent", "chain_of_thought"],
     "test_results": results,
-    "device": device,
-    "n_gpus": torch.cuda.device_count() if device=="cuda" else 0,
-    "ts": time.strftime("%Y-%m-%d %H:%M:%S")
+    "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
 }
-with open(f"{OUT_DIR}/gvr_config.json","w") as f:
-    json.dump(config,f,indent=2,ensure_ascii=False)
 
-print("\n=== Uploading to HuggingFace ===")
+config_path = f"{OUT_DIR}/gvr_config.json"
+with open(config_path, "w") as f:
+    json.dump(config, f, indent=2, ensure_ascii=False)
+
+print("\n" + "="*60)
+print("UPLOADING TO HUGGINGFACE")
+print("="*60)
+
 if HF_TOKEN:
     api = HfApi(token=HF_TOKEN)
     api.create_repo(f"{HF_USER}/gvr-ultimate", exist_ok=True, private=False)
-    for fname in ["gvr_verifier.pt","gvr_config.json"]:
-        api.upload_file(
-            path_or_fileobj=f"{OUT_DIR}/{fname}",
-            path_in_repo=fname,
-            repo_id=f"{HF_USER}/gvr-ultimate",
-            repo_type="model"
-        )
+
+    # upload config
+    api.upload_file(path_or_fileobj=config_path, path_in_repo="config.json",
+                    repo_id=f"{HF_USER}/gvr-ultimate", repo_type="model")
+
+    # upload memory if exists
+    if os.path.exists(MEMORY_FILE):
+        api.upload_file(path_or_fileobj=MEMORY_FILE, path_in_repo="memory.json",
+                        repo_id=f"{HF_USER}/gvr-ultimate", repo_type="model")
+
     print(f"✅ https://huggingface.co/{HF_USER}/gvr-ultimate")
+else:
+    print("No HF_TOKEN — skipping HF upload")
+
+# save result to GitHub
+if GH_PAT:
+    content = base64.b64encode(json.dumps(config, indent=2, ensure_ascii=False).encode()).decode()
+    check = requests.get(
+        "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/gvr_ultimate_result.json",
+        headers={"Authorization": f"token {GH_PAT}"}
+    )
+    body = {"message": "GVR-Ultimate v3 result", "content": content}
+    if check.status_code == 200:
+        body["sha"] = check.json()["sha"]
+    requests.put(
+        "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/gvr_ultimate_result.json",
+        headers={"Authorization": f"token {GH_PAT}"}, json=body
+    )
+    print("✅ Result saved to GitHub")
 
 print("\n" + "="*60)
-print("GVR-ULTIMATE DONE!")
-print(f"Model: {REASONING_MODEL}")
-print(f"Best verifier loss: {best_loss:.4f}")
+print("GVR-ULTIMATE v3.0 — DONE!")
+print(json.dumps({k: v for k, v in config.items() if k != "test_results"}, indent=2))
 print("="*60)
