@@ -1,14 +1,17 @@
 {
-  "id": "ahmedxdx/gvr-gpu-training",
-  "title": "GVR Ultimate v4 - DeepSeek R1 + Vision + All Tools",
-  "code_file": "gvr_kaggle_train.py",
+  "id": "ahmedxdx/aion-gpu-training",
+  "title": "AION GPU Training",
+  "code_file": "aion_kaggle_train.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
   "enable_gpu": true,
+  "enable_tpu": false,
   "enable_internet": true,
-  "accelerator": "nvidiaTeslaT4x2",
-  "dataset_sources": [],
+  "dataset_sources": [
+    "ahmedxdx/deepseek-r1-qwen-14b-uncensored-gguf-20260619"
+  ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [],
+  "model_sources": []
 }
