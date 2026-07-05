@@ -1,12 +1,13 @@
 {
   "id": "ahmedxdx/gvr-gpu-training",
-  "title": "GVR-Ultimate v3 - DeepSeek R1 14B",
+  "title": "GVR Ultimate v4 - DeepSeek R1 + Vision + All Tools",
   "code_file": "gvr_kaggle_train.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
+  "accelerator": "nvidiaTeslaT4x2",
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": []
