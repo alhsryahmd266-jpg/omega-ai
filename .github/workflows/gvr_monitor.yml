@@ -127,7 +127,11 @@ jobs:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
           cd kaggle_push
+          set +e
           OUT=$(kaggle kernels push -p . 2>&1)
+          PUSH_EXIT=$?
+          set -e
+          echo "$OUT"
           echo "$OUT"
           if echo "$OUT" | grep -qi "successfully pushed"; then
             echo "✅ Pushed!"
@@ -135,7 +139,7 @@ jobs:
             echo "::error::409 conflict"
             exit 1
           else
-            echo "::warning::Push status unclear, continuing..."
+            echo "::warning::Exit $PUSH_EXIT — continuing anyway"
           fi
 
       - name: Monitor live — read log every 60s
