@@ -7,6 +7,9 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 175
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,152 +22,217 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
           mkdir -p ~/.kaggle
+          echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+          chmod 600 ~/.kaggle/access_token
           echo "{\"username\":\"${KAGGLE_USERNAME}\",\"key\":\"${KAGGLE_KEY}\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
-          echo "✅ Kaggle configured for: $KAGGLE_USERNAME"
+          echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
+          echo "✅ Kaggle auth: $KAGGLE_USERNAME"
 
-      - name: Inject tokens into kernel
+      - name: Prepare kernel (inject tokens + fix metadata)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
           mkdir -p kaggle_push
-          cp kaggle_kernel/kernel-metadata.json kaggle_push/
-          python3 - << 'EOF'
-          import os
-          with open("kaggle_kernel/gvr_kaggle_train.py") as f:
-              code = f.read()
-          code = code.replace(
-              'HFT   = os.environ.get("HF_TOKEN", "")',
-              f'HFT   = "{os.environ.get("HF_TOKEN","")}"'
-          ).replace(
-              'GHPAT = os.environ.get("GH_PAT", "")',
-              f'GHPAT = "{os.environ.get("GH_PAT","")}"'
-          )
-          with open("kaggle_push/gvr_kaggle_train.py","w") as f:
-              f.write(code)
-          print("✅ Tokens injected")
-          EOF
 
-      - name: Push to Kaggle T4×2
+          # Fix metadata: use aion-gpu-training (existing kernel) with correct code_file
+          python3 -c "
+          import json, os
+          meta = {
+            'id': f\"{os.environ['KAGGLE_USERNAME']}/aion-gpu-training\",
+            'title': 'AION GPU Training',
+            'code_file': 'aion_kaggle_train.py',
+            'language': 'python',
+            'kernel_type': 'script',
+            'is_private': True,
+            'enable_gpu': True,
+            'enable_tpu': False,
+            'enable_internet': True,
+            'dataset_sources': [f\"{os.environ['KAGGLE_USERNAME']}/deepseek-r1-qwen-14b-uncensored-gguf-20260619\"],
+            'competition_sources': [],
+            'kernel_sources': [],
+            'model_sources': []
+          }
+          with open('kaggle_push/kernel-metadata.json','w') as f:
+            json.dump(meta, f, indent=2)
+          print('✅ metadata fixed:', meta['id'])
+          print('   dataset:', meta['dataset_sources'])
+          "
+
+          # Inject GH_PAT into kernel so it can write live logs to GitHub
+          python3 -c "
+          import os
+          with open('kaggle_kernel/aion_kaggle_train.py') as f:
+              code = f.read()
+
+          # Inject tokens at top of file
+          inject = f'''
+          import os as _os
+          _os.environ.setdefault('GH_PAT', '${GH_PAT}')
+          _os.environ.setdefault('HF_TOKEN', '${HF_TOKEN}')
+          '''
+
+          # Add live GitHub logger
+          logger = '''
+          import requests as _req, base64 as _b64, json as _json, time as _time
+
+          _GH_PAT  = os.environ.get('GH_PAT', '')
+          _GH_REPO = 'alhsryahmd266-jpg/omega-ai'
+          _LOG_BUF = []
+
+          def _gh_write(path, text):
+              if not _GH_PAT: return
+              try:
+                  url = f'https://api.github.com/repos/{_GH_REPO}/contents/{path}'
+                  h   = {'Authorization': f'token {_GH_PAT}'}
+                  chk = _req.get(url, headers=h, timeout=10)
+                  body= {'message': f'live: {path}',
+                         'content': _b64.b64encode(text.encode()).decode()}
+                  if chk.status_code == 200:
+                      body['sha'] = chk.json()['sha']
+                  _req.put(url, headers=h, json=body, timeout=10)
+              except Exception as _e:
+                  pass
+
+          def _live_log(msg):
+              _LOG_BUF.append(f'[{_time.strftime(\"%H:%M:%S\")}] {msg}')
+              print(msg, flush=True)
+              # write to GitHub every 10 messages
+              if len(_LOG_BUF) % 10 == 0:
+                  _gh_write('kaggle_live_monitor.json',
+                      _json.dumps({'ts': _time.strftime('%H:%M:%S'),
+                                   'log': chr(10).join(_LOG_BUF[-100:])},
+                                  indent=2, ensure_ascii=False))
+          '''
+
+          # Insert after imports block
+          lines = code.split('\n')
+          insert_at = 0
+          for i,l in enumerate(lines):
+              if l.startswith('import ') or l.startswith('from '):
+                  insert_at = i+1
+          lines.insert(insert_at, logger)
+          lines.insert(0, inject)
+          new_code = '\n'.join(lines)
+
+          with open('kaggle_push/aion_kaggle_train.py','w') as f:
+              f.write(new_code)
+          print(f'✅ kernel ready ({len(new_code)} chars)')
+          "
+
+      - name: Push to Kaggle
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
           cd kaggle_push
-          kaggle kernels push -p . 2>&1
-          echo "✅ Pushed → https://www.kaggle.com/${KAGGLE_USERNAME}/gvr-gpu-training"
+          OUT=$(kaggle kernels push -p . 2>&1)
+          echo "$OUT"
+          if echo "$OUT" | grep -qi "successfully pushed"; then
+            echo "✅ Pushed!"
+          elif echo "$OUT" | grep -qi "409\|conflict"; then
+            echo "::error::409 conflict"
+            exit 1
+          else
+            echo "::warning::Push status unclear, continuing..."
+          fi
 
-      - name: Monitor + Read log every 5 min
+      - name: Monitor live — read log every 60s
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          python3 - << 'EOF'
-          import os, time, subprocess, requests, base64, json
+          python3 << 'PYEOF'
+          import os, time, subprocess, requests, base64, json, glob
 
           user  = os.environ["KAGGLE_USERNAME"]
           pat   = os.environ["GH_PAT"]
-          slug  = f"{user}/gvr-gpu-training"
+          slug  = f"{user}/aion-gpu-training"
           api   = "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents"
           heads = {"Authorization": f"token {pat}"}
 
           def gh_put(path, text):
-              content = base64.b64encode(text.encode()).decode()
-              check = requests.get(f"{api}/{path}", headers=heads)
-              body  = {"message": f"monitor: {path}", "content": content}
-              if check.status_code == 200:
-                  body["sha"] = check.json()["sha"]
-              requests.put(f"{api}/{path}", headers=heads, json=body)
+              url  = f"{api}/{path}"
+              chk  = requests.get(url, headers=heads, timeout=10)
+              body = {"message": f"monitor: {path}",
+                      "content": base64.b64encode(text.encode()).decode()}
+              if chk.status_code == 200:
+                  body["sha"] = chk.json()["sha"]
+              requests.put(url, headers=heads, json=body, timeout=15)
 
-          def kaggle_status():
+          def get_status():
               r = subprocess.run(
                   ["kaggle","kernels","status", slug],
                   capture_output=True, text=True)
-              return r.stdout.strip() + r.stderr.strip()
+              return (r.stdout + r.stderr).strip()
 
-          def kaggle_log():
+          def get_log():
               subprocess.run(
                   ["kaggle","kernels","output", slug, "-p", "/tmp/kout"],
                   capture_output=True, text=True)
-              lf = f"/tmp/kout/{user}_gvr-gpu-training.log"
-              alt = "/tmp/kout/gvr-gpu-training.log"
-              for p in [lf, alt]:
-                  if os.path.exists(p):
-                      with open(p) as f: return f.read()
-              # try listing what we got
-              import glob
+              for pat_l in [f"/tmp/kout/{user}_aion-gpu-training.log",
+                            "/tmp/kout/aion-gpu-training.log",
+                            "/tmp/kout/*.log"]:
+                  files = glob.glob(pat_l)
+                  if files:
+                      with open(files[0]) as f:
+                          return f.read()
               files = glob.glob("/tmp/kout/**/*", recursive=True)
-              return f"No log found. Files: {files}"
+              return f"No log yet. Output files: {files}"
 
-          print("👁️  Monitoring started")
+          print("👁  Monitoring started — every 60s")
           iteration = 0
+
           while True:
               iteration += 1
-              status = kaggle_status()
+              status = get_status()
               ts     = time.strftime("%H:%M:%S")
               print(f"\n[{ts}] iter={iteration} | {status}")
 
-              # always grab log for visibility
-              log = kaggle_log()
-              last_100 = "\n".join(log.splitlines()[-100:])
-              monitor_data = json.dumps({
-                  "ts": ts,
-                  "iteration": iteration,
-                  "status": status,
-                  "log_tail": last_100,
-              }, indent=2)
-              gh_put("kaggle_live_monitor.json", monitor_data)
-              print(f"  → Log tail saved to GitHub ({len(log)} chars)")
+              log = get_log()
+              tail = "\n".join(log.splitlines()[-80:])
+              print("--- LOG TAIL ---")
+              print(tail[-500:])
+              print("----------------")
 
-              # exit conditions
+              monitor = json.dumps({
+                  "ts": ts, "iteration": iteration,
+                  "status": status, "log_tail": tail,
+              }, indent=2, ensure_ascii=False)
+              gh_put("kaggle_live_monitor.json", monitor)
+              print(f"  ✅ Written to GitHub")
+
               if any(x in status.lower() for x in ["complete","error","cancel","fail"]):
-                  print(f"\n🏁 Final status: {status}")
-                  gh_put("kaggle_final_status.txt", status + "\n\nLast log:\n" + last_100)
+                  print(f"\n🏁 Final: {status}")
+                  gh_put("kaggle_final_status.txt",
+                         status + "\n\n" + tail)
                   break
 
-              time.sleep(300)  # 5 min
+              time.sleep(60)
 
           print("Monitor done.")
-          EOF
+          PYEOF
 
-      - name: Download results
+      - name: Download & save results
+        if: always()
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          mkdir -p kaggle_output
-          kaggle kernels output ${KAGGLE_USERNAME}/gvr-gpu-training -p kaggle_output/ 2>&1
-          ls -la kaggle_output/
+          mkdir -p kaggle_output checkpoints
+          kaggle kernels output "${KAGGLE_USERNAME}/aion-gpu-training" -p kaggle_output/ 2>&1 | tee kaggle_download_log.txt
+          find kaggle_output -name "*.pt" -exec cp {} checkpoints/ \; 2>/dev/null || true
+          find kaggle_output -name "*.json" -exec cp {} checkpoints/ \; 2>/dev/null || true
+          find kaggle_output -name "*.log" -exec cp {} kaggle_kernel_log.txt \; 2>/dev/null || true
+          cat checkpoints/kaggle_result.json 2>/dev/null || echo "No result yet"
 
-          python3 - << 'EOF'
-          import os, json, requests, base64, glob
-
-          pat  = os.environ.get("GH_PAT","")
-          user = os.environ.get("KAGGLE_USERNAME","")
-          heads = {"Authorization": f"token {pat}"}
-          api   = "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents"
-
-          def gh_put(path, text):
-              content = base64.b64encode(text.encode()).decode()
-              check = requests.get(f"{api}/{path}", headers=heads)
-              body  = {"message": f"result: {path}", "content": content}
-              if check.status_code == 200:
-                  body["sha"] = check.json()["sha"]
-              requests.put(f"{api}/{path}", headers=heads, json=body)
-
-          cfg_path = "kaggle_output/gvr_config.json"
-          if os.path.exists(cfg_path):
-              with open(cfg_path) as f:
-                  cfg = json.load(f)
-              result = {"status":"SUCCESS", **cfg}
-              print("✅ SUCCESS!")
-              print(json.dumps({k:v for k,v in cfg.items() if k!="test_results"}, indent=2))
-          else:
-              files = glob.glob("kaggle_output/**/*", recursive=True)
-              result = {"status":"NO_OUTPUT", "files": files}
-              print(f"⚠️  No config found. Files: {files}")
-
-          gh_put("gvr_ultimate_result.json",
-                 json.dumps(result, indent=2, ensure_ascii=False))
-          print("Result saved to GitHub ✅")
-          EOF
+      - name: Commit results
+        if: always()
+        run: |
+          git config user.name "GVR-Monitor"
+          git config user.email "monitor@aion.ai"
+          git add kaggle_live_monitor.json kaggle_final_status.txt \
+                  checkpoints/ kaggle_kernel_log.txt kaggle_download_log.txt 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "GVR live results"
+          git push || true
