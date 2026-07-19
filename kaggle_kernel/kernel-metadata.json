@@ -1,7 +1,7 @@
 {
   "id": "ahmedxdx/aion-gpu-training",
   "title": "AION GPU Training",
-  "code_file": "aion_kaggle_train.py",
+  "code_file": "aion_tools_arabic.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
