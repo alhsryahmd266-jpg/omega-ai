@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "GVR Chat",
+    "slug": "gvr-chat",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0a0a0a"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "package": "com.gvr.chat",
+      "permissions": ["INTERNET", "ACCESS_NETWORK_STATE"]
+    },
+    "plugins": []
+  }
+}
