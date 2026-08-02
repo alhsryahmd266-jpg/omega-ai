@@ -7,12 +7,14 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "backgroundColor": "#0a0a0a"
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#05050f"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#0a0a0a"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#05050f"
       },
       "package": "com.gvr.chat",
       "permissions": ["INTERNET", "ACCESS_NETWORK_STATE"]
