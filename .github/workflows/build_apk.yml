@@ -27,11 +27,33 @@ jobs:
 
       - name: Install dependencies
         working-directory: GVRChat
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps 2>&1 | tee /tmp/install.log
 
-      - name: Prebuild (generate android/ folder)
+      - name: Prebuild (verbose, capture errors)
         working-directory: GVRChat
-        run: npx expo prebuild --platform android --clean
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          npx expo prebuild --platform android --clean > /tmp/prebuild.log 2>&1
+          EXIT=$?
+          echo "Exit code: $EXIT"
+          cat /tmp/prebuild.log
+          
+          python3 - << 'EOF'
+          import os, requests, base64
+          pat = os.environ.get("GH_PAT","")
+          with open("/tmp/prebuild.log") as f:
+              log = f.read()
+          content = base64.b64encode(log[-6000:].encode()).decode()
+          url = "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/prebuild_error.txt"
+          check = requests.get(url, headers={"Authorization":f"token {pat}"})
+          body = {"message":"prebuild log","content":content}
+          if check.status_code==200: body["sha"]=check.json()["sha"]
+          requests.put(url, headers={"Authorization":f"token {pat}"}, json=body)
+          print("Log saved to GitHub!")
+          EOF
+          
+          if [ $EXIT -ne 0 ]; then exit 1; fi
 
       - name: Build APK with Gradle
         working-directory: GVRChat/android
@@ -39,44 +61,30 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      - name: Find APK
-        working-directory: GVRChat
-        run: |
-          find . -name "*.apk" -exec ls -lh {} \;
-
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: gvr-chat-apk
           path: GVRChat/android/app/build/outputs/apk/release/*.apk
 
-      - name: Save result
+      - name: Save success result
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           python3 - << 'EOF'
           import os, json, requests, base64, glob, time
-
           pat = os.environ.get("GH_PAT","")
           apks = glob.glob("GVRChat/android/app/build/outputs/apk/release/*.apk")
-
-          result = {
-              "status": "SUCCESS" if apks else "NO_APK",
-              "apks": [os.path.basename(a) for a in apks],
-              "sizes_mb": [round(os.path.getsize(a)/1e6,1) for a in apks],
-              "ts": time.strftime("%Y-%m-%d %H:%M:%S")
-          }
-          print(json.dumps(result, indent=2))
-
+          result = {"status":"SUCCESS" if apks else "NO_APK",
+                    "apks":[os.path.basename(a) for a in apks],
+                    "sizes_mb":[round(os.path.getsize(a)/1e6,1) for a in apks],
+                    "ts":time.strftime("%Y-%m-%d %H:%M:%S")}
+          print(json.dumps(result,indent=2))
           content = base64.b64encode(json.dumps(result,indent=2).encode()).decode()
-          check = requests.get(
-              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/apk_build_result.json",
-              headers={"Authorization":f"token {pat}"}
-          )
+          check = requests.get("https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/apk_build_result.json",
+                               headers={"Authorization":f"token {pat}"})
           body = {"message":"APK build result","content":content}
           if check.status_code==200: body["sha"]=check.json()["sha"]
-          requests.put(
-              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/apk_build_result.json",
-              headers={"Authorization":f"token {pat}"}, json=body
-          )
+          requests.put("https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/apk_build_result.json",
+                       headers={"Authorization":f"token {pat}"}, json=body)
           EOF
