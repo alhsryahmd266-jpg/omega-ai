@@ -33,45 +33,48 @@ jobs:
 
       - name: Prebuild
         working-directory: GVRChat
-        run: |
-          set +e
-          npx expo prebuild --platform android --clean > ../prebuild.log 2>&1
-          echo "EXIT_CODE=$?" >> $GITHUB_ENV
-          cat ../prebuild.log
-          set -e
-
-      - name: Commit log always
-        if: always()
-        run: |
-          git config user.email "bot@gvr.com"
-          git config user.name "GVR Bot"
-          git add prebuild.log
-          git commit -m "Prebuild log" --allow-empty
-          git push
-
-      - name: Fail if prebuild failed
-        run: |
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Prebuild failed, see prebuild.log"
-            exit 1
-          fi
+        run: npx expo prebuild --platform android --clean
 
       - name: Build APK with Gradle
         working-directory: GVRChat/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon 2>&1 | tee ../../gradle.log
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Commit gradle log
-        if: always()
+      - name: Upload APK to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git config user.email "bot@gvr.com"
-          git config user.name "GVR Bot"
-          git add gradle.log
-          git commit -m "Gradle log" --allow-empty
-          git push
+          pip install huggingface_hub -q
+          python3 - << 'EOF'
+          import os, glob, time
+          from huggingface_hub import HfApi
 
-      - name: Upload APK artifact
+          hf = os.environ.get("HF_TOKEN","")
+          api = HfApi(token=hf)
+          HF_USER = "ahmedxg"
+
+          apks = glob.glob("GVRChat/android/app/build/outputs/apk/release/*.apk")
+          if not apks:
+              print("No APK found!")
+              exit(1)
+
+          apk_path = apks[0]
+          size_mb = os.path.getsize(apk_path) / 1e6
+          print(f"APK: {apk_path} ({size_mb:.1f} MB)")
+
+          api.create_repo(f"{HF_USER}/gvr-chat-app", exist_ok=True, private=False)
+          api.upload_file(
+              path_or_fileobj=apk_path,
+              path_in_repo="GVR-Chat.apk",
+              repo_id=f"{HF_USER}/gvr-chat-app",
+              repo_type="model",
+              commit_message=f"GVR Chat APK - {time.strftime('%Y-%m-%d %H:%M')}"
+          )
+          print(f"✅ Uploaded! https://huggingface.co/{HF_USER}/gvr-chat-app/resolve/main/GVR-Chat.apk")
+          EOF
+
+      - name: Upload APK artifact (backup)
         uses: actions/upload-artifact@v4
         with:
           name: gvr-chat-apk
