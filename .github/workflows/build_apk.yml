@@ -1,0 +1,82 @@
+name: Build GVR Chat APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Expo CLI
+        run: npm install -g eas-cli expo-cli
+
+      - name: Install dependencies
+        working-directory: GVRChat
+        run: npm install --legacy-peer-deps
+
+      - name: Prebuild (generate android/ folder)
+        working-directory: GVRChat
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build APK with Gradle
+        working-directory: GVRChat/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Find APK
+        working-directory: GVRChat
+        run: |
+          find . -name "*.apk" -exec ls -lh {} \;
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gvr-chat-apk
+          path: GVRChat/android/app/build/outputs/apk/release/*.apk
+
+      - name: Save result
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          python3 - << 'EOF'
+          import os, json, requests, base64, glob, time
+
+          pat = os.environ.get("GH_PAT","")
+          apks = glob.glob("GVRChat/android/app/build/outputs/apk/release/*.apk")
+
+          result = {
+              "status": "SUCCESS" if apks else "NO_APK",
+              "apks": [os.path.basename(a) for a in apks],
+              "sizes_mb": [round(os.path.getsize(a)/1e6,1) for a in apks],
+              "ts": time.strftime("%Y-%m-%d %H:%M:%S")
+          }
+          print(json.dumps(result, indent=2))
+
+          content = base64.b64encode(json.dumps(result,indent=2).encode()).decode()
+          check = requests.get(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/apk_build_result.json",
+              headers={"Authorization":f"token {pat}"}
+          )
+          body = {"message":"APK build result","content":content}
+          if check.status_code==200: body["sha"]=check.json()["sha"]
+          requests.put(
+              "https://api.github.com/repos/alhsryahmd266-jpg/omega-ai/contents/apk_build_result.json",
+              headers={"Authorization":f"token {pat}"}, json=body
+          )
+          EOF
