@@ -1,0 +1,23 @@
+Warning! Your git working tree is dirty.
+It's recommended to commit all your changes before proceeding, so you can revert the changes made by this command if necessary.
+Git status is dirty but the command will continue because the terminal is not interactive.
+- Clearing android
+✔ Cleared android code
+- Creating native directory (./android)
+✔ Created native directory
+- Updating package.json
+✔ Updated package.json
+- Running prebuild
+✖ Prebuild failed
+Error: [android.dangerous]: withAndroidDangerousBaseMod: ENOENT: no such file or directory, open './assets/icon.png'
+Error: [android.dangerous]: withAndroidDangerousBaseMod: ENOENT: no such file or directory, open './assets/icon.png'
+    at Object.openSync (node:fs:573:18)
+    at readFileSync (node:fs:452:35)
+    at calculateHash (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@expo/image-utils/build/Cache.js:14:91)
+    at createCacheKey (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@expo/image-utils/build/Cache.js:19:18)
+    at Object.createCacheKeyWithDirectoryAsync (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@expo/image-utils/build/Cache.js:24:33)
+    at generateImageAsync (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@expo/image-utils/build/Image.js:177:34)
+    at async generateIconAsync (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@expo/prebuild-config/build/plugins/icons/withAndroidIcons.js:344:11)
+    at async /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@expo/prebuild-config/build/plugins/icons/withAndroidIcons.js:272:21
+    at async Promise.all (index 0)
+    at async generateMultiLayerImageAsync (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@expo/prebuild-config/build/plugins/icons/withAndroidIcons.js:268:3)
