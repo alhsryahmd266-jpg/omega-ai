@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "files": [
+    ".gitattributes",
+    "GVR-Chat.apk"
+  ],
+  "apk_size_mb": 70.8,
+  "download_status": 200,
+  "download_url": "https://huggingface.co/ahmedxg/gvr-chat-app/resolve/main/GVR-Chat.apk"
+}
