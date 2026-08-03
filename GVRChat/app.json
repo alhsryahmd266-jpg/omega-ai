@@ -2,7 +2,7 @@
   "expo": {
     "name": "GVR Chat",
     "slug": "gvr-chat",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,6 +19,22 @@
       "package": "com.gvr.chat",
       "permissions": ["INTERNET", "ACCESS_NETWORK_STATE"]
     },
-    "plugins": []
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": true,
+            "minSdkVersion": 24
+          }
+        }
+      ],
+      [
+        "llama.rn",
+        {
+          "enableOpenCL": false
+        }
+      ]
+    ]
   }
 }
