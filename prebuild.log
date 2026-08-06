@@ -3,9 +3,11 @@ It's recommended to commit all your changes before proceeding, so you can revert
 Git status is dirty but the command will continue because the terminal is not interactive.
 - Clearing android
 ✔ Cleared android code
-
-CommandError: Package "llama.rn" does not contain a valid config plugin.
-Learn more: https://docs.expo.dev/guides/config-plugins/#creating-a-plugin
-
-Unexpected token 'typeof'
-
+- Creating native directory (./android)
+✔ Created native directory
+- Updating package.json
+✔ Updated package.json
+- Running prebuild
+» android: userInterfaceStyle: Install expo-system-ui in your project to enable this feature.
+- Running prebuild
+✔ Finished prebuild
