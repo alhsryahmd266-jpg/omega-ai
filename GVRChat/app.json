@@ -29,12 +29,6 @@
           }
         }
       ],
-      [
-        "llama.rn",
-        {
-          "enableOpenCL": false
-        }
-      ],
       "./plugins/withFFmpegKit.js"
     ]
   }
