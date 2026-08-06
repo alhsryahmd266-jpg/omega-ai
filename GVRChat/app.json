@@ -34,7 +34,8 @@
         {
           "enableOpenCL": false
         }
-      ]
+      ],
+      "./plugins/withFFmpegKit.js"
     ]
   }
 }
