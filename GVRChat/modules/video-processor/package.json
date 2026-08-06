@@ -1,0 +1,9 @@
+{
+  "name": "expo-video-processor",
+  "version": "1.0.0",
+  "description": "Real FFmpeg-backed frame/audio extraction for on-device video analysis",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "expo": "*"
+  }
+}
