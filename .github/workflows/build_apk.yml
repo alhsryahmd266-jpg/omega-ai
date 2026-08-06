@@ -31,6 +31,20 @@ jobs:
         working-directory: GVRChat
         run: npm install --legacy-peer-deps
 
+      - name: Patch llama.rn app.plugin.js (upstream ESM/CJS bug)
+        working-directory: GVRChat
+        run: |
+          PLUGIN_FILE="node_modules/llama.rn/app.plugin.js"
+          if [ -f "$PLUGIN_FILE" ]; then
+            echo "Before patch:"
+            cat "$PLUGIN_FILE"
+            sed -i 's#lib/module/expo-plugin#lib/commonjs/expo-plugin#' "$PLUGIN_FILE"
+            echo "After patch:"
+            cat "$PLUGIN_FILE"
+          else
+            echo "llama.rn app.plugin.js not found - skipping patch"
+          fi
+
       - name: Prebuild
         working-directory: GVRChat
         run: |
@@ -46,7 +60,7 @@ jobs:
           git config user.email "bot@gvr.com"
           git config user.name "GVR Bot"
           git add prebuild.log
-          git commit -m "Prebuild log v2" --allow-empty
+          git commit -m "Prebuild log v3 (patched llama.rn)" --allow-empty
           git push
 
       - name: Fail if prebuild failed
@@ -72,7 +86,7 @@ jobs:
           git config user.email "bot@gvr.com"
           git config user.name "GVR Bot"
           git add gradle.log
-          git commit -m "Gradle log v2" --allow-empty
+          git commit -m "Gradle log v3" --allow-empty
           git push
 
       - name: Fail if gradle failed
