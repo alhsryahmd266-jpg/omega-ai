@@ -331,3 +331,65 @@ export async function tryLoadSession(name: string): Promise<boolean> {
     return false;
   }
 }
+
+/* ── MULTIMODAL / VISION (real, via llama.rn's mtmd bridge) ──────────────────
+ * Requires a model whose architecture actually supports vision (e.g.
+ * Qwen2-VL, LLaVA, Gemma-3) PLUS its matching .mmproj projector file — not
+ * every GGUF works, only ones exported with a paired mmproj. Loading the
+ * wrong pairing will make initMultimodal() return false, not crash.
+ * ────────────────────────────────────────────────────────────────────────── */
+let multimodalReady = false;
+
+export async function loadVisionProjector(mmprojPath: string): Promise<boolean> {
+  if (!currentContext) throw new Error('Load a base model before the vision projector');
+  try {
+    const ok = await (currentContext as any).initMultimodal({
+      path: mmprojPath,
+      use_gpu: false, // CPU by default — matches the rest of this app's stability-first stance
+    });
+    multimodalReady = !!ok;
+    return multimodalReady;
+  } catch (e) {
+    multimodalReady = false;
+    return false;
+  }
+}
+
+export function isVisionReady(): boolean {
+  return multimodalReady;
+}
+
+export async function unloadVisionProjector(): Promise<void> {
+  if (currentContext && multimodalReady) {
+    try { await (currentContext as any).releaseMultimodal(); } catch {}
+  }
+  multimodalReady = false;
+}
+
+/**
+ * Describe/analyze a single image. Returns the model's real text response —
+ * not a canned caption. Requires loadVisionProjector() to have succeeded.
+ */
+export async function analyzeImage(
+  imagePath: string,
+  question = 'Describe this image in detail.'
+): Promise<string> {
+  if (!currentContext) throw new Error('No model loaded');
+  if (!multimodalReady) throw new Error('Vision projector not loaded — call loadVisionProjector() first');
+
+  const result = await (currentContext as any).completion({
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `file://${imagePath}` } },
+          { type: 'text', text: question },
+        ],
+      },
+    ],
+    temperature: 0.4,
+    n_predict: 300,
+  });
+
+  return (result.text || result.content || '').trim();
+}
