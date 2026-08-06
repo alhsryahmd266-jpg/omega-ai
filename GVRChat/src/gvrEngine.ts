@@ -238,3 +238,40 @@ export async function runChat(
   const res = await generateStream(message, onToken, { temperature: 0.7, maxTokens: 800 });
   return { answer: res.text, steps: [], elapsed: (Date.now() - t0) / 1000 };
 }
+
+/* ── UNIFIED ENTRY POINT (single chat screen, optional attachment) ───────
+ * This is what the one-screen UI actually calls. The model still decides
+ * whether it needs search/memory/js tools via the normal ReAct loop — the
+ * attachment's extracted content is just additional context injected into
+ * the task, exactly like a human pasting file contents into the chat.
+ * ────────────────────────────────────────────────────────────────────── */
+import type { PreparedAttachment } from './attachments';
+
+export async function runWithAttachment(
+  userMessage: string,
+  attachment: PreparedAttachment | null,
+  onEvent?: (e: StepEvent) => void,
+  maxSteps = 5
+): Promise<RunResult & { attachmentWarnings?: string[] }> {
+  if (!attachment) {
+    return runAgent(userMessage, onEvent, maxSteps);
+  }
+
+  if (attachment.kind === 'unsupported' || !attachment.extractedContent) {
+    // Nothing usable was extracted — tell the model honestly instead of
+    // pretending the attachment worked.
+    const note = attachment.warnings.join(' ') || 'Attachment could not be processed.';
+    const task = `${userMessage}\n\n[Attached file "${attachment.name}": ${note}]`;
+    const result = await runAgent(task, onEvent, maxSteps);
+    return { ...result, attachmentWarnings: attachment.warnings };
+  }
+
+  const contextBlock =
+    attachment.kind === 'image' || attachment.kind === 'video'
+      ? `[Attached ${attachment.kind} "${attachment.name}" — visual analysis]:\n${attachment.extractedContent}`
+      : `[Attached file "${attachment.name}" — extracted content]:\n${attachment.extractedContent}`;
+
+  const task = `${contextBlock}\n\nUser request: ${userMessage}`;
+  const result = await runAgent(task, onEvent, maxSteps);
+  return { ...result, attachmentWarnings: attachment.warnings.length ? attachment.warnings : undefined };
+}
