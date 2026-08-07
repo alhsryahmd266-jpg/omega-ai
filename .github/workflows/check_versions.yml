@@ -1,0 +1,29 @@
+name: Check FFmpegKit Versions
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+      - name: Fetch real maven-metadata.xml
+        run: |
+          echo "=== ffmpeg-kit-full metadata ===" > version_check.txt
+          curl -s "https://repo.maven.apache.org/maven2/com/arthenica/ffmpeg-kit-full/maven-metadata.xml" >> version_check.txt
+          echo "" >> version_check.txt
+          echo "=== ffmpeg-kit (non-full) metadata ===" >> version_check.txt
+          curl -s "https://repo.maven.apache.org/maven2/com/arthenica/ffmpeg-kit/maven-metadata.xml" >> version_check.txt
+          echo "" >> version_check.txt
+          echo "=== ffmpeg-kit-min metadata ===" >> version_check.txt
+          curl -s "https://repo.maven.apache.org/maven2/com/arthenica/ffmpeg-kit-min/maven-metadata.xml" >> version_check.txt
+          cat version_check.txt
+      - name: Commit result
+        run: |
+          git config user.email "bot@gvr.com"
+          git config user.name "GVR Bot"
+          git add version_check.txt
+          git commit -m "FFmpegKit version check" --allow-empty
+          git push
