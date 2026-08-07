@@ -28,8 +28,7 @@
             "minSdkVersion": 24
           }
         }
-      ],
-      "./plugins/withFFmpegKit.js"
+      ]
     ]
   }
 }
