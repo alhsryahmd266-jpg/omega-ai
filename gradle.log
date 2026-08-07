@@ -62,10 +62,17 @@ FAILURE: Build failed with an exception.
 
 * What went wrong:
 Could not determine the dependencies of task ':app:lintVitalReportRelease'.
-> Could not resolve all dependencies for configuration ':app:releaseCompileClasspath'.
+> Could not resolve all dependencies for configuration ':app:releaseRuntimeClasspath'.
    > Could not find com.arthenica:ffmpeg-kit-full:6.0-2.
+     Searched in the following locations:
+       - https://oss.sonatype.org/content/repositories/snapshots/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
+       - https://repo.maven.apache.org/maven2/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
+       - file:/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/jsc-android/dist/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
+       - https://dl.google.com/dl/android/maven2/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
+       - https://www.jitpack.io/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
+       - file:/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native/android/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
      Required by:
-         project :app
+         project :app > project :expo > project :expo-video-processor
 
 * Try:
 > Run with --stacktrace option to get the stack trace.
@@ -73,5 +80,5 @@ Could not determine the dependencies of task ':app:lintVitalReportRelease'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 3m 12s
+BUILD FAILED in 2m 40s
 10 actionable tasks: 10 executed
