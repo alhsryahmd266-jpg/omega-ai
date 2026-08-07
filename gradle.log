@@ -73,5 +73,5 @@ Could not determine the dependencies of task ':app:lintVitalReportRelease'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 2m 34s
+BUILD FAILED in 3m 12s
 10 actionable tasks: 10 executed
