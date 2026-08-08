@@ -1,80 +1,112 @@
 package expo.modules.videoprocessor
 
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
+import java.io.FileOutputStream
 
 /**
- * VideoProcessorModule — real FFmpeg-backed video/audio extraction.
+ * VideoProcessorModule — real frame extraction via Android's own
+ * MediaMetadataRetriever, no external native library required.
  *
- * Honest scope: this does NOT make the model "watch" video directly — no
- * local model can. What it actually does, for real:
- *   1. extractFrames(): pulls JPEG frames at a fixed interval via ffmpeg
- *      -vf fps=... — each frame is then sent to the Vision model separately
- *      as a still image, and the agent stitches the descriptions together.
- *   2. extractAudio(): pulls a mono 16kHz WAV track via ffmpeg, suitable for
- *      a speech-to-text model (e.g. whisper.cpp) if/when one is wired up.
- *   3. getDuration(): real ffprobe-style duration query, used to enforce a
- *      sane processing cap on very long videos (a hard practical limit —
- *      analyzing a 2-hour video frame-by-frame on a phone CPU is not
- *      realistic, so callers should check this before proceeding).
+ * Honest scope: this replaces an earlier FFmpegKit-based design.
+ * FFmpegKit (arthenica/ffmpeg-kit) was archived in 2023 and its Maven
+ * Central artifacts were later pulled entirely (confirmed: 404 on
+ * ffmpeg-kit-full, ffmpeg-kit, and ffmpeg-kit-min as of this build) —
+ * so it could not be used as a dependency at all, not just outdated.
+ *
+ * MediaMetadataRetriever is a standard Android SDK class, ships with
+ * every device, and needs zero extra dependencies. Its trade-off:
+ *   - Frame extraction: real, reliable (getFrameAtTime).
+ *   - Audio track extraction: NOT implemented in this version — would
+ *     require MediaExtractor + MediaCodec, real work, not done yet.
+ *     Callers should not assume speech-to-text input is available.
+ *   - Video compression/downscaling: NOT implemented — would require a
+ *     real MediaCodec encoder pipeline. Long/huge videos are rejected
+ *     by duration cap (enforced in TS) rather than silently compressed.
  */
 class VideoProcessorModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("VideoProcessor")
 
-    // Real duration probe via ffmpeg's own metadata reader.
     AsyncFunction("getDurationSeconds") { videoPath: String, promise: expo.modules.kotlin.Promise ->
-      val session = com.arthenica.ffmpegkit.FFprobeKit.getMediaInformation(videoPath)
-      val info = session.mediaInformation
-      val duration = info?.duration?.toDoubleOrNull() ?: -1.0
-      promise.resolve(duration)
+      val retriever = MediaMetadataRetriever()
+      try {
+        retriever.setDataSource(videoPath)
+        val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+        val seconds = (durationMs?.toLongOrNull() ?: -1L) / 1000.0
+        promise.resolve(seconds)
+      } catch (e: Exception) {
+        promise.reject("RETRIEVER_ERROR", "Could not read video duration: ${e.message}", e)
+      } finally {
+        retriever.release()
+      }
     }
 
-    // Extract frames at `fps` (e.g. 0.5 = one frame every 2 seconds).
-    // Returns the list of written JPEG file paths.
+    // Extract frames at a fixed interval (real getFrameAtTime calls),
+    // write each as a JPEG, return the real file paths written.
     AsyncFunction("extractFrames") { videoPath: String, outDir: String, fps: Double, maxFrames: Int, promise: expo.modules.kotlin.Promise ->
       val dir = File(outDir)
       if (!dir.exists()) dir.mkdirs()
 
-      val pattern = "$outDir/frame_%04d.jpg"
-      val cmd = "-y -i \"$videoPath\" -vf fps=$fps -frames:v $maxFrames -q:v 4 \"$pattern\""
+      val retriever = MediaMetadataRetriever()
+      val written = mutableListOf<String>()
 
-      val session = FFmpegKit.execute(cmd)
-      if (ReturnCode.isSuccess(session.returnCode)) {
-        val frames = dir.listFiles { f -> f.name.startsWith("frame_") && f.name.endsWith(".jpg") }
-          ?.sortedBy { it.name }
-          ?.map { it.absolutePath }
-          ?: emptyList()
-        promise.resolve(frames)
-      } else {
-        promise.reject("FFMPEG_ERROR", "Frame extraction failed: ${session.failStackTrace}", null)
+      try {
+        retriever.setDataSource(videoPath)
+        val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+          ?.toLongOrNull() ?: 0L
+
+        val intervalMs = if (fps > 0) (1000.0 / fps).toLong() else 2000L
+        var timeMs = 0L
+        var frameIndex = 0
+
+        while (timeMs < durationMs && frameIndex < maxFrames) {
+          val bitmap: Bitmap? = retriever.getFrameAtTime(
+            timeMs * 1000, // microseconds
+            MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+          )
+          if (bitmap != null) {
+            val framePath = "$outDir/frame_${String.format("%04d", frameIndex)}.jpg"
+            FileOutputStream(framePath).use { out ->
+              bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            }
+            bitmap.recycle()
+            written.add(framePath)
+            frameIndex++
+          }
+          timeMs += intervalMs
+        }
+
+        promise.resolve(written)
+      } catch (e: Exception) {
+        promise.reject("RETRIEVER_ERROR", "Frame extraction failed: ${e.message}", e)
+      } finally {
+        retriever.release()
       }
     }
 
-    // Extract mono 16kHz WAV audio track (whisper.cpp-compatible format).
+    // Not implemented in this version — see class doc. Returns a clear
+    // error instead of a fake/empty success, so callers don't silently
+    // proceed as if audio was extracted when it wasn't.
     AsyncFunction("extractAudio") { videoPath: String, outPath: String, promise: expo.modules.kotlin.Promise ->
-      val cmd = "-y -i \"$videoPath\" -vn -ac 1 -ar 16000 -f wav \"$outPath\""
-      val session = FFmpegKit.execute(cmd)
-      if (ReturnCode.isSuccess(session.returnCode)) {
-        promise.resolve(outPath)
-      } else {
-        promise.reject("FFMPEG_ERROR", "Audio extraction failed: ${session.failStackTrace}", null)
-      }
+      promise.reject(
+        "NOT_IMPLEMENTED",
+        "Audio extraction is not implemented in this build (requires MediaExtractor/MediaCodec, not yet built). Frame-based analysis only.",
+        null
+      )
     }
 
-    // Downscale + compress an oversized video before processing, so we
-    // never try to hold a huge file in memory. Real, bounded operation.
+    // Not implemented — see class doc. Duration cap (enforced in TS)
+    // is used instead of compression to keep processing bounded.
     AsyncFunction("compressVideo") { videoPath: String, outPath: String, maxWidth: Int, promise: expo.modules.kotlin.Promise ->
-      val cmd = "-y -i \"$videoPath\" -vf scale='min($maxWidth,iw)':-2 -c:v mpeg4 -q:v 5 \"$outPath\""
-      val session = FFmpegKit.execute(cmd)
-      if (ReturnCode.isSuccess(session.returnCode)) {
-        promise.resolve(outPath)
-      } else {
-        promise.reject("FFMPEG_ERROR", "Compression failed: ${session.failStackTrace}", null)
-      }
+      promise.reject(
+        "NOT_IMPLEMENTED",
+        "Video compression is not implemented in this build. Long videos are rejected by duration cap instead.",
+        null
+      )
     }
   }
 }
