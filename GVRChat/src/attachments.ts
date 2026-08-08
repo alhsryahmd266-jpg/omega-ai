@@ -140,7 +140,8 @@ async function prepareVideo(asset: DocumentPicker.DocumentPickerAsset): Promise<
 
   try {
     const prep = await prepareVideoForAnalysis(asset.uri, workDir);
-    if (prep.wasCompressed) warnings.push('Video was compressed before analysis.');
+    // Frame extraction only in this version (MediaMetadataRetriever) —
+    // no pre-compression step, see video-processor module notes.
     warnings.push(
       `Analyzed ${prep.framePaths.length} frames sampled every ` +
       `${VIDEO_LIMITS.frameIntervalSeconds}s (${Math.round(prep.durationSeconds)}s total). ` +
