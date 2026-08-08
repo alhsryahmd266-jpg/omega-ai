@@ -36,13 +36,8 @@ jobs:
         run: |
           PLUGIN_FILE="node_modules/llama.rn/app.plugin.js"
           if [ -f "$PLUGIN_FILE" ]; then
-            echo "Before patch:"
-            cat "$PLUGIN_FILE"
             sed -i 's#lib/module/expo-plugin#lib/commonjs/expo-plugin#' "$PLUGIN_FILE"
-            echo "After patch:"
             cat "$PLUGIN_FILE"
-          else
-            echo "llama.rn app.plugin.js not found - skipping patch"
           fi
 
       - name: Prebuild
@@ -59,9 +54,13 @@ jobs:
         run: |
           git config user.email "bot@gvr.com"
           git config user.name "GVR Bot"
-          git add prebuild.log
-          git commit -m "Prebuild log v3 (patched llama.rn)" --allow-empty
-          git push
+          for i in 1 2 3 4 5; do
+            git add prebuild.log
+            git commit -m "Prebuild log v4" --allow-empty
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying..."
+            sleep 5
+          done
 
       - name: Fail if prebuild failed
         run: |
@@ -85,9 +84,13 @@ jobs:
         run: |
           git config user.email "bot@gvr.com"
           git config user.name "GVR Bot"
-          git add gradle.log
-          git commit -m "Gradle log v3" --allow-empty
-          git push
+          for i in 1 2 3 4 5; do
+            git add gradle.log
+            git commit -m "Gradle log v4" --allow-empty
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying..."
+            sleep 5
+          done
 
       - name: Fail if gradle failed
         run: |
