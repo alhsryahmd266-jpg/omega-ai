@@ -4,11 +4,6 @@ apply plugin: 'kotlin-android'
 group = 'expo.modules.videoprocessor'
 version = '1.0.0'
 
-repositories {
-  mavenCentral()
-  google()
-}
-
 android {
   namespace "expo.modules.videoprocessor"
   compileSdkVersion safeExtGet("compileSdkVersion", 34)
@@ -20,7 +15,6 @@ android {
 
 dependencies {
   implementation project(':expo-modules-core')
-  implementation 'com.arthenica:ffmpeg-kit-full:6.0-2'
 }
 
 def safeExtGet(prop, fallback) {
