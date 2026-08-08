@@ -58,21 +58,134 @@ Using expo modules
 Android gradle plugin: 8.2.1
 Gradle: 8.8
 
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :app:generateNewArchitectureFiles
+> Task :app:generatePackageList
+> Task :app:syncRNLlamaHtpAssets
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :app:generateReleaseBuildConfig
+> Task :expo:generateExpoModulesPackageListTask
+> Task :expo:preBuild
+> Task :expo:preReleaseBuild
+> Task :expo-asset:preBuild UP-TO-DATE
+> Task :expo-asset:preReleaseBuild UP-TO-DATE
+> Task :expo-blur:preBuild UP-TO-DATE
+> Task :expo-blur:preReleaseBuild UP-TO-DATE
+> Task :expo:writeReleaseAarMetadata
+> Task :expo-blur:writeReleaseAarMetadata
+> Task :expo-asset:writeReleaseAarMetadata
+
+> Task :expo-constants:createExpoConfig
+The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set.
+Proceeding without mode-specific .env
+
+> Task :expo-constants:preBuild
+> Task :expo-constants:preReleaseBuild
+> Task :expo-document-picker:preBuild UP-TO-DATE
+> Task :expo-document-picker:preReleaseBuild UP-TO-DATE
+> Task :expo-file-system:preBuild UP-TO-DATE
+> Task :expo-constants:writeReleaseAarMetadata
+> Task :expo-file-system:preReleaseBuild UP-TO-DATE
+> Task :expo-document-picker:writeReleaseAarMetadata
+> Task :expo-font:preBuild UP-TO-DATE
+> Task :expo-font:preReleaseBuild UP-TO-DATE
+> Task :expo-file-system:writeReleaseAarMetadata
+> Task :expo-keep-awake:preBuild UP-TO-DATE
+> Task :expo-font:writeReleaseAarMetadata
+> Task :expo-keep-awake:preReleaseBuild UP-TO-DATE
+> Task :expo-linear-gradient:preBuild UP-TO-DATE
+> Task :expo-linear-gradient:preReleaseBuild UP-TO-DATE
+> Task :expo-keep-awake:writeReleaseAarMetadata
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-modules-core:preReleaseBuild UP-TO-DATE
+> Task :expo-linear-gradient:writeReleaseAarMetadata
+> Task :expo-video-processor:preBuild UP-TO-DATE
+> Task :expo-modules-core:writeReleaseAarMetadata
+> Task :expo-video-processor:preReleaseBuild UP-TO-DATE
+> Task :expo-video-processor:writeReleaseAarMetadata
+> Task :llama.rn:generateCodegenSchemaFromJavaScript
+> Task :llama.rn:generateCodegenArtifactsFromSchema
+> Task :llama.rn:preBuild
+> Task :llama.rn:preReleaseBuild
+> Task :llama.rn:writeReleaseAarMetadata
+> Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript
+> Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema
+> Task :react-native-async-storage_async-storage:preBuild
+> Task :react-native-async-storage_async-storage:preReleaseBuild
+> Task :react-native-async-storage_async-storage:writeReleaseAarMetadata
+> Task :react-native-gesture-handler:generateCodegenSchemaFromJavaScript
+> Task :react-native-gesture-handler:generateCodegenArtifactsFromSchema
+> Task :react-native-gesture-handler:preBuild
+> Task :react-native-gesture-handler:preReleaseBuild
+> Task :react-native-gesture-handler:writeReleaseAarMetadata
+> Task :react-native-reanimated:assertLatestReactNativeWithNewArchitectureTask SKIPPED
+> Task :react-native-reanimated:assertMinimalReactNativeVersionTask SKIPPED
+> Task :react-native-reanimated:generateCodegenSchemaFromJavaScript
+> Task :react-native-reanimated:generateCodegenArtifactsFromSchema
+> Task :react-native-reanimated:prepareHeadersForPrefab
+> Task :react-native-reanimated:preBuild
+> Task :react-native-reanimated:preReleaseBuild
+> Task :react-native-reanimated:writeReleaseAarMetadata
+> Task :react-native-safe-area-context:generateCodegenSchemaFromJavaScript
+> Task :react-native-safe-area-context:generateCodegenArtifactsFromSchema
+> Task :react-native-safe-area-context:preBuild
+> Task :react-native-safe-area-context:preReleaseBuild
+> Task :react-native-safe-area-context:writeReleaseAarMetadata
+> Task :react-native-screens:generateCodegenSchemaFromJavaScript
+> Task :react-native-screens:generateCodegenArtifactsFromSchema
+> Task :react-native-screens:preBuild
+> Task :react-native-screens:preReleaseBuild
+> Task :react-native-screens:writeReleaseAarMetadata
+> Task :react-native-svg:generateCodegenSchemaFromJavaScript
+> Task :react-native-svg:generateCodegenArtifactsFromSchema
+> Task :react-native-svg:preBuild
+> Task :react-native-svg:preReleaseBuild
+> Task :react-native-svg:writeReleaseAarMetadata
+
+> Task :app:createBundleReleaseJsAndAssets
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Android Bundling failed 9832ms node_modules/expo/AppEntry.js (700 modules)
+Error: Unable to resolve module expo-battery from /home/runner/work/omega-ai/omega-ai/GVRChat/src/tools.ts: expo-battery could not be found within the project or in these directories:
+  node_modules
+[0m [90m 11 |[39m [90m *  - memory_save / memory_get / memory_list : real persistent storage[39m
+ [90m 12 |[39m [90m */[39m
+[31m[1m>[22m[39m[90m 13 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mBattery[39m [36mfrom[39m [32m'expo-battery'[39m[33m;[39m
+ [90m    |[39m                           [31m[1m^[22m[39m
+ [90m 14 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mFileSystem[39m [36mfrom[39m [32m'expo-file-system'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m
+ [90m 16 |[39m[0m
+Error: Unable to resolve module expo-battery from /home/runner/work/omega-ai/omega-ai/GVRChat/src/tools.ts: expo-battery could not be found within the project or in these directories:
+  node_modules
+[0m [90m 11 |[39m [90m *  - memory_save / memory_get / memory_list : real persistent storage[39m
+ [90m 12 |[39m [90m */[39m
+[31m[1m>[22m[39m[90m 13 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mBattery[39m [36mfrom[39m [32m'expo-battery'[39m[33m;[39m
+ [90m    |[39m                           [31m[1m^[22m[39m
+ [90m 14 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mFileSystem[39m [36mfrom[39m [32m'expo-file-system'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m
+ [90m 16 |[39m[0m
+    at ModuleResolver.resolveDependency (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/node-haste/DependencyGraph/ModuleResolution.js:139:15)
+    at DependencyGraph.resolveDependency (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/node-haste/DependencyGraph.js:232:43)
+    at /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/lib/transformHelpers.js:156:21
+    at resolveDependencies (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:42:25)
+    at visit (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:83:30)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Promise.all (index 3)
+    at visit (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:92:5)
+    at async Promise.all (index 12)
+    at visit (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:92:5)
+
+> Task :app:createBundleReleaseJsAndAssets FAILED
+
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Could not determine the dependencies of task ':app:lintVitalReportRelease'.
-> Could not resolve all dependencies for configuration ':app:releaseRuntimeClasspath'.
-   > Could not find com.arthenica:ffmpeg-kit-full:6.0-2.
-     Searched in the following locations:
-       - https://oss.sonatype.org/content/repositories/snapshots/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
-       - https://repo.maven.apache.org/maven2/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
-       - file:/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/jsc-android/dist/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
-       - https://dl.google.com/dl/android/maven2/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
-       - https://www.jitpack.io/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
-       - file:/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native/android/com/arthenica/ffmpeg-kit-full/6.0-2/ffmpeg-kit-full-6.0-2.pom
-     Required by:
-         project :app > project :expo > project :expo-video-processor
+Execution failed for task ':app:createBundleReleaseJsAndAssets'.
+> Process 'command 'node'' finished with non-zero exit value 1
 
 * Try:
 > Run with --stacktrace option to get the stack trace.
@@ -80,5 +193,5 @@ Could not determine the dependencies of task ':app:lintVitalReportRelease'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 2m 40s
-10 actionable tasks: 10 executed
+BUILD FAILED in 3m 14s
+52 actionable tasks: 52 executed
