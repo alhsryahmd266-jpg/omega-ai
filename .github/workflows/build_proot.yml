@@ -1,0 +1,66 @@
+name: Build Real proot + termux-exec Binaries
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-proot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Clone termux-packages
+        run: |
+          git clone --depth 1 https://github.com/termux/termux-packages.git
+          cd termux-packages
+          echo "Cloned successfully"
+
+      - name: Pull official builder image
+        run: docker pull ghcr.io/termux/package-builder:latest
+
+      - name: Build proot for aarch64 (real termux-packages build system)
+        working-directory: termux-packages
+        run: |
+          set +e
+          ./scripts/run-docker.sh ./build-package.sh -a aarch64 proot > ../proot_build.log 2>&1
+          echo "PROOT_EXIT=$?" >> $GITHUB_ENV
+          tail -200 ../proot_build.log
+          set -e
+
+      - name: Locate built proot .deb
+        run: |
+          find termux-packages -iname "*proot*.deb" -exec ls -la {} \;
+          find termux-packages -iname "*proot*.deb" -exec cp {} /tmp/proot.deb \; || echo "not found"
+
+      - name: Extract proot binary from .deb
+        run: |
+          if [ -f /tmp/proot.deb ]; then
+            mkdir -p /tmp/proot_extracted
+            cd /tmp/proot_extracted
+            ar x /tmp/proot.deb
+            tar xf data.tar.* 2>/dev/null || tar xf data.tar
+            find . -iname "proot" -type f -exec ls -la {} \;
+            find . -iname "*.so*" -exec ls -la {} \;
+          else
+            echo "No .deb found - build likely failed"
+          fi
+
+      - name: Commit results and binary
+        if: always()
+        run: |
+          mkdir -p proot_output
+          cp /tmp/proot_build.log proot_output/ 2>/dev/null || true
+          if [ -f /tmp/proot_extracted/data/data/com.termux/files/usr/bin/proot ]; then
+            cp /tmp/proot_extracted/data/data/com.termux/files/usr/bin/proot proot_output/proot-aarch64
+            echo "Binary found and copied!"
+          fi
+          find /tmp/proot_extracted -type f -name "proot" 2>/dev/null | head -5
+
+          git config user.email "bot@gvr.com"
+          git config user.name "GVR Bot"
+          for i in 1 2 3 4 5; do
+            git add proot_output/ 2>/dev/null || true
+            git commit -m "proot build attempt" --allow-empty
+            git pull --rebase origin main && git push && break
+            sleep 5
+          done
