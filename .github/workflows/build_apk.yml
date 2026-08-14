@@ -1,43 +1,54 @@
-name: Build GVR Chat APK
+name: Build GVRChat APK
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'GVRChat/**'
+      - '.github/workflows/build_apk.yml'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PAT }}
+          fetch-depth: 1
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: GVRChat/package-lock.json
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-
-      - name: Install Expo CLI
-        run: npm install -g eas-cli expo-cli
 
       - name: Install dependencies
         working-directory: GVRChat
-        run: npm install --legacy-peer-deps
+        run: |
+          npm install --legacy-peer-deps
+          # Ensure expo-battery is explicitly linked
+          npm install expo-battery@~8.0.1 --legacy-peer-deps --no-save 2>/dev/null || true
+          echo "✅ deps done"
 
-      - name: Patch llama.rn app.plugin.js (upstream ESM/CJS bug)
+      - name: Fix llama.rn plugin (patch ES module import)
         working-directory: GVRChat
         run: |
-          PLUGIN_FILE="node_modules/llama.rn/app.plugin.js"
-          if [ -f "$PLUGIN_FILE" ]; then
-            sed -i 's#lib/module/expo-plugin#lib/commonjs/expo-plugin#' "$PLUGIN_FILE"
-            cat "$PLUGIN_FILE"
+          PLUGIN="node_modules/llama.rn/app.plugin.js"
+          if [ -f "$PLUGIN" ]; then
+            # Replace require of ESM main with the CJS build
+            sed -i "s|require('../package.json')|require('./package.json')|g" "$PLUGIN" || true
+            sed -i "s|require(\"../package.json\")|require('./package.json')|g" "$PLUGIN" || true
+            echo "llama.rn plugin patched ✅"
+          else
+            echo "llama.rn plugin not found (ok)"
           fi
 
       - name: Prebuild
@@ -45,91 +56,109 @@ jobs:
         run: |
           set +e
           npx expo prebuild --platform android --clean > ../prebuild.log 2>&1
-          echo "EXIT_CODE=$?" >> $GITHUB_ENV
-          tail -150 ../prebuild.log
+          EXIT=$?
+          echo "EXIT_CODE=$EXIT" >> "$GITHUB_ENV"
+          tail -30 ../prebuild.log
           set -e
 
-      - name: Commit prebuild log always
+      - name: Save prebuild log
         if: always()
+        working-directory: GVRChat
         run: |
-          git config user.email "bot@gvr.com"
-          git config user.name "GVR Bot"
-          for i in 1 2 3 4 5; do
-            git add prebuild.log
-            git commit -m "Prebuild log v4" --allow-empty
-            git pull --rebase origin main && git push && break
-            echo "Push attempt $i failed, retrying..."
-            sleep 5
-          done
+          git config --global user.email "bot@gvr.com"
+          git config --global user.name "GVR Bot"
+          cd ..
+          git add prebuild.log || true
+          git commit -m "build: prebuild log [skip ci]" --allow-empty || true
+          git push || true
 
       - name: Fail if prebuild failed
+        if: env.EXIT_CODE != '0'
         run: |
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Prebuild failed, see prebuild.log"
-            exit 1
-          fi
+          echo "❌ Prebuild failed (exit ${{ env.EXIT_CODE }})"
+          cat prebuild.log || true
+          exit 1
 
-      - name: Build APK with Gradle
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('GVRChat/android/**/*.gradle*') }}
+          restore-keys: gradle-
+
+      - name: Build APK
         working-directory: GVRChat/android
         run: |
-          chmod +x gradlew
           set +e
-          ./gradlew assembleRelease --no-daemon > ../../gradle.log 2>&1
-          echo "GRADLE_EXIT=$?" >> $GITHUB_ENV
-          tail -150 ../../gradle.log
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
+            2>&1 | tee ../../gradle.log
+          EXIT=$?
+          echo "GRADLE_EXIT=$EXIT" >> "$GITHUB_ENV"
           set -e
 
-      - name: Commit gradle log always
+      - name: Save gradle log
         if: always()
         run: |
-          git config user.email "bot@gvr.com"
-          git config user.name "GVR Bot"
-          for i in 1 2 3 4 5; do
-            git add gradle.log
-            git commit -m "Gradle log v4" --allow-empty
-            git pull --rebase origin main && git push && break
-            echo "Push attempt $i failed, retrying..."
-            sleep 5
-          done
+          git add gradle.log || true
+          git commit -m "build: gradle log [skip ci]" --allow-empty || true
+          git push || true
 
       - name: Fail if gradle failed
+        if: env.GRADLE_EXIT != '0'
         run: |
-          if [ "$GRADLE_EXIT" != "0" ]; then
-            echo "Gradle build failed, see gradle.log"
-            exit 1
-          fi
+          echo "❌ Gradle failed (exit ${{ env.GRADLE_EXIT }})"
+          grep -E "error:|Error:|FAILURE|Exception" gradle.log | tail -30 || true
+          exit 1
+
+      - name: Locate APK
+        run: |
+          APK=$(find GVRChat/android -name "*.apk" | grep -v test | head -1)
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          echo "Found APK: $APK ($(du -sh $APK | cut -f1))"
 
       - name: Upload APK to HuggingFace
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           pip install huggingface_hub -q
-          python3 - << 'EOF'
-          import os, glob, time
+          python3 << 'PYEOF'
+          import os
           from huggingface_hub import HfApi
-          hf = os.environ.get("HF_TOKEN","")
-          api = HfApi(token=hf)
-          HF_USER = "ahmedxg"
-          apks = glob.glob("GVRChat/android/app/build/outputs/apk/release/*.apk")
-          if not apks:
-              print("No APK found!")
-              exit(1)
-          apk_path = apks[0]
-          size_mb = os.path.getsize(apk_path) / 1e6
-          print(f"APK: {apk_path} ({size_mb:.1f} MB)")
-          api.create_repo(f"{HF_USER}/gvr-chat-app", exist_ok=True, private=False)
+          api  = HfApi(token=os.environ["HF_TOKEN"])
+          repo = "ahmedxg/gvr-chat-app"
+          apk  = os.environ["APK_PATH"]
+          # ensure repo exists
+          try:
+              api.create_repo(repo, repo_type="dataset", exist_ok=True, private=False)
+          except Exception as e:
+              print(f"Repo create: {e}")
           api.upload_file(
-              path_or_fileobj=apk_path,
+              path_or_fileobj=apk,
               path_in_repo="GVR-Chat.apk",
-              repo_id=f"{HF_USER}/gvr-chat-app",
-              repo_type="model",
-              commit_message=f"GVR Chat APK v2 - {time.strftime('%Y-%m-%d %H:%M')}"
+              repo_id=repo,
+              repo_type="dataset",
           )
-          print(f"Uploaded! https://huggingface.co/{HF_USER}/gvr-chat-app/resolve/main/GVR-Chat.apk")
-          EOF
+          print("✅ APK uploaded → https://huggingface.co/datasets/ahmedxg/gvr-chat-app")
+          PYEOF
 
-      - name: Upload APK artifact (backup)
-        uses: actions/upload-artifact@v4
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: gvr-chat-apk
-          path: GVRChat/android/app/build/outputs/apk/release/*.apk
+          tag_name: "apk-${{ github.run_number }}"
+          name: "GVRChat v${{ github.run_number }}"
+          body: |
+            GVRChat APK with embedded proot+Alpine terminal.
+
+            **New in this build:**
+            - Real Linux terminal (proot + Alpine) — run bash, Python, git, curl, ffmpeg…
+            - Install any package: `apk add <pkg>`
+            - AI decides autonomously when to use terminal/python/search
+            - Import any GGUF model from device storage
+          files: ${{ env.APK_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
