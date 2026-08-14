@@ -1,0 +1,8 @@
+{
+  "name": "terminal",
+  "version": "1.0.0",
+  "description": "proot + Alpine Linux terminal for GVRChat",
+  "main": "src/index",
+  "types": "src/index",
+  "private": true
+}
