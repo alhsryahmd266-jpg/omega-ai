@@ -1,0 +1,71 @@
+name: Build Real termux-exec Binaries
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-exec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Clone termux-packages
+        run: git clone --depth 1 https://github.com/termux/termux-packages.git
+
+      - name: Pull official builder image
+        run: docker pull ghcr.io/termux/package-builder:latest
+
+      - name: Check termux-exec package exists
+        run: |
+          ls termux-packages/packages/ | grep -i "termux-exec" || echo "checking libtermux-exec instead"
+          find termux-packages/packages -maxdepth 1 -iname "*termux-exec*"
+
+      - name: Build termux-exec for aarch64
+        working-directory: termux-packages
+        run: |
+          set +e
+          PKG=$(find packages -maxdepth 1 -iname "*termux-exec*" -type d | head -1 | xargs basename)
+          echo "Building package: $PKG"
+          ./scripts/run-docker.sh ./build-package.sh -a aarch64 "$PKG" > ../exec_build.log 2>&1
+          echo "EXEC_EXIT=$?" >> $GITHUB_ENV
+          tail -150 ../exec_build.log
+          set -e
+
+      - name: Extract binaries from .deb
+        run: |
+          mkdir -p /tmp/out
+          for DEB in $(find termux-packages -iname "*termux-exec*.deb"); do
+            echo "Processing: $DEB"
+            WORKDIR="/tmp/extract_$(basename $DEB .deb)"
+            mkdir -p "$WORKDIR"
+            cd "$WORKDIR"
+            ar x "$DEB"
+            tar xf data.tar.* 2>/dev/null || tar xf data.tar
+            find . -iname "*.so*" -type f -exec cp {} /tmp/out/ \;
+            find . -type f -iname "*termux-exec*" ! -iname "*.so*" -exec cp {} /tmp/out/ \;
+            cd -
+          done
+          echo "=== Files extracted ==="
+          ls -la /tmp/out/
+
+      - name: Checkout repo for commit
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          path: gvr-repo
+
+      - name: Commit binaries with retry
+        run: |
+          mkdir -p gvr-repo/native_binaries/termux-exec
+          cp /tmp/out/* gvr-repo/native_binaries/termux-exec/ 2>/dev/null || echo "nothing to copy"
+          cp /tmp/exec_build.log gvr-repo/native_binaries/termux-exec/build.log 2>/dev/null || true
+          cd gvr-repo
+          git config user.email "bot@gvr.com"
+          git config user.name "GVR Bot"
+          for i in 1 2 3 4 5 6; do
+            git add native_binaries/ 2>/dev/null || true
+            git commit -m "Real termux-exec binaries for arm64" --allow-empty
+            git pull --rebase origin main && git push && break
+            echo "Attempt $i failed, retrying..."
+            sleep $((i * 5))
+          done
