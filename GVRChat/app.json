@@ -1,34 +1,64 @@
 {
   "expo": {
-    "name": "GVR Chat",
-    "slug": "gvr-chat",
+    "name": "GVRChat",
+    "slug": "GVRChat",
     "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
-      "resizeMode": "cover",
-      "backgroundColor": "#05050f"
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
     },
     "android": {
+      "package": "com.ahmedxg.gvrchat",
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#05050f"
+        "backgroundColor": "#000000"
       },
-      "package": "com.gvr.chat",
-      "permissions": ["INTERNET", "ACCESS_NETWORK_STATE"]
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.MANAGE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
     },
     "plugins": [
       [
         "expo-build-properties",
         {
           "android": {
-            "newArchEnabled": true,
-            "minSdkVersion": 24
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "34.0.0",
+            "kotlinVersion": "1.9.24",
+            "enableProguardInReleaseBuilds": false,
+            "enableShrinkResourcesInReleaseBuilds": false,
+            "packagingOptions": {
+              "pickFirst": [
+                "**/libc++_shared.so",
+                "**/libfbjni.so"
+              ]
+            },
+            "extraMavenRepos": [
+              "https://jitpack.io"
+            ]
           }
         }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
       ]
-    ]
+    ],
+    "newArchEnabled": false
   }
 }
