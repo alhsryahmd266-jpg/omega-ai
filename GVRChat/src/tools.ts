@@ -1,23 +1,16 @@
 /**
- * tools.ts — Real on-device tools + proot terminal
- * =================================================
- * Tools available:
- *   search        — real HTTP fetch → DuckDuckGo
- *   device_info   — battery %, free storage
- *   mem_save / mem_get / mem_list — persistent AsyncStorage
- *   terminal      — Alpine Linux shell via proot (run ANY command)
- *   python        — run Python 3 code in Alpine
- *   pkg_install   — apk add <package> in Alpine
+ * tools.ts — GVRChat tools
+ * Includes: terminal (proot+Alpine), python, pkg_install,
+ *           web search, device info, persistent memory
  */
 
-import * as Battery from 'expo-battery';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Terminal from '../modules/terminal/src';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 
-/* ── TERMINAL SETUP STATE ─────────────────────────────────────────────────── */
+/* ── TERMINAL SETUP ──────────────────────────────────────────────────────── */
 let terminalReady: boolean | null = null;
 
 async function ensureTerminal(): Promise<string | null> {
@@ -26,7 +19,6 @@ async function ensureTerminal(): Promise<string | null> {
     terminalReady = await Terminal.isSetupDone();
     if (terminalReady) return null;
   }
-  // Need setup — runs ~10-30s on first call
   terminalReady = false;
   try {
     await Terminal.setupTerminal();
@@ -38,28 +30,28 @@ async function ensureTerminal(): Promise<string | null> {
   }
 }
 
-/* ── TERMINAL (proot + Alpine Linux) ──────────────────────────────────────── */
+/* ── TERMINAL ─────────────────────────────────────────────────────────────── */
 export async function toolTerminal(command: string, timeout = 30): Promise<string> {
   const err = await ensureTerminal();
   if (err) return err;
   return Terminal.run(command, timeout);
 }
 
-/* ── PYTHON ────────────────────────────────────────────────────────────────── */
+/* ── PYTHON ───────────────────────────────────────────────────────────────── */
 export async function toolPython(code: string, timeout = 60): Promise<string> {
   const err = await ensureTerminal();
   if (err) return err;
   return Terminal.runPython(code, timeout);
 }
 
-/* ── PACKAGE INSTALL ───────────────────────────────────────────────────────── */
+/* ── PKG INSTALL ──────────────────────────────────────────────────────────── */
 export async function toolPkgInstall(pkg: string): Promise<string> {
   const err = await ensureTerminal();
   if (err) return err;
   return Terminal.installPackage(pkg);
 }
 
-/* ── WEB SEARCH ────────────────────────────────────────────────────────────── */
+/* ── WEB SEARCH ───────────────────────────────────────────────────────────── */
 export async function toolWebSearch(query: string): Promise<string> {
   try {
     const res = await fetch(
@@ -70,8 +62,7 @@ export async function toolWebSearch(query: string): Promise<string> {
     const clean = (s: string) => s.replace(/<[^>]+>/g, '').trim();
     const titleRe = /class="result__a"[^>]*>(.*?)<\/a>/g;
     const snipRe  = /class="result__snippet"[^>]*>(.*?)<\/a>/g;
-    const titles: string[] = [];
-    const snippets: string[] = [];
+    const titles: string[] = [], snippets: string[] = [];
     let m;
     while ((m = titleRe.exec(html)) && titles.length < 4) titles.push(clean(m[1]));
     while ((m = snipRe.exec(html)) && snippets.length < 4) snippets.push(clean(m[1]));
@@ -82,26 +73,21 @@ export async function toolWebSearch(query: string): Promise<string> {
   }
 }
 
-/* ── DEVICE INFO ───────────────────────────────────────────────────────────── */
+/* ── DEVICE INFO (no expo-battery dependency) ─────────────────────────────── */
 export async function toolDeviceInfo(): Promise<string> {
   try {
-    const level = await Battery.getBatteryLevelAsync();
-    const state = await Battery.getBatteryStateAsync();
-    const stateNames: Record<number, string> = {
-      0: 'unknown', 1: 'unplugged', 2: 'charging', 3: 'full',
-    };
-    const freeBytes  = await FileSystem.getFreeDiskStorageAsync();
-    const totalBytes = await FileSystem.getTotalDiskCapacityAsync();
+    const free  = await FileSystem.getFreeDiskStorageAsync();
+    const total = await FileSystem.getTotalDiskCapacityAsync();
     return [
-      `🔋 Battery: ${Math.round(level * 100)}% (${stateNames[state] ?? 'unknown'})`,
-      `💾 Storage: ${(freeBytes / 1e9).toFixed(1)} GB free / ${(totalBytes / 1e9).toFixed(1)} GB total`,
+      `💾 Storage: ${(free / 1e9).toFixed(1)} GB free / ${(total / 1e9).toFixed(1)} GB total`,
+      `📁 App dir: ${FileSystem.documentDirectory}`,
     ].join('\n');
   } catch (e: any) {
     return `Device info error: ${e.message}`;
   }
 }
 
-/* ── MEMORY ────────────────────────────────────────────────────────────────── */
+/* ── MEMORY ───────────────────────────────────────────────────────────────── */
 async function loadMemory(): Promise<Record<string, { value: string; ts: string }>> {
   try {
     const raw = await AsyncStorage.getItem(MEMORY_KEY);
@@ -111,7 +97,6 @@ async function loadMemory(): Promise<Record<string, { value: string; ts: string 
 async function persistMemory(mem: Record<string, any>) {
   await AsyncStorage.setItem(MEMORY_KEY, JSON.stringify(mem));
 }
-
 export async function toolMemorySave(key: string, value: string): Promise<string> {
   const mem = await loadMemory();
   mem[key.trim()] = { value: value.trim(), ts: new Date().toISOString() };
@@ -130,7 +115,7 @@ export async function toolMemoryList(): Promise<string> {
   return keys.map(k => `• ${k}: ${mem[k].value.slice(0, 60)}`).join('\n');
 }
 
-/* ── DISPATCH ──────────────────────────────────────────────────────────────── */
+/* ── DISPATCH ─────────────────────────────────────────────────────────────── */
 export type ToolName =
   | 'search' | 'device_info'
   | 'mem_save' | 'mem_get' | 'mem_list'
