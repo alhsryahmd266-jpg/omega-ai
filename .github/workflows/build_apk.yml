@@ -22,8 +22,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: GVRChat/package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -32,51 +30,41 @@ jobs:
 
       - name: Install dependencies
         working-directory: GVRChat
-        run: |
-          npm install --legacy-peer-deps
-          # Ensure expo-battery is explicitly linked
-          npm install expo-battery@~8.0.1 --legacy-peer-deps --no-save 2>/dev/null || true
-          echo "✅ deps done"
+        run: npm install --legacy-peer-deps
 
-      - name: Fix llama.rn plugin (patch ES module import)
+      - name: Fix llama.rn plugin
         working-directory: GVRChat
         run: |
           PLUGIN="node_modules/llama.rn/app.plugin.js"
           if [ -f "$PLUGIN" ]; then
-            # Replace require of ESM main with the CJS build
-            sed -i "s|require('../package.json')|require('./package.json')|g" "$PLUGIN" || true
-            sed -i "s|require(\"../package.json\")|require('./package.json')|g" "$PLUGIN" || true
-            echo "llama.rn plugin patched ✅"
-          else
-            echo "llama.rn plugin not found (ok)"
+            sed -i "s|require('../package.json')|require('./package.json')|g" "$PLUGIN" 2>/dev/null || true
+            sed -i 's|require("../package.json")|require("./package.json")|g' "$PLUGIN" 2>/dev/null || true
+            echo "llama.rn patched ✅"
           fi
 
       - name: Prebuild
         working-directory: GVRChat
         run: |
           set +e
-          npx expo prebuild --platform android --clean > ../prebuild.log 2>&1
-          EXIT=$?
-          echo "EXIT_CODE=$EXIT" >> "$GITHUB_ENV"
-          tail -30 ../prebuild.log
+          npx expo prebuild --platform android --clean 2>&1 | tee ../prebuild.log
+          EXIT=${PIPESTATUS[0]}
+          echo "PREBUILD_EXIT=$EXIT" >> "$GITHUB_ENV"
           set -e
 
       - name: Save prebuild log
         if: always()
-        working-directory: GVRChat
         run: |
           git config --global user.email "bot@gvr.com"
           git config --global user.name "GVR Bot"
-          cd ..
-          git add prebuild.log || true
-          git commit -m "build: prebuild log [skip ci]" --allow-empty || true
-          git push || true
+          git add prebuild.log 2>/dev/null || true
+          git commit -m "build: prebuild log [skip ci]" --allow-empty 2>/dev/null || true
+          git push 2>/dev/null || true
 
       - name: Fail if prebuild failed
-        if: env.EXIT_CODE != '0'
+        if: env.PREBUILD_EXIT != '0'
         run: |
-          echo "❌ Prebuild failed (exit ${{ env.EXIT_CODE }})"
-          cat prebuild.log || true
+          echo "❌ Prebuild failed"
+          tail -30 prebuild.log || true
           exit 1
 
       - name: Cache Gradle
@@ -97,68 +85,72 @@ jobs:
             --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
             2>&1 | tee ../../gradle.log
-          EXIT=$?
-          echo "GRADLE_EXIT=$EXIT" >> "$GITHUB_ENV"
+          GRADLE_EXIT=${PIPESTATUS[0]}
+          echo "GRADLE_EXIT=$GRADLE_EXIT" >> "$GITHUB_ENV"
           set -e
 
       - name: Save gradle log
         if: always()
         run: |
-          git add gradle.log || true
-          git commit -m "build: gradle log [skip ci]" --allow-empty || true
-          git push || true
+          git add gradle.log 2>/dev/null || true
+          git commit -m "build: gradle log [skip ci]" --allow-empty 2>/dev/null || true
+          git push 2>/dev/null || true
 
       - name: Fail if gradle failed
         if: env.GRADLE_EXIT != '0'
         run: |
-          echo "❌ Gradle failed (exit ${{ env.GRADLE_EXIT }})"
-          grep -E "error:|Error:|FAILURE|Exception" gradle.log | tail -30 || true
+          echo "❌ Gradle failed"
+          grep -E "error:|FAILURE|Exception" gradle.log | tail -20 || true
           exit 1
 
       - name: Locate APK
         run: |
           APK=$(find GVRChat/android -name "*.apk" | grep -v test | head -1)
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
-          echo "Found APK: $APK ($(du -sh $APK | cut -f1))"
+          ls -lh "$APK"
 
-      - name: Upload APK to HuggingFace
+      - name: Upload to HuggingFace
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           pip install huggingface_hub -q
-          python3 << 'PYEOF'
+          python3 - << 'PYEOF'
           import os
           from huggingface_hub import HfApi
-          api  = HfApi(token=os.environ["HF_TOKEN"])
+          api = HfApi(token=os.environ["HF_TOKEN"])
           repo = "ahmedxg/gvr-chat-app"
           apk  = os.environ["APK_PATH"]
-          # ensure repo exists
           try:
               api.create_repo(repo, repo_type="dataset", exist_ok=True, private=False)
-          except Exception as e:
-              print(f"Repo create: {e}")
+          except: pass
           api.upload_file(
               path_or_fileobj=apk,
               path_in_repo="GVR-Chat.apk",
               repo_id=repo,
               repo_type="dataset",
           )
-          print("✅ APK uploaded → https://huggingface.co/datasets/ahmedxg/gvr-chat-app")
+          print("✅ https://huggingface.co/datasets/ahmedxg/gvr-chat-app")
           PYEOF
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "apk-${{ github.run_number }}"
-          name: "GVRChat v${{ github.run_number }}"
+          name: "GVRChat v${{ github.run_number }} — with Terminal"
           body: |
-            GVRChat APK with embedded proot+Alpine terminal.
+            **GVRChat** — on-device AI + real Linux terminal
 
-            **New in this build:**
-            - Real Linux terminal (proot + Alpine) — run bash, Python, git, curl, ffmpeg…
-            - Install any package: `apk add <pkg>`
-            - AI decides autonomously when to use terminal/python/search
-            - Import any GGUF model from device storage
+            **Terminal features:**
+            - proot + Alpine Linux (runs on first launch, ~6 MB download)
+            - Run bash, Python 3, git, curl, ffmpeg, nodejs — anything
+            - Install packages: AI can `apk add` whatever it needs
+            - AI calls tools automatically based on your request
+
+            **Model support:**
+            - Import any `.gguf` from your phone storage
+            - Supports text, vision (Qwen-VL + mmproj), tool-use models
+
+            **Download:** [GVR-Chat.apk](https://huggingface.co/datasets/ahmedxg/gvr-chat-app/resolve/main/GVR-Chat.apk)
           files: ${{ env.APK_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
