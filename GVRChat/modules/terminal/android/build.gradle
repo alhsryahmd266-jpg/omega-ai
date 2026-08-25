@@ -1,21 +1,43 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
-apply plugin: 'expo-module-gradle-plugin'
 
 android {
   namespace "expo.modules.terminal"
-  compileSdkVersion safeExtGet("compileSdkVersion", 34)
+  compileSdkVersion 34
 
   defaultConfig {
-    minSdkVersion safeExtGet("minSdkVersion", 24)
-    targetSdkVersion safeExtGet("targetSdkVersion", 34)
+    minSdkVersion 24
+    targetSdkVersion 34
+    versionCode 1
+    versionName "1.0"
   }
-  buildFeatures { buildConfig true }
-  kotlinOptions { jvmTarget = "17" }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
 }
 
 dependencies {
-  implementation project(':expo-modules-core')
-  implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlinVersion}"
+  implementation "com.facebook.react:react-android"
+  implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+  // expo-modules-core — provided by the host app, compileOnly to avoid duplication
+  compileOnly project(':expo-modules-core')
 }
