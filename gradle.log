@@ -59,9 +59,6 @@ Using expo modules
   - [32mterminal[0m (1.0.0)
 
 
-> Configure project :llama.rn
-🚫 Hexagon SDK not found — building CPU-only
-
 > Configure project :react-native-reanimated
 Android gradle plugin: 8.2.1
 Gradle: 8.8
@@ -71,7 +68,6 @@ Gradle: 8.8
 > Task :app:generateCodegenSchemaFromJavaScript SKIPPED
 > Task :app:generateCodegenArtifactsFromSchema SKIPPED
 > Task :app:generatePackageList
-> Task :app:syncRNLlamaHtpAssets
 > Task :app:preBuild
 > Task :app:preReleaseBuild
 > Task :app:generateReleaseBuildConfig
@@ -83,8 +79,8 @@ Gradle: 8.8
 > Task :expo-blur:preBuild UP-TO-DATE
 > Task :expo-blur:preReleaseBuild UP-TO-DATE
 > Task :expo-blur:writeReleaseAarMetadata
-> Task :expo-asset:writeReleaseAarMetadata
 > Task :expo:writeReleaseAarMetadata
+> Task :expo-asset:writeReleaseAarMetadata
 
 > Task :expo-constants:createExpoConfig
 The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set.
@@ -92,437 +88,102 @@ Proceeding without mode-specific .env
 
 > Task :expo-constants:preBuild
 > Task :expo-constants:preReleaseBuild
+> Task :expo-constants:writeReleaseAarMetadata
 > Task :expo-document-picker:preBuild UP-TO-DATE
 > Task :expo-document-picker:preReleaseBuild UP-TO-DATE
-> Task :expo-constants:writeReleaseAarMetadata
-> Task :expo-document-picker:writeReleaseAarMetadata
 > Task :expo-file-system:preBuild UP-TO-DATE
+> Task :expo-document-picker:writeReleaseAarMetadata
 > Task :expo-file-system:preReleaseBuild UP-TO-DATE
-> Task :expo-file-system:writeReleaseAarMetadata
 > Task :expo-font:preBuild UP-TO-DATE
 > Task :expo-font:preReleaseBuild UP-TO-DATE
+> Task :expo-file-system:writeReleaseAarMetadata
 > Task :expo-keep-awake:preBuild UP-TO-DATE
 > Task :expo-keep-awake:preReleaseBuild UP-TO-DATE
 > Task :expo-font:writeReleaseAarMetadata
 > Task :expo-linear-gradient:preBuild UP-TO-DATE
-> Task :expo-linear-gradient:preReleaseBuild UP-TO-DATE
 > Task :expo-keep-awake:writeReleaseAarMetadata
+> Task :expo-linear-gradient:preReleaseBuild UP-TO-DATE
 > Task :expo-modules-core:preBuild UP-TO-DATE
 > Task :expo-modules-core:preReleaseBuild UP-TO-DATE
 > Task :expo-linear-gradient:writeReleaseAarMetadata
 > Task :expo-video-processor:preBuild UP-TO-DATE
-> Task :expo-modules-core:writeReleaseAarMetadata
 > Task :expo-video-processor:preReleaseBuild UP-TO-DATE
-> Task :llama.rn:preBuild UP-TO-DATE
-> Task :llama.rn:preReleaseBuild UP-TO-DATE
-> Task :expo-video-processor:writeReleaseAarMetadata
+> Task :expo-modules-core:writeReleaseAarMetadata
 > Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
 > Task :react-native-async-storage_async-storage:preReleaseBuild UP-TO-DATE
-> Task :llama.rn:writeReleaseAarMetadata
+> Task :expo-video-processor:writeReleaseAarMetadata
 > Task :react-native-gesture-handler:preBuild UP-TO-DATE
-> Task :react-native-async-storage_async-storage:writeReleaseAarMetadata
 > Task :react-native-gesture-handler:preReleaseBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:writeReleaseAarMetadata
+> Task :react-native-gesture-handler:writeReleaseAarMetadata
 > Task :react-native-reanimated:assertLatestReactNativeWithNewArchitectureTask SKIPPED
 > Task :react-native-reanimated:assertMinimalReactNativeVersionTask SKIPPED
-> Task :react-native-gesture-handler:writeReleaseAarMetadata
 > Task :react-native-reanimated:prepareHeadersForPrefab
 > Task :react-native-reanimated:preBuild
 > Task :react-native-reanimated:preReleaseBuild
-> Task :react-native-reanimated:writeReleaseAarMetadata
 > Task :react-native-safe-area-context:preBuild UP-TO-DATE
 > Task :react-native-safe-area-context:preReleaseBuild UP-TO-DATE
+> Task :react-native-reanimated:writeReleaseAarMetadata
 > Task :react-native-screens:preBuild UP-TO-DATE
 > Task :react-native-screens:preReleaseBuild UP-TO-DATE
 > Task :react-native-safe-area-context:writeReleaseAarMetadata
 > Task :react-native-svg:preBuild UP-TO-DATE
 > Task :react-native-svg:preReleaseBuild UP-TO-DATE
 > Task :react-native-screens:writeReleaseAarMetadata
-> Task :react-native-svg:writeReleaseAarMetadata
 > Task :terminal:preBuild UP-TO-DATE
+> Task :react-native-svg:writeReleaseAarMetadata
 > Task :terminal:preReleaseBuild UP-TO-DATE
 > Task :terminal:writeReleaseAarMetadata
+> Task :app:checkReleaseAarMetadata
 
 > Task :app:createBundleReleaseJsAndAssets
 Starting Metro Bundler
 warning: Bundler cache is empty, rebuilding (this may take a minute)
-Android Bundled 6203ms node_modules/expo/AppEntry.js (707 modules)
-Writing bundle output to: /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle
-Writing sourcemap output to: /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/intermediates/sourcemaps/react/release/index.android.bundle.packager.map
-Copying 19 asset files
-Done writing bundle output
-Done writing sourcemap output
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:767:63: warning: Direct call to eval(), but lexical scope is not supported.
-...typeof expo === "undefined" ? eval("require") : function (moduleId) {
-                                 ^~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:3366:16: warning: the variable "SharedArrayBuffer" was not declared in function "from"
-    if (typeof SharedArrayBuffer !== 'undefined' && (isInstance(value, Shared...
-               ^~~~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:7358:18: warning: the variable "DebuggerInternal" was not declared in function "__shouldPauseOnThrow"
-          typeof DebuggerInternal !== 'undefined' &&
-                 ^~~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:19564:7: warning: the variable "setTimeout" was not declared in function "logCapturedError"
-      setTimeout(function () {
-      ^~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:17674:31: warning: the variable "nativeFabricUIManager" was not declared in anonymous function " 376#"
-  var _nativeFabricUIManage = nativeFabricUIManager,
-                              ^~~~~~~~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:17702:21: warning: the variable "clearTimeout" was not declared in anonymous function " 376#"
-    cancelTimeout = clearTimeout;
-                    ^~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:22332:30: warning: the variable "__REACT_DEVTOOLS_GLOBAL_HOOK__" was not declared in anonymous function " 376#"
-  if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
-                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:23887:5: warning: the variable "setImmediate" was not declared in function "handleResolved"
-    setImmediate(function () {
-    ^~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:27920:5: warning: the variable "fetch" was not declared in anonymous function " 590#"
-    fetch,
-    ^~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:27921:5: warning: the variable "Headers" was not declared in anonymous function " 590#"
-    Headers,
-    ^~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:27922:5: warning: the variable "Request" was not declared in anonymous function " 590#"
-    Request,
-    ^~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:27923:5: warning: the variable "Response" was not declared in anonymous function " 590#"
-    Response
-    ^~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:28080:24: warning: the variable "FileReader" was not declared in function "readBlobAsArrayBuffer"
-      var reader = new FileReader();
-                       ^~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:28131:36: warning: the variable "Blob" was not declared in anonymous function " 601#"
-        } else if (support.blob && Blob.prototype.isPrototypeOf(body)) {
-                                   ^~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:28133:40: warning: the variable "FormData" was not declared in anonymous function " 601#"
-        } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
-                                       ^~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:28135:44: warning: the variable "URLSearchParams" was not declared in anonymous function " 601#"
-...e if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body...
-                                 ^~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:28254:26: warning: the variable "AbortController" was not declared in anonymous function " 607#"
-          var ctrl = new AbortController();
-                         ^~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:28388:23: warning: the variable "XMLHttpRequest" was not declared in anonymous function " 611#"
-        var xhr = new XMLHttpRequest();
-                      ^~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:27933:71: warning: the variable "self" was not declared in anonymous function " 593#"
-...undefined' && globalThis || typeof self !== 'undefined' && self ||
-                                      ^~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:31923:27: warning: the variable "performance" was not declared in anonymous function " 768#"
-  if ("object" === typeof performance && "function" === typeof performance.no...
-                          ^~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:31946:26: warning: the variable "navigator" was not declared in anonymous function " 768#"
-  "undefined" !== typeof navigator && undefined !== navigator.scheduling && u...
-                         ^~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:32056:37: warning: the variable "MessageChannel" was not declared in anonymous function " 768#"
-  };else if ("undefined" !== typeof MessageChannel) {
-                                    ^~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:32071:34: warning: the variable "nativeRuntimeScheduler" was not declared in anonymous function " 768#"
-... = "undefined" !== typeof nativeRuntimeScheduler ? nativeRuntimeScheduler....
-                             ^~~~~~~~~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:43837:34: warning: the variable "requestAnimationFrame" was not declared in function "start 9#"
-...    this._animationFrame = requestAnimationFrame(this.onUpdate.bind(this));
-                              ^~~~~~~~~~~~~~~~~~~~~
+Error: Unable to resolve module llama.rn from /home/runner/work/omega-ai/omega-ai/GVRChat/src/localLLM.ts: llama.rn could not be found within the project or in these directories:
+Android Bundling failed 9539ms node_modules/expo/AppEntry.js (700 modules)
+  node_modules
+[0m [90m 10 |[39m [90m * - First load of a new model takes 10-30s depending on size[39m
+ [90m 11 |[39m [90m */[39m
+[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { initLlama[33m,[39m [33mLlamaContext[39m[33m,[39m releaseAllLlama } [36mfrom[39m [32m'llama.rn'[39m[33m;[39m
+ [90m    |[39m                                                           [31m[1m^[22m[39m
+ [90m 13 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mFileSystem[39m [36mfrom[39m [32m'expo-file-system'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mDocumentPicker[39m [36mfrom[39m [32m'expo-document-picker'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m[0m
+Error: Unable to resolve module llama.rn from /home/runner/work/omega-ai/omega-ai/GVRChat/src/localLLM.ts: llama.rn could not be found within the project or in these directories:
+  node_modules
+[0m [90m 10 |[39m [90m * - First load of a new model takes 10-30s depending on size[39m
+ [90m 11 |[39m [90m */[39m
+[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { initLlama[33m,[39m [33mLlamaContext[39m[33m,[39m releaseAllLlama } [36mfrom[39m [32m'llama.rn'[39m[33m;[39m
+ [90m    |[39m                                                           [31m[1m^[22m[39m
+ [90m 13 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mFileSystem[39m [36mfrom[39m [32m'expo-file-system'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m [33m*[39m [36mas[39m [33mDocumentPicker[39m [36mfrom[39m [32m'expo-document-picker'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m [33mAsyncStorage[39m [36mfrom[39m [32m'@react-native-async-storage/async-storage'[39m[33m;[39m[0m
+    at ModuleResolver.resolveDependency (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/node-haste/DependencyGraph/ModuleResolution.js:139:15)
+    at DependencyGraph.resolveDependency (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/node-haste/DependencyGraph.js:232:43)
+    at /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/lib/transformHelpers.js:156:21
+    at resolveDependencies (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:42:25)
+    at visit (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:83:30)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Promise.all (index 11)
+    at visit (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:92:5)
+    at async Promise.all (index 2)
+    at visit (/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/metro/src/DeltaBundler/buildSubgraph.js:92:5)
 
-> Task :app:checkReleaseAarMetadata
-> Task :app:generateReleaseResValues
-> Task :expo:generateReleaseResValues
-> Task :expo:generateReleaseResources
-> Task :expo:packageReleaseResources
-> Task :expo-asset:generateReleaseResValues
-> Task :expo-asset:generateReleaseResources
-> Task :expo-asset:packageReleaseResources
-> Task :expo-blur:generateReleaseResValues
-> Task :expo-blur:generateReleaseResources
-> Task :expo-blur:packageReleaseResources
-> Task :expo-constants:generateReleaseResValues
-> Task :expo-constants:generateReleaseResources
-> Task :expo-constants:packageReleaseResources
-> Task :expo-document-picker:generateReleaseResValues
-> Task :expo-document-picker:generateReleaseResources
-> Task :expo-document-picker:packageReleaseResources
-> Task :expo-file-system:generateReleaseResValues
-> Task :expo-file-system:generateReleaseResources
-> Task :expo-file-system:packageReleaseResources
-> Task :expo-font:generateReleaseResValues
-> Task :expo-font:generateReleaseResources
-> Task :expo-font:packageReleaseResources
-> Task :expo-keep-awake:generateReleaseResValues
-> Task :expo-keep-awake:generateReleaseResources
-> Task :expo-keep-awake:packageReleaseResources
-> Task :expo-linear-gradient:generateReleaseResValues
-> Task :expo-linear-gradient:generateReleaseResources
-> Task :expo-linear-gradient:packageReleaseResources
-> Task :expo-modules-core:generateReleaseResValues
-> Task :expo-modules-core:generateReleaseResources
-> Task :expo-modules-core:packageReleaseResources
-> Task :expo-video-processor:generateReleaseResValues
-> Task :expo-video-processor:generateReleaseResources
-> Task :expo-video-processor:packageReleaseResources
-> Task :llama.rn:generateReleaseResValues
-> Task :llama.rn:generateReleaseResources
-> Task :llama.rn:packageReleaseResources
-> Task :react-native-async-storage_async-storage:generateReleaseResValues
-> Task :react-native-async-storage_async-storage:generateReleaseResources
-> Task :react-native-async-storage_async-storage:packageReleaseResources
-> Task :react-native-gesture-handler:generateReleaseResValues
-> Task :react-native-gesture-handler:generateReleaseResources
-> Task :react-native-gesture-handler:packageReleaseResources
-> Task :react-native-reanimated:generateReleaseResValues
-> Task :react-native-reanimated:generateReleaseResources
-> Task :react-native-reanimated:packageReleaseResources
-> Task :react-native-safe-area-context:generateReleaseResValues
-> Task :react-native-safe-area-context:generateReleaseResources
-> Task :react-native-safe-area-context:packageReleaseResources
-> Task :react-native-screens:generateReleaseResValues
-> Task :react-native-screens:generateReleaseResources
-> Task :react-native-screens:packageReleaseResources
-> Task :react-native-svg:generateReleaseResValues
-> Task :react-native-svg:generateReleaseResources
-> Task :react-native-svg:packageReleaseResources
-> Task :terminal:generateReleaseResValues
-> Task :terminal:generateReleaseResources
-> Task :terminal:packageReleaseResources
-> Task :app:mapReleaseSourceSetPaths
-> Task :app:generateReleaseResources
-> Task :app:packageReleaseResources
-> Task :app:mergeReleaseResources
-> Task :app:createReleaseCompatibleScreenManifests
-> Task :app:extractDeepLinksRelease
-> Task :expo:extractDeepLinksRelease
-> Task :expo-asset:extractDeepLinksRelease
-> Task :expo-blur:extractDeepLinksRelease
-> Task :app:parseReleaseLocalResources
-> Task :expo-constants:extractDeepLinksRelease
-> Task :expo:processReleaseManifest
-> Task :expo-asset:processReleaseManifest
-> Task :expo-constants:processReleaseManifest
-> Task :expo-blur:processReleaseManifest
-> Task :expo-document-picker:extractDeepLinksRelease
-> Task :expo-file-system:extractDeepLinksRelease
-> Task :expo-document-picker:processReleaseManifest
-> Task :expo-font:extractDeepLinksRelease
-> Task :expo-font:processReleaseManifest
-
-> Task :expo-file-system:processReleaseManifest
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-file-system/android/src/main/AndroidManifest.xml:6:9-8:20 Warning:
-	provider#expo.modules.filesystem.FileSystemFileProvider@android:authorities was tagged at AndroidManifest.xml:6 to replace other declarations but no other declaration present
-
-> Task :expo-keep-awake:extractDeepLinksRelease
-> Task :expo-keep-awake:processReleaseManifest
-> Task :expo-linear-gradient:extractDeepLinksRelease
-> Task :expo-modules-core:extractDeepLinksRelease
-> Task :expo-linear-gradient:processReleaseManifest
-> Task :expo-video-processor:extractDeepLinksRelease
-
-> Task :expo-modules-core:processReleaseManifest
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/AndroidManifest.xml:8:9-11:45 Warning:
-	meta-data#com.facebook.soloader.enabled@android:value was tagged at AndroidManifest.xml:8 to replace other declarations but no other declaration present
-
-> Task :llama.rn:extractDeepLinksRelease
-> Task :expo-video-processor:processReleaseManifest
-
-> Task :llama.rn:processReleaseManifest
-package="com.rnllama" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/AndroidManifest.xml.
-Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
-Recommendation: remove package="com.rnllama" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/AndroidManifest.xml.
-
-> Task :react-native-async-storage_async-storage:extractDeepLinksRelease
-> Task :react-native-gesture-handler:extractDeepLinksRelease
-
-> Task :react-native-async-storage_async-storage:processReleaseManifest
-package="com.reactnativecommunity.asyncstorage" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@react-native-async-storage/async-storage/android/src/main/AndroidManifest.xml.
-Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
-Recommendation: remove package="com.reactnativecommunity.asyncstorage" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@react-native-async-storage/async-storage/android/src/main/AndroidManifest.xml.
-
-> Task :react-native-reanimated:extractDeepLinksRelease
-
-> Task :react-native-gesture-handler:processReleaseManifest
-package="com.swmansion.gesturehandler" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-gesture-handler/android/src/main/AndroidManifest.xml.
-Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
-Recommendation: remove package="com.swmansion.gesturehandler" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-gesture-handler/android/src/main/AndroidManifest.xml.
-
-> Task :react-native-reanimated:processReleaseManifest
-package="com.swmansion.reanimated" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-reanimated/android/src/main/AndroidManifest.xml.
-Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
-Recommendation: remove package="com.swmansion.reanimated" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-reanimated/android/src/main/AndroidManifest.xml.
-
-> Task :react-native-safe-area-context:extractDeepLinksRelease
-> Task :react-native-screens:extractDeepLinksRelease
-
-> Task :react-native-safe-area-context:processReleaseManifest
-package="com.th3rdwave.safeareacontext" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
-Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
-Recommendation: remove package="com.th3rdwave.safeareacontext" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
-
-> Task :react-native-svg:extractDeepLinksRelease
-
-> Task :react-native-screens:processReleaseManifest
-package="com.swmansion.rnscreens" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-screens/android/src/main/AndroidManifest.xml.
-Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
-Recommendation: remove package="com.swmansion.rnscreens" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-screens/android/src/main/AndroidManifest.xml.
-
-> Task :react-native-svg:processReleaseManifest
-package="com.horcrux.svg" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-svg/android/src/main/AndroidManifest.xml.
-Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
-Recommendation: remove package="com.horcrux.svg" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-svg/android/src/main/AndroidManifest.xml.
-
-> Task :terminal:extractDeepLinksRelease
-> Task :terminal:processReleaseManifest
-> Task :expo:compileReleaseLibraryResources
-
-> Task :app:processReleaseMainManifest
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/src/main/AndroidManifest.xml Warning:
-	provider#expo.modules.filesystem.FileSystemFileProvider@android:authorities was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
-
-> Task :app:processReleaseManifest
-> Task :expo-asset:compileReleaseLibraryResources
-> Task :expo-blur:compileReleaseLibraryResources
-> Task :expo-asset:parseReleaseLocalResources
-> Task :expo:parseReleaseLocalResources
-> Task :expo-blur:parseReleaseLocalResources
-> Task :app:processReleaseManifestForPackage
-> Task :expo-constants:compileReleaseLibraryResources
-> Task :expo-blur:generateReleaseRFile
-> Task :expo:generateReleaseRFile
-> Task :expo-asset:generateReleaseRFile
-> Task :expo-document-picker:compileReleaseLibraryResources
-> Task :expo-constants:parseReleaseLocalResources
-> Task :expo-file-system:compileReleaseLibraryResources
-> Task :expo-document-picker:parseReleaseLocalResources
-> Task :expo-file-system:parseReleaseLocalResources
-> Task :expo-constants:generateReleaseRFile
-> Task :expo-document-picker:generateReleaseRFile
-> Task :expo-font:compileReleaseLibraryResources
-> Task :expo-file-system:generateReleaseRFile
-> Task :expo-keep-awake:compileReleaseLibraryResources
-> Task :expo-font:parseReleaseLocalResources
-> Task :expo-keep-awake:parseReleaseLocalResources
-> Task :expo-font:generateReleaseRFile
-> Task :expo-linear-gradient:compileReleaseLibraryResources
-> Task :expo-keep-awake:generateReleaseRFile
-> Task :expo-modules-core:compileReleaseLibraryResources
-> Task :expo-modules-core:parseReleaseLocalResources
-> Task :expo-linear-gradient:parseReleaseLocalResources
-> Task :expo-video-processor:compileReleaseLibraryResources
-> Task :llama.rn:compileReleaseLibraryResources
-> Task :expo-modules-core:generateReleaseRFile
-> Task :expo-video-processor:parseReleaseLocalResources
-> Task :llama.rn:parseReleaseLocalResources
-> Task :expo-linear-gradient:generateReleaseRFile
-> Task :react-native-async-storage_async-storage:compileReleaseLibraryResources
-> Task :expo-video-processor:generateReleaseRFile
-> Task :react-native-async-storage_async-storage:parseReleaseLocalResources
-> Task :llama.rn:generateReleaseRFile
-> Task :react-native-gesture-handler:compileReleaseLibraryResources
-> Task :react-native-reanimated:compileReleaseLibraryResources
-> Task :react-native-gesture-handler:parseReleaseLocalResources
-> Task :react-native-async-storage_async-storage:generateReleaseRFile
-> Task :react-native-reanimated:parseReleaseLocalResources
-> Task :react-native-safe-area-context:compileReleaseLibraryResources
-> Task :react-native-gesture-handler:generateReleaseRFile
-> Task :react-native-reanimated:generateReleaseRFile
-> Task :react-native-safe-area-context:parseReleaseLocalResources
-> Task :react-native-svg:compileReleaseLibraryResources
-> Task :react-native-screens:compileReleaseLibraryResources
-> Task :react-native-safe-area-context:generateReleaseRFile
-> Task :react-native-svg:parseReleaseLocalResources
-> Task :react-native-screens:parseReleaseLocalResources
-> Task :terminal:compileReleaseLibraryResources
-> Task :react-native-screens:generateReleaseRFile
-> Task :expo:checkKotlinGradlePluginConfigurationErrors
-> Task :terminal:parseReleaseLocalResources
-> Task :expo:generateReleaseBuildConfig
-> Task :react-native-svg:generateReleaseRFile
-> Task :expo-asset:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-asset:generateReleaseBuildConfig
-> Task :terminal:generateReleaseRFile
-> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-modules-core:generateReleaseBuildConfig
-> Task :app:processReleaseResources
-> Task :expo-blur:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-asset:javaPreCompileRelease
-> Task :expo-modules-core:javaPreCompileRelease
-> Task :expo-blur:generateReleaseBuildConfig
-> Task :expo-constants:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-blur:javaPreCompileRelease
-> Task :expo-constants:generateReleaseBuildConfig
-> Task :expo-constants:javaPreCompileRelease
-> Task :expo-document-picker:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-document-picker:generateReleaseBuildConfig
-> Task :expo-file-system:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-document-picker:javaPreCompileRelease
-> Task :expo-file-system:generateReleaseBuildConfig
-> Task :expo-font:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-file-system:javaPreCompileRelease
-> Task :expo-font:generateReleaseBuildConfig
-> Task :expo-keep-awake:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-font:javaPreCompileRelease
-> Task :expo-keep-awake:generateReleaseBuildConfig
-> Task :expo-linear-gradient:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-keep-awake:javaPreCompileRelease
-> Task :expo-linear-gradient:generateReleaseBuildConfig
-> Task :expo-video-processor:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-linear-gradient:javaPreCompileRelease
-> Task :expo-video-processor:generateReleaseBuildConfig
-> Task :terminal:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-video-processor:javaPreCompileRelease
-> Task :terminal:generateReleaseBuildConfig
-> Task :terminal:javaPreCompileRelease
-> Task :expo:javaPreCompileRelease
-> Task :llama.rn:generateReleaseBuildConfig
-> Task :llama.rn:javaPreCompileRelease
-> Task :react-native-async-storage_async-storage:generateReleaseBuildConfig
-
-> Task :llama.rn:compileReleaseJavaWithJavac
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaModule.java:11: error: cannot find symbol
-public class RNLlamaModule extends NativeRNLlamaSpec {
-                                   ^
-  symbol: class NativeRNLlamaSpec
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaPackage.java:22: error: incompatible types: RNLlamaModule cannot be converted to NativeModule
-      return new com.rnllama.RNLlamaModule(reactContext);
-             ^
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaModule.java:21: error: method does not override or implement a method from a supertype
-  @Override
-  ^
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaModule.java:27: error: method does not override or implement a method from a supertype
-  @Override
-  ^
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaModule.java:57: error: method does not override or implement a method from a supertype
-  @Override
-  ^
-/home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaModule.java:64: error: cannot find symbol
-    super.invalidate();
-    ^
-  symbol:   variable super
-  location: class RNLlamaModule
-Note: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaPackage.java uses or overrides a deprecated API.
-Note: Recompile with -Xlint:deprecation for details.
-6 errors
-
-> Task :llama.rn:compileReleaseJavaWithJavac FAILED
-
-> Task :expo-modules-core:compileReleaseKotlin
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt:20:26 'Promise' is deprecated. AsyncFunction will crash when called. Use expo.modules.kotlin.Promise instead
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt:63:51 'Promise' is deprecated. AsyncFunction will crash when called. Use expo.modules.kotlin.Promise instead
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt:90:54 'Promise' is deprecated. AsyncFunction will crash when called. Use expo.modules.kotlin.Promise instead
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/defaultmodules/CoreModule.kt:6:34 'ReactFeatureFlags' is deprecated. Deprecated in Java
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/defaultmodules/CoreModule.kt:70:12 'ReactFeatureFlags' is deprecated. Deprecated in Java
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/events/KModuleEventEmitterWrapper.kt:97:7 'constructor Event<T : Event<(raw) Event<*>>!>(Int)' is deprecated. Deprecated in Java
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/types/JSTypeConverterHelper.kt:44:17 'get(String!): Any?' is deprecated. Deprecated in Java
+> Task :app:createBundleReleaseJsAndAssets FAILED
 
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Execution failed for task ':llama.rn:compileReleaseJavaWithJavac'.
-> Compilation failed; see the compiler error output for details.
+Execution failed for task ':app:createBundleReleaseJsAndAssets'.
+> Process 'command 'node'' finished with non-zero exit value 1
 
 * Try:
-> Run with --info option to get more log output.
+> Run with --info or --debug option to get more log output.
 > Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
 
 * Exception is:
-org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':llama.rn:compileReleaseJavaWithJavac'.
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:createBundleReleaseJsAndAssets'.
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
 	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:282)
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
@@ -554,44 +215,19 @@ org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':llama.r
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
-Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Compilation failed; see the compiler error output for details.
-	at org.gradle.api.internal.tasks.compile.JdkJavaCompiler.execute(JdkJavaCompiler.java:61)
-	at org.gradle.api.internal.tasks.compile.JdkJavaCompiler.execute(JdkJavaCompiler.java:41)
-	at org.gradle.api.internal.tasks.compile.NormalizingJavaCompiler.delegateAndHandleErrors(NormalizingJavaCompiler.java:98)
-	at org.gradle.api.internal.tasks.compile.NormalizingJavaCompiler.execute(NormalizingJavaCompiler.java:52)
-	at org.gradle.api.internal.tasks.compile.NormalizingJavaCompiler.execute(NormalizingJavaCompiler.java:38)
-	at org.gradle.api.internal.tasks.compile.AnnotationProcessorDiscoveringCompiler.execute(AnnotationProcessorDiscoveringCompiler.java:52)
-	at org.gradle.api.internal.tasks.compile.AnnotationProcessorDiscoveringCompiler.execute(AnnotationProcessorDiscoveringCompiler.java:38)
-	at org.gradle.api.internal.tasks.compile.ModuleApplicationNameWritingCompiler.execute(ModuleApplicationNameWritingCompiler.java:46)
-	at org.gradle.api.internal.tasks.compile.ModuleApplicationNameWritingCompiler.execute(ModuleApplicationNameWritingCompiler.java:36)
-	at org.gradle.jvm.toolchain.internal.DefaultToolchainJavaCompiler.execute(DefaultToolchainJavaCompiler.java:57)
-	at org.gradle.api.tasks.compile.JavaCompile.lambda$createToolchainCompiler$3(JavaCompile.java:202)
-	at org.gradle.api.internal.tasks.compile.CleaningJavaCompiler.execute(CleaningJavaCompiler.java:53)
-	at org.gradle.api.internal.tasks.compile.incremental.IncrementalCompilerFactory.lambda$createRebuildAllCompiler$0(IncrementalCompilerFactory.java:52)
-	at org.gradle.api.internal.tasks.compile.incremental.SelectiveCompiler.execute(SelectiveCompiler.java:70)
-	at org.gradle.api.internal.tasks.compile.incremental.SelectiveCompiler.execute(SelectiveCompiler.java:44)
-	at org.gradle.api.internal.tasks.compile.incremental.IncrementalResultStoringCompiler.execute(IncrementalResultStoringCompiler.java:66)
-	at org.gradle.api.internal.tasks.compile.incremental.IncrementalResultStoringCompiler.execute(IncrementalResultStoringCompiler.java:52)
-	at org.gradle.api.internal.tasks.compile.CompileJavaBuildOperationReportingCompiler$1.call(CompileJavaBuildOperationReportingCompiler.java:64)
-	at org.gradle.api.internal.tasks.compile.CompileJavaBuildOperationReportingCompiler$1.call(CompileJavaBuildOperationReportingCompiler.java:48)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
-	at org.gradle.api.internal.tasks.compile.CompileJavaBuildOperationReportingCompiler.execute(CompileJavaBuildOperationReportingCompiler.java:48)
-	at org.gradle.api.tasks.compile.JavaCompile.performCompilation(JavaCompile.java:220)
-	at org.gradle.api.tasks.compile.JavaCompile.performIncrementalCompilation(JavaCompile.java:161)
-	at org.gradle.api.tasks.compile.JavaCompile.compile(JavaCompile.java:146)
+Caused by: org.gradle.process.internal.ExecException: Process 'command 'node'' finished with non-zero exit value 1
+	at org.gradle.process.internal.DefaultExecHandle$ExecResultImpl.assertNormalExitValue(DefaultExecHandle.java:442)
+	at org.gradle.process.internal.DefaultExecAction.execute(DefaultExecAction.java:38)
+	at org.gradle.process.internal.DefaultExecActionFactory.exec(DefaultExecActionFactory.java:202)
+	at org.gradle.api.internal.project.DefaultProject.exec(DefaultProject.java:1229)
+	at com.facebook.react.tasks.BundleHermesCTask.runCommand(BundleHermesCTask.kt:130)
+	at com.facebook.react.tasks.BundleHermesCTask.run(BundleHermesCTask.kt:90)
 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
 	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
 	at org.gradle.internal.reflect.JavaMethod.invoke(JavaMethod.java:125)
-	at org.gradle.api.internal.project.taskfactory.IncrementalTaskAction.doExecute(IncrementalTaskAction.java:45)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.doExecute(StandardTaskAction.java:58)
 	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:51)
-	at org.gradle.api.internal.project.taskfactory.IncrementalTaskAction.execute(IncrementalTaskAction.java:26)
 	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:29)
 	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:244)
 	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:29)
@@ -656,7 +292,7 @@ Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Com
 	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
 	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
 	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
-	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:61)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:56)
 	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
 	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
 	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
@@ -708,5 +344,5 @@ Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Com
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
 
 
-BUILD FAILED in 3m 20s
-224 actionable tasks: 224 executed
+BUILD FAILED in 3m 44s
+37 actionable tasks: 37 executed
