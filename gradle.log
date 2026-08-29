@@ -79,8 +79,8 @@ Gradle: 8.8
 > Task :expo-blur:preBuild UP-TO-DATE
 > Task :expo-blur:preReleaseBuild UP-TO-DATE
 > Task :expo:writeReleaseAarMetadata
-> Task :expo-blur:writeReleaseAarMetadata
 > Task :expo-asset:writeReleaseAarMetadata
+> Task :expo-blur:writeReleaseAarMetadata
 
 > Task :expo-constants:createExpoConfig
 The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set.
@@ -89,8 +89,8 @@ Proceeding without mode-specific .env
 > Task :expo-constants:preBuild
 > Task :expo-constants:preReleaseBuild
 > Task :expo-document-picker:preBuild UP-TO-DATE
-> Task :expo-document-picker:preReleaseBuild UP-TO-DATE
 > Task :expo-constants:writeReleaseAarMetadata
+> Task :expo-document-picker:preReleaseBuild UP-TO-DATE
 > Task :expo-file-system:preBuild UP-TO-DATE
 > Task :expo-file-system:preReleaseBuild UP-TO-DATE
 > Task :expo-document-picker:writeReleaseAarMetadata
@@ -107,25 +107,25 @@ Proceeding without mode-specific .env
 > Task :expo-modules-core:preReleaseBuild UP-TO-DATE
 > Task :expo-linear-gradient:writeReleaseAarMetadata
 > Task :expo-video-processor:preBuild UP-TO-DATE
-> Task :expo-video-processor:preReleaseBuild UP-TO-DATE
 > Task :expo-modules-core:writeReleaseAarMetadata
+> Task :expo-video-processor:preReleaseBuild UP-TO-DATE
 > Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
 > Task :react-native-async-storage_async-storage:preReleaseBuild UP-TO-DATE
 > Task :expo-video-processor:writeReleaseAarMetadata
 > Task :react-native-gesture-handler:preBuild UP-TO-DATE
-> Task :react-native-async-storage_async-storage:writeReleaseAarMetadata
 > Task :react-native-gesture-handler:preReleaseBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:writeReleaseAarMetadata
+> Task :react-native-gesture-handler:writeReleaseAarMetadata
 > Task :react-native-reanimated:assertLatestReactNativeWithNewArchitectureTask SKIPPED
 > Task :react-native-reanimated:assertMinimalReactNativeVersionTask SKIPPED
-> Task :react-native-gesture-handler:writeReleaseAarMetadata
 > Task :react-native-reanimated:prepareHeadersForPrefab
 > Task :react-native-reanimated:preBuild
 > Task :react-native-reanimated:preReleaseBuild
 > Task :react-native-safe-area-context:preBuild UP-TO-DATE
+> Task :react-native-reanimated:writeReleaseAarMetadata
 > Task :react-native-safe-area-context:preReleaseBuild UP-TO-DATE
 > Task :react-native-screens:preBuild UP-TO-DATE
 > Task :react-native-screens:preReleaseBuild UP-TO-DATE
-> Task :react-native-reanimated:writeReleaseAarMetadata
 > Task :react-native-safe-area-context:writeReleaseAarMetadata
 > Task :react-native-svg:preBuild UP-TO-DATE
 > Task :react-native-svg:preReleaseBuild UP-TO-DATE
@@ -138,6 +138,7 @@ Proceeding without mode-specific .env
 > Task :app:createBundleReleaseJsAndAssets
 Starting Metro Bundler
 warning: Bundler cache is empty, rebuilding (this may take a minute)
+Android Bundling failed 6468ms node_modules/expo/AppEntry.js (700 modules)
 Error: Unable to resolve module llama.rn from /home/runner/work/omega-ai/omega-ai/GVRChat/src/localLLM.ts: llama.rn could not be found within the project or in these directories:
   node_modules
 [0m [90m 10 |[39m [90m * - First load of a new model takes 10-30s depending on size[39m
@@ -211,6 +212,35 @@ org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:cre
 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:463)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
+	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:116)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:44)
+	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:264)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:128)
+	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:80)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
 Caused by: org.gradle.process.internal.ExecException: Process 'command 'node'' finished with non-zero exit value 1
@@ -338,9 +368,38 @@ Caused by: org.gradle.process.internal.ExecException: Process 'command 'node'' f
 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:463)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
+	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:116)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:44)
+	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:264)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:128)
+	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:80)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
 
 
-BUILD FAILED in 3m 13s
+BUILD FAILED in 3m 45s
 36 actionable tasks: 36 executed
