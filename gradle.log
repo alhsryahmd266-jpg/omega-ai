@@ -85,10 +85,10 @@ Gradle: 8.8
 > Task :expo-battery:preReleaseBuild UP-TO-DATE
 > Task :expo-blur:preBuild UP-TO-DATE
 > Task :expo-blur:preReleaseBuild UP-TO-DATE
-> Task :expo-blur:writeReleaseAarMetadata
-> Task :expo-battery:writeReleaseAarMetadata
-> Task :expo-asset:writeReleaseAarMetadata
 > Task :expo:writeReleaseAarMetadata
+> Task :expo-asset:writeReleaseAarMetadata
+> Task :expo-battery:writeReleaseAarMetadata
+> Task :expo-blur:writeReleaseAarMetadata
 
 > Task :expo-constants:createExpoConfig
 The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set.
@@ -105,9 +105,9 @@ Proceeding without mode-specific .env
 > Task :expo-font:preBuild UP-TO-DATE
 > Task :expo-font:preReleaseBuild UP-TO-DATE
 > Task :expo-file-system:writeReleaseAarMetadata
-> Task :expo-font:writeReleaseAarMetadata
 > Task :expo-keep-awake:preBuild UP-TO-DATE
 > Task :expo-keep-awake:preReleaseBuild UP-TO-DATE
+> Task :expo-font:writeReleaseAarMetadata
 > Task :expo-linear-gradient:preBuild UP-TO-DATE
 > Task :expo-linear-gradient:preReleaseBuild UP-TO-DATE
 > Task :expo-keep-awake:writeReleaseAarMetadata
@@ -126,30 +126,30 @@ Proceeding without mode-specific .env
 > Task :react-native-gesture-handler:preBuild UP-TO-DATE
 > Task :react-native-async-storage_async-storage:writeReleaseAarMetadata
 > Task :react-native-gesture-handler:preReleaseBuild UP-TO-DATE
-> Task :react-native-reanimated:assertLatestReactNativeWithNewArchitectureTask SKIPPED
 > Task :react-native-gesture-handler:writeReleaseAarMetadata
+> Task :react-native-reanimated:assertLatestReactNativeWithNewArchitectureTask SKIPPED
 > Task :react-native-reanimated:assertMinimalReactNativeVersionTask SKIPPED
 > Task :react-native-reanimated:prepareHeadersForPrefab
 > Task :react-native-reanimated:preBuild
 > Task :react-native-reanimated:preReleaseBuild
 > Task :react-native-safe-area-context:preBuild UP-TO-DATE
+> Task :react-native-reanimated:writeReleaseAarMetadata
 > Task :react-native-safe-area-context:preReleaseBuild UP-TO-DATE
 > Task :react-native-screens:preBuild UP-TO-DATE
 > Task :react-native-screens:preReleaseBuild UP-TO-DATE
-> Task :react-native-reanimated:writeReleaseAarMetadata
-> Task :react-native-svg:preBuild UP-TO-DATE
 > Task :react-native-safe-area-context:writeReleaseAarMetadata
+> Task :react-native-svg:preBuild UP-TO-DATE
 > Task :react-native-svg:preReleaseBuild UP-TO-DATE
-> Task :terminal:preBuild UP-TO-DATE
-> Task :terminal:preReleaseBuild UP-TO-DATE
 > Task :react-native-screens:writeReleaseAarMetadata
+> Task :terminal:preBuild UP-TO-DATE
 > Task :react-native-svg:writeReleaseAarMetadata
+> Task :terminal:preReleaseBuild UP-TO-DATE
 > Task :terminal:writeReleaseAarMetadata
 
 > Task :app:createBundleReleaseJsAndAssets
 Starting Metro Bundler
 warning: Bundler cache is empty, rebuilding (this may take a minute)
-Android Bundled 10176ms node_modules/expo/AppEntry.js (707 modules)
+Android Bundled 10651ms node_modules/expo/AppEntry.js (707 modules)
 Writing bundle output to: /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle
 Writing sourcemap output to: /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/intermediates/sourcemaps/react/release/index.android.bundle.packager.map
 Copying 19 asset files
@@ -293,23 +293,25 @@ Done writing sourcemap output
 > Task :app:mapReleaseSourceSetPaths
 > Task :app:generateReleaseResources
 > Task :app:packageReleaseResources
+> Task :app:mergeReleaseResources
 > Task :app:createReleaseCompatibleScreenManifests
 > Task :app:extractDeepLinksRelease
 > Task :expo:extractDeepLinksRelease
 > Task :expo-asset:extractDeepLinksRelease
-> Task :expo:processReleaseManifest
-> Task :app:parseReleaseLocalResources
-> Task :expo-asset:processReleaseManifest
 > Task :expo-battery:extractDeepLinksRelease
+> Task :app:parseReleaseLocalResources
 > Task :expo-blur:extractDeepLinksRelease
 > Task :expo-battery:processReleaseManifest
-> Task :expo-constants:extractDeepLinksRelease
 > Task :expo-blur:processReleaseManifest
-> Task :expo-constants:processReleaseManifest
+> Task :expo:processReleaseManifest
+> Task :expo-constants:extractDeepLinksRelease
+> Task :expo-asset:processReleaseManifest
 > Task :expo-document-picker:extractDeepLinksRelease
+> Task :expo-constants:processReleaseManifest
 > Task :expo-file-system:extractDeepLinksRelease
 > Task :expo-font:extractDeepLinksRelease
 > Task :expo-document-picker:processReleaseManifest
+> Task :expo-font:processReleaseManifest
 
 > Task :expo-file-system:processReleaseManifest
 /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-file-system/android/src/main/AndroidManifest.xml:6:9-8:20 Warning:
@@ -317,9 +319,8 @@ Done writing sourcemap output
 
 > Task :expo-keep-awake:extractDeepLinksRelease
 > Task :expo-linear-gradient:extractDeepLinksRelease
-> Task :expo-font:processReleaseManifest
-> Task :expo-modules-core:extractDeepLinksRelease
 > Task :expo-keep-awake:processReleaseManifest
+> Task :expo-modules-core:extractDeepLinksRelease
 > Task :expo-linear-gradient:processReleaseManifest
 > Task :expo-video-processor:extractDeepLinksRelease
 
@@ -327,8 +328,8 @@ Done writing sourcemap output
 /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/AndroidManifest.xml:8:9-11:45 Warning:
 	meta-data#com.facebook.soloader.enabled@android:value was tagged at AndroidManifest.xml:8 to replace other declarations but no other declaration present
 
-> Task :expo-video-processor:processReleaseManifest
 > Task :llama.rn:extractDeepLinksRelease
+> Task :expo-video-processor:processReleaseManifest
 > Task :react-native-async-storage_async-storage:extractDeepLinksRelease
 
 > Task :llama.rn:processReleaseManifest
@@ -336,13 +337,12 @@ package="com.rnllama" found in source AndroidManifest.xml: /home/runner/work/ome
 Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
 Recommendation: remove package="com.rnllama" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/AndroidManifest.xml.
 
-> Task :react-native-gesture-handler:extractDeepLinksRelease
-
 > Task :react-native-async-storage_async-storage:processReleaseManifest
 package="com.reactnativecommunity.asyncstorage" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@react-native-async-storage/async-storage/android/src/main/AndroidManifest.xml.
 Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
 Recommendation: remove package="com.reactnativecommunity.asyncstorage" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/@react-native-async-storage/async-storage/android/src/main/AndroidManifest.xml.
 
+> Task :react-native-gesture-handler:extractDeepLinksRelease
 > Task :react-native-reanimated:extractDeepLinksRelease
 
 > Task :react-native-gesture-handler:processReleaseManifest
@@ -380,7 +380,6 @@ Recommendation: remove package="com.horcrux.svg" from the source AndroidManifest
 
 > Task :terminal:processReleaseManifest
 > Task :expo:compileReleaseLibraryResources
-> Task :app:mergeReleaseResources
 
 > Task :app:processReleaseMainManifest
 /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/src/main/AndroidManifest.xml Warning:
@@ -389,79 +388,80 @@ Recommendation: remove package="com.horcrux.svg" from the source AndroidManifest
 > Task :app:processReleaseManifest
 > Task :expo-asset:compileReleaseLibraryResources
 > Task :expo:parseReleaseLocalResources
-> Task :expo-battery:compileReleaseLibraryResources
 > Task :expo-asset:parseReleaseLocalResources
+> Task :expo-battery:compileReleaseLibraryResources
+> Task :app:processReleaseManifestForPackage
+> Task :expo-blur:compileReleaseLibraryResources
 > Task :expo-battery:parseReleaseLocalResources
 > Task :expo-asset:generateReleaseRFile
-> Task :expo-battery:generateReleaseRFile
 > Task :expo:generateReleaseRFile
-> Task :expo-blur:compileReleaseLibraryResources
-> Task :expo-constants:compileReleaseLibraryResources
-> Task :expo-document-picker:compileReleaseLibraryResources
 > Task :expo-blur:parseReleaseLocalResources
+> Task :expo-constants:compileReleaseLibraryResources
+> Task :expo-battery:generateReleaseRFile
+> Task :expo-blur:generateReleaseRFile
+> Task :expo-document-picker:compileReleaseLibraryResources
 > Task :expo-constants:parseReleaseLocalResources
 > Task :expo-document-picker:parseReleaseLocalResources
-> Task :app:processReleaseManifestForPackage
-> Task :expo-blur:generateReleaseRFile
-> Task :expo-document-picker:generateReleaseRFile
 > Task :expo-file-system:compileReleaseLibraryResources
+> Task :expo-document-picker:generateReleaseRFile
 > Task :expo-constants:generateReleaseRFile
 > Task :expo-file-system:parseReleaseLocalResources
 > Task :expo-font:compileReleaseLibraryResources
+> Task :expo-file-system:generateReleaseRFile
 > Task :expo-font:parseReleaseLocalResources
 > Task :expo-keep-awake:compileReleaseLibraryResources
-> Task :expo-file-system:generateReleaseRFile
-> Task :expo-font:generateReleaseRFile
-> Task :expo-linear-gradient:compileReleaseLibraryResources
 > Task :expo-keep-awake:parseReleaseLocalResources
-> Task :expo-linear-gradient:parseReleaseLocalResources
+> Task :expo-linear-gradient:compileReleaseLibraryResources
+> Task :expo-font:generateReleaseRFile
 > Task :expo-modules-core:compileReleaseLibraryResources
 > Task :expo-keep-awake:generateReleaseRFile
-> Task :expo-linear-gradient:generateReleaseRFile
-> Task :expo-modules-core:parseReleaseLocalResources
+> Task :expo-linear-gradient:parseReleaseLocalResources
 > Task :expo-video-processor:compileReleaseLibraryResources
-> Task :llama.rn:compileReleaseLibraryResources
-> Task :react-native-async-storage_async-storage:compileReleaseLibraryResources
+> Task :expo-modules-core:parseReleaseLocalResources
+> Task :expo-linear-gradient:generateReleaseRFile
 > Task :expo-video-processor:parseReleaseLocalResources
 > Task :expo-modules-core:generateReleaseRFile
+> Task :llama.rn:compileReleaseLibraryResources
+> Task :expo-video-processor:generateReleaseRFile
+> Task :react-native-async-storage_async-storage:compileReleaseLibraryResources
 > Task :llama.rn:parseReleaseLocalResources
 > Task :react-native-async-storage_async-storage:parseReleaseLocalResources
-> Task :expo-video-processor:generateReleaseRFile
-> Task :llama.rn:generateReleaseRFile
 > Task :react-native-gesture-handler:compileReleaseLibraryResources
+> Task :llama.rn:generateReleaseRFile
 > Task :react-native-async-storage_async-storage:generateReleaseRFile
 > Task :react-native-reanimated:compileReleaseLibraryResources
 > Task :react-native-gesture-handler:parseReleaseLocalResources
 > Task :react-native-safe-area-context:compileReleaseLibraryResources
 > Task :react-native-reanimated:parseReleaseLocalResources
 > Task :react-native-gesture-handler:generateReleaseRFile
-> Task :react-native-safe-area-context:parseReleaseLocalResources
 > Task :react-native-reanimated:generateReleaseRFile
-> Task :react-native-svg:compileReleaseLibraryResources
-> Task :react-native-safe-area-context:generateReleaseRFile
-> Task :react-native-screens:parseReleaseLocalResources
+> Task :react-native-safe-area-context:parseReleaseLocalResources
 > Task :react-native-screens:compileReleaseLibraryResources
+> Task :react-native-safe-area-context:generateReleaseRFile
+> Task :react-native-svg:compileReleaseLibraryResources
+> Task :react-native-screens:parseReleaseLocalResources
 > Task :react-native-svg:parseReleaseLocalResources
-> Task :terminal:compileReleaseLibraryResources
 > Task :react-native-screens:generateReleaseRFile
+> Task :terminal:compileReleaseLibraryResources
 > Task :react-native-svg:generateReleaseRFile
 > Task :expo:checkKotlinGradlePluginConfigurationErrors
+> Task :terminal:parseReleaseLocalResources
 > Task :expo:generateReleaseBuildConfig
 > Task :expo-asset:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-asset:generateReleaseBuildConfig
-> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors
-> Task :terminal:parseReleaseLocalResources
-> Task :expo-modules-core:generateReleaseBuildConfig
 > Task :terminal:generateReleaseRFile
-> Task :expo-modules-core:javaPreCompileRelease
+> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors
+> Task :expo-modules-core:generateReleaseBuildConfig
+> Task :app:processReleaseResources
 > Task :expo-battery:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-asset:javaPreCompileRelease
+> Task :expo-modules-core:javaPreCompileRelease
 > Task :expo-battery:generateReleaseBuildConfig
 > Task :expo-blur:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-battery:javaPreCompileRelease
 > Task :expo-blur:generateReleaseBuildConfig
-> Task :expo-blur:javaPreCompileRelease
 > Task :expo-constants:checkKotlinGradlePluginConfigurationErrors
+> Task :expo-blur:javaPreCompileRelease
 > Task :expo-constants:generateReleaseBuildConfig
 > Task :expo-constants:javaPreCompileRelease
 > Task :expo-document-picker:checkKotlinGradlePluginConfigurationErrors
@@ -476,8 +476,8 @@ Recommendation: remove package="com.horcrux.svg" from the source AndroidManifest
 > Task :expo-font:javaPreCompileRelease
 > Task :expo-keep-awake:generateReleaseBuildConfig
 > Task :expo-linear-gradient:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-linear-gradient:generateReleaseBuildConfig
 > Task :expo-keep-awake:javaPreCompileRelease
+> Task :expo-linear-gradient:generateReleaseBuildConfig
 > Task :expo-video-processor:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-linear-gradient:javaPreCompileRelease
 > Task :expo-video-processor:generateReleaseBuildConfig
@@ -489,7 +489,6 @@ Recommendation: remove package="com.horcrux.svg" from the source AndroidManifest
 > Task :llama.rn:generateReleaseBuildConfig
 > Task :llama.rn:javaPreCompileRelease
 > Task :react-native-async-storage_async-storage:generateReleaseBuildConfig
-> Task :app:processReleaseResources
 
 > Task :llama.rn:compileReleaseJavaWithJavac
 /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaModule.java:11: error: cannot find symbol
@@ -569,6 +568,35 @@ org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':llama.r
 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:463)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
+	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:116)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:44)
+	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:264)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:128)
+	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:80)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
 Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Compilation failed; see the compiler error output for details.
@@ -721,9 +749,38 @@ Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Com
 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:463)
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
+	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:116)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:44)
+	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:264)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:128)
+	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:80)
+	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
 
 
-BUILD FAILED in 4m 5s
+BUILD FAILED in 4m 2s
 235 actionable tasks: 235 executed
