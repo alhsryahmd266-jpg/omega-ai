@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.ahmedxg.gvrchat",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
@@ -59,6 +59,6 @@
         }
       ]
     ],
-    "newArchEnabled": false
+    "newArchEnabled": true
   }
 }
