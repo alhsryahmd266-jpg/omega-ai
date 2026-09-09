@@ -32,6 +32,24 @@ jobs:
         working-directory: GVRChat
         run: npm install --legacy-peer-deps
 
+      - name: Download llama.rn native artifacts explicitly
+        working-directory: GVRChat
+        run: |
+          set +e
+          SCRIPT="node_modules/llama.rn/install/download-native-artifacts.js"
+          if [ -f "$SCRIPT" ]; then
+            echo "Found downloader, running it explicitly..."
+            node "$SCRIPT"
+            echo "DOWNLOAD_EXIT=$?" >> "$GITHUB_ENV"
+          else
+            echo "Downloader not at expected path, searching..."
+            find node_modules/llama.rn -iname "*download*artifact*"
+            echo "DOWNLOAD_EXIT=1" >> "$GITHUB_ENV"
+          fi
+          echo "=== jniLibs after download ==="
+          find node_modules/llama.rn -iname "*.so" -o -iname "*.aar" | head -30
+          set -e
+
       - name: Fix llama.rn plugin
         working-directory: GVRChat
         run: |
@@ -39,7 +57,7 @@ jobs:
           if [ -f "$PLUGIN" ]; then
             sed -i "s|require('../package.json')|require('./package.json')|g" "$PLUGIN" 2>/dev/null || true
             sed -i 's|require("../package.json")|require("./package.json")|g' "$PLUGIN" 2>/dev/null || true
-            echo "llama.rn patched ✅"
+            echo "llama.rn patched"
           fi
 
       - name: Prebuild
@@ -63,9 +81,17 @@ jobs:
       - name: Fail if prebuild failed
         if: env.PREBUILD_EXIT != '0'
         run: |
-          echo "❌ Prebuild failed"
+          echo "Prebuild failed"
           tail -30 prebuild.log || true
           exit 1
+
+      - name: Verify jniLibs actually landed
+        working-directory: GVRChat
+        run: |
+          echo "=== llama.rn jniLibs ==="
+          find android -path "*llama*" -iname "*.so" 2>/dev/null | head -20
+          echo "=== terminal module jniLibs ==="
+          find android -path "*terminal*" -iname "*.so" 2>/dev/null | head -20
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -80,9 +106,7 @@ jobs:
         working-directory: GVRChat/android
         run: |
           set +e
-          ./gradlew assembleRelease \
-            --no-daemon \
-            --stacktrace \
+          ./gradlew assembleRelease --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
             2>&1 | tee ../../gradle.log
           GRADLE_EXIT=${PIPESTATUS[0]}
@@ -99,8 +123,8 @@ jobs:
       - name: Fail if gradle failed
         if: env.GRADLE_EXIT != '0'
         run: |
-          echo "❌ Gradle failed"
-          grep -E "error:|FAILURE|Exception" gradle.log | tail -20 || true
+          echo "Gradle failed"
+          grep -E "error:|FAILURE|Exception" gradle.log | tail -30 || true
           exit 1
 
       - name: Locate APK
@@ -123,34 +147,16 @@ jobs:
           try:
               api.create_repo(repo, repo_type="dataset", exist_ok=True, private=False)
           except: pass
-          api.upload_file(
-              path_or_fileobj=apk,
-              path_in_repo="GVR-Chat.apk",
-              repo_id=repo,
-              repo_type="dataset",
-          )
-          print("✅ https://huggingface.co/datasets/ahmedxg/gvr-chat-app")
+          api.upload_file(path_or_fileobj=apk, path_in_repo="GVR-Chat.apk", repo_id=repo, repo_type="dataset")
+          print("Uploaded")
           PYEOF
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "apk-${{ github.run_number }}"
-          name: "GVRChat v${{ github.run_number }} — with Terminal"
-          body: |
-            **GVRChat** — on-device AI + real Linux terminal
-
-            **Terminal features:**
-            - proot + Alpine Linux (runs on first launch, ~6 MB download)
-            - Run bash, Python 3, git, curl, ffmpeg, nodejs — anything
-            - Install packages: AI can `apk add` whatever it needs
-            - AI calls tools automatically based on your request
-
-            **Model support:**
-            - Import any `.gguf` from your phone storage
-            - Supports text, vision (Qwen-VL + mmproj), tool-use models
-
-            **Download:** [GVR-Chat.apk](https://huggingface.co/datasets/ahmedxg/gvr-chat-app/resolve/main/GVR-Chat.apk)
+          name: "GVRChat v${{ github.run_number }}"
+          body: "Download: https://huggingface.co/datasets/ahmedxg/gvr-chat-app/resolve/main/GVR-Chat.apk"
           files: ${{ env.APK_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
