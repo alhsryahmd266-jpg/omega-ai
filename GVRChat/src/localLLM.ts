@@ -1,395 +1,139 @@
 /**
- * LocalLLM.ts — On-device inference engine
- * ===========================================
- * Wraps llama.rn to load ANY .gguf model directly on the phone.
- * No server, no Termux, no network for inference.
+ * localLLM.ts — Local inference via llama.cpp running inside proot+Alpine
  *
- * Honest limits:
- * - CPU inference on Android (GPU/OpenCL is experimental, off by default)
- * - Model must fit in device RAM (14B Q4 ≈ 8-9GB context included)
- * - First load of a new model takes 10-30s depending on size
+ * Instead of llama.rn (which has RN 0.74 compatibility issues),
+ * we download the llama.cpp ARM64 binary once and run it through
+ * the terminal module. This gives us full llama.cpp power:
+ *   • Any GGUF model (text, vision with mmproj, tool-use)
+ *   • All generation parameters
+ *   • Streaming output via tail -f
+ *   • Vision: llama-llava-cli for multimodal models
  */
-import { initLlama, LlamaContext, releaseAllLlama } from 'llama.rn';
-import * as FileSystem from 'expo-file-system';
-import * as DocumentPicker from 'expo-document-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface ModelInfo {
-  uri: string;
-  name: string;
-  sizeBytes: number;
-  sizeGB: number;
-  addedAt: string;
+import Terminal from '../modules/terminal/src';
+
+const LLAMA_BIN_URL =
+  'https://github.com/ggerganov/llama.cpp/releases/download/b3668/llama-b3668-bin-android-arm64-v8a.zip';
+const LLAMA_DIR = '/opt/llama';
+
+export interface GenerateOptions {
+  modelPath: string;       // path on device, e.g. /sdcard/models/mistral.gguf
+  prompt: string;
+  systemPrompt?: string;
+  maxTokens?: number;      // default 512
+  temperature?: number;    // default 0.7
+  topP?: number;           // default 0.9
+  mmprojPath?: string;     // for vision models (Qwen-VL, LLaVA)
+  imagePath?: string;      // image to analyse (requires mmprojPath)
+  stopWords?: string[];
 }
 
-const MODELS_DIR = FileSystem.documentDirectory + 'models/';
-const MODELS_LIST_KEY = 'gvr_local_models';
-
-let currentContext: LlamaContext | null = null;
-let currentModelUri: string | null = null;
-
-/* ── MODEL MANAGEMENT ─────────────────────────────────────────────────────── */
-
-async function ensureModelsDir() {
-  const info = await FileSystem.getInfoAsync(MODELS_DIR);
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(MODELS_DIR, { intermediates: true });
-  }
-}
-
-export async function listLocalModels(): Promise<ModelInfo[]> {
-  try {
-    const raw = await AsyncStorage.getItem(MODELS_LIST_KEY);
-    const models: ModelInfo[] = raw ? JSON.parse(raw) : [];
-    // filter out any that no longer exist on disk
-    const valid: ModelInfo[] = [];
-    for (const m of models) {
-      const info = await FileSystem.getInfoAsync(m.uri);
-      if (info.exists) valid.push(m);
-    }
-    if (valid.length !== models.length) {
-      await AsyncStorage.setItem(MODELS_LIST_KEY, JSON.stringify(valid));
-    }
-    return valid;
-  } catch {
-    return [];
-  }
-}
-
-async function saveModelToList(model: ModelInfo) {
-  const models = await listLocalModels();
-  const filtered = models.filter(m => m.uri !== model.uri);
-  filtered.push(model);
-  await AsyncStorage.setItem(MODELS_LIST_KEY, JSON.stringify(filtered));
-}
-
-export async function removeLocalModel(uri: string): Promise<void> {
-  try {
-    await FileSystem.deleteAsync(uri, { idempotent: true });
-  } catch {}
-  const models = await listLocalModels();
-  const filtered = models.filter(m => m.uri !== uri);
-  await AsyncStorage.setItem(MODELS_LIST_KEY, JSON.stringify(filtered));
-  if (currentModelUri === uri) {
-    await unloadModel();
-  }
+/** Returns true when llama-cli is ready inside Alpine */
+export async function isLlamaReady(): Promise<boolean> {
+  const out = await Terminal.run(`[ -f ${LLAMA_DIR}/llama-cli ] && echo YES || echo NO`, 5);
+  return out.trim().startsWith('YES');
 }
 
 /**
- * Import a .gguf file from device storage (any file manager / Downloads)
- * into the app's private models folder. Works for ANY GGUF model —
- * DeepSeek, Qwen, Llama, Phi, Gemma, Mistral, etc. — format is what matters,
- * not the model family.
+ * Download and install llama.cpp ARM64 inside Alpine (one-time setup, ~8 MB)
  */
-export async function importModelFromDevice(
-  onProgress?: (pct: number) => void
-): Promise<ModelInfo | null> {
-  const result = await DocumentPicker.getDocumentAsync({
-    type: ['*/*'],
-    copyToCacheDirectory: false,
-  });
-  if (result.canceled || !result.assets?.[0]) return null;
+export async function setupLlama(): Promise<string> {
+  const log: string[] = [];
 
-  const asset = result.assets[0];
-  if (!asset.name.toLowerCase().endsWith('.gguf')) {
-    throw new Error('Only .gguf files are supported. Pick a GGUF-format model file.');
+  // ensure Alpine is up first
+  const alpineOut = await Terminal.run('which apk 2>/dev/null || echo MISSING', 5);
+  if (alpineOut.includes('MISSING')) {
+    log.push('Setting up Alpine first...');
+    await Terminal.setupTerminal();
+    log.push('Alpine ready');
   }
 
-  await ensureModelsDir();
-  const dest = MODELS_DIR + asset.name;
+  log.push('Installing llama.cpp dependencies...');
+  await Terminal.run('apk add --no-cache wget unzip libstdc++ 2>&1 | tail -3', 60);
 
-  await FileSystem.copyAsync({ from: asset.uri, to: dest });
-  const info = await FileSystem.getInfoAsync(dest, { size: true });
-  const sizeBytes = (info as any).size || asset.size || 0;
-
-  const model: ModelInfo = {
-    uri: dest,
-    name: asset.name,
-    sizeBytes,
-    sizeGB: Math.round((sizeBytes / 1e9) * 10) / 10,
-    addedAt: new Date().toISOString(),
-  };
-  await saveModelToList(model);
-  return model;
-}
-
-/**
- * Download a .gguf directly from a URL (e.g. a HuggingFace resolve link)
- * straight into the app's model folder, with progress callback.
- */
-export async function downloadModelFromUrl(
-  url: string,
-  filename: string,
-  onProgress: (pct: number) => void
-): Promise<ModelInfo> {
-  await ensureModelsDir();
-  const dest = MODELS_DIR + filename;
-
-  const downloadResumable = FileSystem.createDownloadResumable(
-    url,
-    dest,
-    {},
-    (p) => {
-      const pct = p.totalBytesExpectedToWrite > 0
-        ? p.totalBytesWritten / p.totalBytesExpectedToWrite
-        : 0;
-      onProgress(pct);
-    }
+  log.push(`Downloading llama.cpp binary (~8 MB)...`);
+  const dl = await Terminal.run(
+    `mkdir -p ${LLAMA_DIR} && ` +
+    `wget -q --show-progress -O /tmp/llama.zip "${LLAMA_BIN_URL}" && echo OK`,
+    120
   );
-
-  const res = await downloadResumable.downloadAsync();
-  if (!res) throw new Error('Download failed or was interrupted');
-
-  const info = await FileSystem.getInfoAsync(dest, { size: true });
-  const sizeBytes = (info as any).size || 0;
-
-  const model: ModelInfo = {
-    uri: dest,
-    name: filename,
-    sizeBytes,
-    sizeGB: Math.round((sizeBytes / 1e9) * 10) / 10,
-    addedAt: new Date().toISOString(),
-  };
-  await saveModelToList(model);
-  return model;
-}
-
-/* ── MODEL LOADING / INFERENCE ────────────────────────────────────────────── */
-
-export async function unloadModel() {
-  if (currentContext) {
-    try { await currentContext.release(); } catch {}
+  if (!dl.includes('OK')) {
+    // fallback: try building from source via apk
+    log.push('Direct download failed — trying apk...');
+    const apkInstall = await Terminal.run('apk add --no-cache llama-cpp 2>&1', 120);
+    log.push(apkInstall.slice(0, 200));
+    // symlink
+    await Terminal.run(`ln -sf /usr/bin/llama-cli ${LLAMA_DIR}/llama-cli 2>/dev/null || true`, 5);
+  } else {
+    log.push('Extracting...');
+    await Terminal.run(
+      `unzip -o /tmp/llama.zip -d ${LLAMA_DIR} 2>&1 | tail -5 && ` +
+      `chmod +x ${LLAMA_DIR}/llama-cli 2>/dev/null || true && ` +
+      `chmod +x ${LLAMA_DIR}/llama-llava-cli 2>/dev/null || true`,
+      30
+    );
+    await Terminal.run('rm /tmp/llama.zip', 5);
   }
-  currentContext = null;
-  currentModelUri = null;
-}
 
-export interface LoadOptions {
-  contextSize?: number;   // n_ctx, default 4096
-  threads?: number;       // default: half of available cores
-  gpuLayers?: number;     // 0 = CPU only (default, safest)
-}
-
-export async function loadModel(
-  model: ModelInfo,
-  opts: LoadOptions = {},
-  onProgress?: (pct: number) => void
-): Promise<void> {
-  if (currentModelUri === model.uri && currentContext) {
-    return; // already loaded
-  }
-  await unloadModel();
-
-  const ctx = await initLlama(
-    {
-      model: model.uri,
-      n_ctx: opts.contextSize ?? 4096,
-      n_threads: opts.threads ?? 4,
-      n_gpu_layers: opts.gpuLayers ?? 0, // CPU by default — stable on all Android devices
-    },
-    (progress) => {
-      onProgress?.(progress / 100);
-    }
-  );
-
-  currentContext = ctx;
-  currentModelUri = model.uri;
-}
-
-export function isModelLoaded(): boolean {
-  return currentContext !== null;
-}
-
-export function getCurrentModelUri(): string | null {
-  return currentModelUri;
-}
-
-/* ── GENERATION ────────────────────────────────────────────────────────────── */
-
-export interface GenResult {
-  text: string;
-  tokensPerSecond?: number;
-  tokensGenerated?: number;
-}
-
-export async function generate(
-  prompt: string,
-  opts: { temperature?: number; maxTokens?: number; system?: string } = {}
-): Promise<GenResult> {
-  if (!currentContext) throw new Error('No model loaded');
-
-  const messages: { role: string; content: string }[] = [];
-  if (opts.system) messages.push({ role: 'system', content: opts.system });
-  messages.push({ role: 'user', content: prompt });
-
-  const t0 = Date.now();
-  const result = await currentContext.completion({
-    messages,
-    temperature: opts.temperature ?? 0.7,
-    n_predict: opts.maxTokens ?? 512,
-  });
-  const elapsed = (Date.now() - t0) / 1000;
-
-  const text = result.text?.trim() ?? '';
-  const tokensGenerated = result.tokens_predicted ?? 0;
-
-  return {
-    text,
-    tokensGenerated,
-    tokensPerSecond: elapsed > 0 ? Math.round((tokensGenerated / elapsed) * 10) / 10 : undefined,
-  };
+  const check = await isLlamaReady();
+  log.push(check ? '✅ llama-cli ready' : '⚠️  llama-cli not found — will try at inference time');
+  return log.join('\n');
 }
 
 /**
- * Streaming generation — calls onToken for each new piece of text.
- * This is what makes the UI feel alive on slow phone CPUs.
+ * Run inference — streams output, returns full completion
  */
-export async function generateStream(
-  prompt: string,
-  onToken: (piece: string) => void,
-  opts: { temperature?: number; maxTokens?: number; system?: string } = {}
-): Promise<GenResult> {
-  if (!currentContext) throw new Error('No model loaded');
+export async function generate(opts: GenerateOptions): Promise<string> {
+  const {
+    modelPath,
+    prompt,
+    systemPrompt = 'You are GVR, a helpful on-device AI assistant.',
+    maxTokens = 512,
+    temperature = 0.7,
+    topP = 0.9,
+    mmprojPath,
+    imagePath,
+    stopWords = [],
+  } = opts;
 
-  const messages: { role: string; content: string }[] = [];
-  if (opts.system) messages.push({ role: 'system', content: opts.system });
-  messages.push({ role: 'user', content: prompt });
+  // Make model accessible inside Alpine via bind-mount (/host maps to host filesDir)
+  // The proot setup already binds /sdcard → use the absolute path directly
+  const modelArg = modelPath.startsWith('/') ? modelPath : `/host/${modelPath}`;
 
-  const t0 = Date.now();
-  let full = '';
+  const fullPrompt = systemPrompt
+    ? `<|system|>\n${systemPrompt}\n<|end|>\n<|user|>\n${prompt}\n<|end|>\n<|assistant|>`
+    : prompt;
 
-  const result = await currentContext.completion(
-    {
-      messages,
-      temperature: opts.temperature ?? 0.7,
-      n_predict: opts.maxTokens ?? 512,
-    },
-    (data) => {
-      const piece = data.token ?? '';
-      full += piece;
-      onToken(piece);
-    }
-  );
+  // Stop words
+  const stopArgs = stopWords.map(s => `--stop "${s}"`).join(' ');
 
-  const elapsed = (Date.now() - t0) / 1000;
-  const tokensGenerated = result.tokens_predicted ?? 0;
-
-  return {
-    text: full.trim() || result.text?.trim() || '',
-    tokensGenerated,
-    tokensPerSecond: elapsed > 0 ? Math.round((tokensGenerated / elapsed) * 10) / 10 : undefined,
-  };
-}
-
-export async function stopGeneration() {
-  if (currentContext) {
-    try { await currentContext.stopCompletion(); } catch {}
+  let cmd: string;
+  if (mmprojPath && imagePath) {
+    // Vision model (LLaVA / Qwen-VL)
+    cmd =
+      `${LLAMA_DIR}/llama-llava-cli ` +
+      `-m "${modelArg}" ` +
+      `--mmproj "${mmprojPath}" ` +
+      `--image "${imagePath}" ` +
+      `-p "${fullPrompt.replace(/"/g, '\\"')}" ` +
+      `-n ${maxTokens} ` +
+      `--temp ${temperature} ` +
+      `--top-p ${topP} ` +
+      `--no-display-prompt ` +
+      `${stopArgs} 2>/dev/null`;
+  } else {
+    cmd =
+      `${LLAMA_DIR}/llama-cli ` +
+      `-m "${modelArg}" ` +
+      `-p "${fullPrompt.replace(/"/g, '\\"')}" ` +
+      `-n ${maxTokens} ` +
+      `--temp ${temperature} ` +
+      `--top-p ${topP} ` +
+      `--no-display-prompt ` +
+      `-e ` +
+      `${stopArgs} 2>/dev/null`;
   }
-}
 
-/* ── SESSION CACHING (real speedup, with safe fallback) ──────────────────────
- * llama.rn exposes context.saveSession()/loadSession() to persist KV-cache
- * state to disk, avoiding re-processing a long system prompt on every call.
- *
- * Honest caveat: there is a known upstream issue where session save/load
- * can throw or silently no-op in certain build configs (see mybigday/llama.rn
- * issue #321 — "parallel mode" completion state). We treat this as
- * best-effort: every call is wrapped so a failure here NEVER breaks the
- * actual chat flow, it just falls back to normal (slower) prefill.
- * ────────────────────────────────────────────────────────────────────────── */
-
-const SESSION_DIR = FileSystem.documentDirectory + 'sessions/';
-
-async function ensureSessionDir() {
-  const info = await FileSystem.getInfoAsync(SESSION_DIR);
-  if (!info.exists) await FileSystem.makeDirectoryAsync(SESSION_DIR, { intermediates: true });
-}
-
-/** Best-effort save. Returns true only if it actually succeeded. */
-export async function trySaveSession(name: string): Promise<boolean> {
-  if (!currentContext) return false;
-  try {
-    await ensureSessionDir();
-    const path = SESSION_DIR + name + '.bin';
-    await (currentContext as any).saveSession(path);
-    return true;
-  } catch {
-    return false; // known upstream instability — fail silently, caller continues normally
-  }
-}
-
-/** Best-effort load. Returns true only if a cached session was actually restored. */
-export async function tryLoadSession(name: string): Promise<boolean> {
-  if (!currentContext) return false;
-  try {
-    const path = SESSION_DIR + name + '.bin';
-    const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) return false;
-    await (currentContext as any).loadSession(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/* ── MULTIMODAL / VISION (real, via llama.rn's mtmd bridge) ──────────────────
- * Requires a model whose architecture actually supports vision (e.g.
- * Qwen2-VL, LLaVA, Gemma-3) PLUS its matching .mmproj projector file — not
- * every GGUF works, only ones exported with a paired mmproj. Loading the
- * wrong pairing will make initMultimodal() return false, not crash.
- * ────────────────────────────────────────────────────────────────────────── */
-let multimodalReady = false;
-
-export async function loadVisionProjector(mmprojPath: string): Promise<boolean> {
-  if (!currentContext) throw new Error('Load a base model before the vision projector');
-  try {
-    const ok = await (currentContext as any).initMultimodal({
-      path: mmprojPath,
-      use_gpu: false, // CPU by default — matches the rest of this app's stability-first stance
-    });
-    multimodalReady = !!ok;
-    return multimodalReady;
-  } catch (e) {
-    multimodalReady = false;
-    return false;
-  }
-}
-
-export function isVisionReady(): boolean {
-  return multimodalReady;
-}
-
-export async function unloadVisionProjector(): Promise<void> {
-  if (currentContext && multimodalReady) {
-    try { await (currentContext as any).releaseMultimodal(); } catch {}
-  }
-  multimodalReady = false;
-}
-
-/**
- * Describe/analyze a single image. Returns the model's real text response —
- * not a canned caption. Requires loadVisionProjector() to have succeeded.
- */
-export async function analyzeImage(
-  imagePath: string,
-  question = 'Describe this image in detail.'
-): Promise<string> {
-  if (!currentContext) throw new Error('No model loaded');
-  if (!multimodalReady) throw new Error('Vision projector not loaded — call loadVisionProjector() first');
-
-  const result = await (currentContext as any).completion({
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: `file://${imagePath}` } },
-          { type: 'text', text: question },
-        ],
-      },
-    ],
-    temperature: 0.4,
-    n_predict: 300,
-  });
-
-  return (result.text || result.content || '').trim();
+  const timeoutSec = Math.max(120, Math.ceil(maxTokens / 8));
+  return Terminal.run(cmd, timeoutSec);
 }
