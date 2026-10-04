@@ -85,6 +85,19 @@ jobs:
           tail -30 prebuild.log || true
           exit 1
 
+      - name: Force New Architecture in gradle.properties
+        working-directory: GVRChat/android
+        run: |
+          echo "=== gradle.properties BEFORE ==="
+          grep -n -i "newArch" gradle.properties || echo "(newArchEnabled not present)"
+          if grep -q "^newArchEnabled=" gradle.properties; then
+            sed -i 's/^newArchEnabled=.*/newArchEnabled=true/' gradle.properties
+          else
+            echo "newArchEnabled=true" >> gradle.properties
+          fi
+          echo "=== gradle.properties AFTER ==="
+          grep -n -i "newArch" gradle.properties
+
       - name: Verify jniLibs actually landed
         working-directory: GVRChat
         run: |
