@@ -1,0 +1,88 @@
+name: Fetch proot runtime (libs + loader)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install tools
+        run: sudo apt-get update -y && sudo apt-get install -y patchelf binutils xz-utils
+
+      - name: Download Termux packages (aarch64)
+        run: |
+          set -e
+          BASE=https://packages.termux.dev/apt/termux-main
+          IDX=dists/stable/main/binary-aarch64
+          mkdir -p work && cd work
+          if ! curl -fsSL "$BASE/$IDX/Packages" -o Packages; then
+            curl -fsSL "$BASE/$IDX/Packages.xz" -o Packages.xz && xz -d Packages.xz
+          fi
+          get_filename() {
+            awk -v pkg="$1" 'BEGIN{RS="";FS="\n"} {n="";f="";for(i=1;i<=NF;i++){if($i ~ /^Package: /)n=substr($i,10);if($i ~ /^Filename: /)f=substr($i,11)} if(n==pkg){print f;exit}}' Packages
+          }
+          for P in proot libtalloc libandroid-shmem; do
+            F=$(get_filename "$P")
+            echo "$P -> $F"
+            test -n "$F"
+            curl -fsSL "$BASE/$F" -o "$P.deb"
+            mkdir -p "x_$P"
+            (cd "x_$P" && ar x "../$P.deb" && tar xf data.tar.* )
+          done
+
+      - name: Assemble jniLibs
+        run: |
+          set -e
+          OUT=$PWD/out; mkdir -p $OUT
+          cd work
+          PROOT=$(find x_proot -path '*/bin/proot' -type f | head -1)
+          LOADER=$(find x_proot -path '*/libexec/proot/loader' -type f | head -1)
+          TALLOC=$(find x_libtalloc -name 'libtalloc.so*' -type f | head -1)
+          SHMEM=$(find x_libandroid-shmem -name 'libandroid-shmem.so' | head -1)
+          echo "proot=$PROOT loader=$LOADER talloc=$TALLOC shmem=$SHMEM"
+          test -n "$PROOT" && test -n "$LOADER" && test -n "$TALLOC" && test -n "$SHMEM"
+          cp -L "$PROOT"  $OUT/libproot.so
+          cp -L "$LOADER" $OUT/libproot-loader.so
+          cp -L "$TALLOC" $OUT/libtalloc.so
+          cp -L "$SHMEM"  $OUT/libandroid-shmem.so
+          cd $OUT
+          patchelf --replace-needed libtalloc.so.2 libtalloc.so libproot.so
+          patchelf --set-soname libtalloc.so libtalloc.so
+          patchelf --set-rpath '$ORIGIN' libproot.so
+          patchelf --set-rpath '$ORIGIN' libtalloc.so
+          patchelf --set-rpath '$ORIGIN' libandroid-shmem.so
+          {
+            for f in libproot.so libproot-loader.so libtalloc.so libandroid-shmem.so; do
+              echo "=== $f ($(stat -c %s $f) bytes)"
+              readelf -h $f | grep -E 'Class|Machine|Type'
+              readelf -d $f 2>/dev/null | grep -E 'NEEDED|SONAME|RPATH|RUNPATH' || echo '(no dynamic section: static)'
+              readelf -l $f 2>/dev/null | grep -E 'INTERP|Requesting' || true
+            done
+          } | tee readelf.txt
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          path: repo
+
+      - name: Commit with retry
+        run: |
+          D=repo/GVRChat/modules/terminal/android/src/main/jniLibs/arm64-v8a
+          mkdir -p $D repo/native_binaries/proot2
+          cp out/libproot.so out/libproot-loader.so out/libtalloc.so out/libandroid-shmem.so $D/
+          cp out/readelf.txt repo/native_binaries/proot2/readelf.txt
+          cd repo
+          git config user.email "bot@gvr.com"
+          git config user.name "GVR Bot"
+          git add -A GVRChat/modules/terminal/android/src/main/jniLibs native_binaries/proot2
+          git commit -m "fix: ship complete proot runtime (libtalloc, libandroid-shmem, loader) [skip ci]" || true
+          for i in 1 2 3 4 5 6; do
+            git pull --rebase origin main && git push && break
+            echo "push attempt $i failed"; sleep $((i*5))
+          done
