@@ -21,6 +21,26 @@ import * as DocumentPicker from 'expo-document-picker';
 import { analyzeImage, isVisionReady } from './localLLM';
 import { prepareVideoForAnalysis, VIDEO_LIMITS } from '../modules/video-processor/src';
 
+const B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** Pure-JS base64 -> binary string (does not rely on a global atob). */
+function base64ToBinary(b64: string): string {
+  const clean = b64.replace(/[^A-Za-z0-9+/]/g, '');
+  const parts: string[] = [];
+  let buf = 0;
+  let bits = 0;
+  for (let i = 0; i < clean.length; i++) {
+    buf = (buf << 6) | B64_CHARS.indexOf(clean[i]);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      parts.push(String.fromCharCode((buf >> bits) & 0xff));
+      buf &= (1 << bits) - 1;
+    }
+  }
+  return parts.join('');
+}
+
 export const LIMITS = {
   maxTextChars: 20000,        // ~5k tokens of raw text injected into prompt
   maxPdfPages: 30,
@@ -81,7 +101,7 @@ async function preparePdf(asset: DocumentPicker.DocumentPickerAsset): Promise<Pr
   const raw = await FileSystem.readAsStringAsync(asset.uri, {
     encoding: FileSystem.EncodingType.Base64,
   });
-  const bytes = atob(raw);
+  const bytes = base64ToBinary(raw);
 
   let text = '';
   const btEtRegex = /BT([\s\S]*?)ET/g;
@@ -113,22 +133,21 @@ async function preparePdf(asset: DocumentPicker.DocumentPickerAsset): Promise<Pr
 }
 
 /* ── IMAGE ─────────────────────────────────────────────────────────────── */
+// The image itself is handed to the vision model together with the user's
+// question (see gvrEngine.runWithAttachment), so nothing is analysed here —
+// attaching is instant and the answer is specific to what the user asks.
 async function prepareImage(asset: DocumentPicker.DocumentPickerAsset): Promise<PreparedAttachment> {
   const warnings: string[] = [];
-
   if (!isVisionReady()) {
-    return {
-      kind: 'image', name: asset.name, uri: asset.uri,
-      sizeBytes: asset.size || 0,
-      extractedContent: '',
-      warnings: ['No vision model loaded — cannot analyze this image. Load a vision-capable model + mmproj in settings first.'],
-    };
+    warnings.push(
+      'No vision model loaded — the image cannot be analysed. Load a vision-capable model + its mmproj file in settings first.'
+    );
   }
-
-  const description = await analyzeImage(asset.uri, 'Describe this image in detail, including any visible text.');
   return {
     kind: 'image', name: asset.name, uri: asset.uri,
-    sizeBytes: asset.size || 0, extractedContent: description, warnings,
+    sizeBytes: asset.size || 0,
+    extractedContent: '',
+    warnings,
   };
 }
 

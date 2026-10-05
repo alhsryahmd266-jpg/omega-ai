@@ -13,11 +13,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import {
-  listLocalModels, importModelFromDevice, loadModel,
-  isModelLoaded, isVisionReady, type ModelInfo,
+  listLocalModels, importModelFromDevice, loadModel, deleteModel, autoLoadLastModel,
+  isModelLoaded, isVisionReady, getLoadedModel, getVisionNote, stopGeneration,
+  type ModelInfo,
 } from './src/localLLM';
-import { runWithAttachment, type StepEvent } from './src/gvrEngine';
+import { runWithAttachment, resetConversation, type StepEvent } from './src/gvrEngine';
 import { prepareAttachment, pickAnyFile, type PreparedAttachment } from './src/attachments';
+import { setToolConfirmHandler, resetToolApprovals, resetTerminalState } from './src/tools';
+import {
+  PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, requestPermission,
+  type PermKey, type PermStatus,
+} from './src/permissions';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -82,11 +88,24 @@ function AIAvatar({ size = 36 }: { size?: number }) {
 
 const TOOL_LABELS: Record<string, { icon: string; label: string }> = {
   search:       { icon: 'magnify',              label: 'يبحث في الإنترنت' },
-  device_info:  { icon: 'cellphone-cog',        label: 'يفحص الجهاز' },
+  fetch_url:    { icon: 'web',                  label: 'يفتح صفحة ويب' },
+  download_file:{ icon: 'download',             label: 'ينزّل ملف' },
+  terminal:     { icon: 'console',              label: 'ينفّذ أمر في الترمنال' },
   javascript:   { icon: 'code-braces',          label: 'ينفّذ كود' },
+  calc:         { icon: 'calculator',           label: 'يحسب' },
+  datetime:     { icon: 'clock-outline',        label: 'يشوف الوقت' },
+  read_file:    { icon: 'file-document-outline',label: 'يقرأ ملف' },
+  write_file:   { icon: 'file-edit-outline',    label: 'يكتب ملف' },
+  list_dir:     { icon: 'folder-outline',       label: 'يستعرض مجلد' },
+  delete_file:  { icon: 'delete-outline',       label: 'يمسح ملف' },
+  device_info:  { icon: 'cellphone-cog',        label: 'يفحص الجهاز' },
+  open_url:     { icon: 'open-in-new',          label: 'يفتح رابط' },
+  share_text:   { icon: 'share-variant',        label: 'يشارك نص' },
+  permission:   { icon: 'shield-key-outline',   label: 'الصلاحيات' },
   mem_save:     { icon: 'content-save',         label: 'يحفظ في الذاكرة' },
   mem_get:      { icon: 'brain',                label: 'يسترجع من الذاكرة' },
   mem_list:     { icon: 'format-list-bulleted', label: 'يراجع الذاكرة' },
+  mem_delete:   { icon: 'delete-outline',       label: 'يمسح من الذاكرة' },
 };
 
 function LiveStatus({ event }: { event: StepEvent | null }) {
@@ -161,7 +180,7 @@ function Bubble({ msg }: { msg: Msg }) {
       <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
         {isUser ? (
           <LinearGradient colors={[C.user1, C.user2]} start={{x:0,y:0}} end={{x:1,y:1}}
-                          style={StyleSheet.absoluteFill} borderRadius={18} borderBottomRightRadius={4} />
+                          style={[StyleSheet.absoluteFill, { borderRadius: 18, borderBottomRightRadius: 4 }]} />
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.035)',
             borderRadius: 18, borderBottomLeftRadius: 4 }]} />
@@ -198,7 +217,7 @@ function Bubble({ msg }: { msg: Msg }) {
       {isUser && (
         <View style={styles.userAvatar}>
           <LinearGradient colors={[C.user1, C.user2]} start={{x:0,y:0}} end={{x:1,y:1}}
-                          style={StyleSheet.absoluteFill} borderRadius={36} />
+                          style={[StyleSheet.absoluteFill, { borderRadius: 36 }]} />
           <Ionicons name="person" size={16} color="#fff" />
         </View>
       )}
@@ -254,19 +273,59 @@ export default function App() {
   const [localModels, setLocalModels] = useState<ModelInfo[]>([]);
   const [modelLoading, setModelLoading] = useState(false);
   const [modelLoadPct, setModelLoadPct] = useState(0);
+  const [perms, setPerms] = useState<Partial<Record<PermKey, PermStatus>>>({});
 
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
     (async () => {
-      const h = await AsyncStorage.getItem('gvr_msgs');
-      if (h) setMsgs(JSON.parse(h));
-      const models = await listLocalModels();
-      setLocalModels(models);
-      setModelReady(isModelLoaded());
-      setVisionReadyState(isVisionReady());
+      try {
+        const h = await AsyncStorage.getItem('gvr_msgs');
+        if (h) setMsgs(JSON.parse(h));
+      } catch { /* corrupt history — start clean */ }
+      try {
+        setLocalModels(await listLocalModels());
+      } catch (e: any) {
+        Alert.alert('خطأ في قراءة النماذج', e.message);
+      }
+      try {
+        setModelLoading(true);
+        const r = await autoLoadLastModel((pct) => setModelLoadPct(pct));
+        if (r.status === 'skipped_after_crash') {
+          Alert.alert('تنبيه', 'آخر تحميل للنموذج وقف التطبيق (غالباً الذاكرة). جرّب نموذج أصغر أو تكميم أقل من الإعدادات.');
+        }
+      } catch (e: any) {
+        Alert.alert('فشل تحميل النموذج الأخير', e.message);
+      } finally {
+        setModelLoading(false);
+        setModelLoadPct(0);
+        setModelReady(isModelLoaded());
+        setVisionReadyState(isVisionReady());
+      }
     })();
   }, []);
+
+  // Side-effect tools (terminal, writing files, ...) ask the user first.
+  useEffect(() => {
+    setToolConfirmHandler((tool, arg) => new Promise<'once' | 'always' | 'deny'>((resolve) => {
+      const label = TOOL_LABELS[tool]?.label || tool;
+      Alert.alert(
+        `GVR عايز: ${label}`,
+        arg.length > 400 ? arg.slice(0, 400) + '…' : (arg || '(بدون وسيط)'),
+        [
+          { text: 'رفض', style: 'cancel', onPress: () => resolve('deny') },
+          { text: 'دايماً (الجلسة)', onPress: () => resolve('always') },
+          { text: 'نفّذ', onPress: () => resolve('once') },
+        ],
+        { cancelable: true, onDismiss: () => resolve('deny') },
+      );
+    }));
+    return () => setToolConfirmHandler(null);
+  }, []);
+
+  useEffect(() => {
+    if (showSettings) getPermissionsStatus().then(setPerms).catch(() => {});
+  }, [showSettings]);
 
   const save = async (m: Msg[]) => AsyncStorage.setItem('gvr_msgs', JSON.stringify(m.slice(-80)));
 
@@ -347,22 +406,35 @@ export default function App() {
     { text: 'إلغاء', style: 'cancel' },
     { text: 'مسح', style: 'destructive', onPress: async () => {
       setMsgs([]); await AsyncStorage.removeItem('gvr_msgs');
+      resetConversation(); resetToolApprovals(); resetTerminalState();
     }},
   ]);
+
+  const afterLoad = () => {
+    setModelReady(isModelLoaded());
+    setVisionReadyState(isVisionReady());
+    const note = getVisionNote();
+    if (note) Alert.alert('الرؤية', note);
+  };
 
   const handleImportModel = async () => {
     try {
       setModelLoading(true);
       const model = await importModelFromDevice();
-      if (!model) { setModelLoading(false); return; }
+      if (!model) return;
       setLocalModels(await listLocalModels());
+      if (model.isProjector) {
+        Alert.alert('تم', 'ملف الرؤية (mmproj) اتحفظ. حمّل النموذج الأساسي (أو أعد تحميله) عشان يتربط بيه.');
+        return;
+      }
       await loadModel(model, {}, (pct) => setModelLoadPct(pct));
-      setModelReady(true);
+      afterLoad();
     } catch (e: any) {
-      Alert.alert('فشل تحميل النموذج', e.message);
+      Alert.alert('فشل استيراد/تحميل النموذج', e.message);
     } finally {
       setModelLoading(false);
       setModelLoadPct(0);
+      setModelReady(isModelLoaded());
     }
   };
 
@@ -370,14 +442,37 @@ export default function App() {
     try {
       setModelLoading(true);
       await loadModel(model, {}, (pct) => setModelLoadPct(pct));
-      setModelReady(true);
+      afterLoad();
       setShowSettings(false);
     } catch (e: any) {
       Alert.alert('فشل تحميل النموذج', e.message);
     } finally {
       setModelLoading(false);
       setModelLoadPct(0);
+      setModelReady(isModelLoaded());
     }
+  };
+
+  const handleDeleteModel = (model: ModelInfo) => {
+    Alert.alert('مسح الملف', `هتمسح "${model.name}" من الجهاز؟`, [
+      { text: 'إلغاء', style: 'cancel' },
+      { text: 'مسح', style: 'destructive', onPress: async () => {
+        try {
+          await deleteModel(model);
+          setLocalModels(await listLocalModels());
+          setModelReady(isModelLoaded());
+          setVisionReadyState(isVisionReady());
+        } catch (e: any) {
+          Alert.alert('فشل المسح', e.message);
+        }
+      }},
+    ]);
+  };
+
+  const handlePermission = async (k: PermKey) => {
+    const r = await requestPermission(k);
+    setPerms(await getPermissionsStatus());
+    if (r.status !== 'granted') Alert.alert(PERMISSION_LABELS[k], r.message);
   };
 
   return (
@@ -397,7 +492,7 @@ export default function App() {
               <View style={styles.statusRow}>
                 <View style={[styles.statusDot, { backgroundColor: modelReady ? C.green : C.textDim }]} />
                 <Text style={styles.statusText}>
-                  {modelReady ? (visionReady ? 'نص + رؤية' : 'نص فقط') : 'مفيش نموذج'}
+                  {modelLoading ? 'جارٍ تحميل النموذج…' : modelReady ? (visionReady ? 'نص + رؤية' : 'نص فقط') : 'مفيش نموذج'}
                 </Text>
               </View>
             </View>
@@ -470,14 +565,14 @@ export default function App() {
               />
 
               <TouchableOpacity
-                style={[styles.sendBtn, ((!input.trim() && !pendingAttachment) || loading || !modelReady) && styles.sendBtnOff]}
-                onPress={() => send()}
-                disabled={(!input.trim() && !pendingAttachment) || loading || !modelReady}
+                style={[styles.sendBtn, (!loading && ((!input.trim() && !pendingAttachment) || !modelReady)) && styles.sendBtnOff]}
+                onPress={() => (loading ? stopGeneration() : send())}
+                disabled={!loading && ((!input.trim() && !pendingAttachment) || !modelReady)}
               >
                 <LinearGradient colors={[C.user1, C.glow2]} start={{x:0,y:0}} end={{x:1,y:1}}
                                 style={[StyleSheet.absoluteFill, { borderRadius: 22 }]} />
                 {loading
-                  ? <ActivityIndicator size={18} color="#fff" />
+                  ? <Ionicons name="stop" size={18} color="#fff" />
                   : <Ionicons name="arrow-up" size={20} color="#fff" />
                 }
               </TouchableOpacity>
@@ -495,20 +590,31 @@ export default function App() {
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>النماذج</Text>
 
-            <ScrollView style={{ maxHeight: H * 0.5 }}>
+            <ScrollView style={{ maxHeight: H * 0.3 }}>
               {localModels.length === 0 && (
                 <Text style={styles.noModelsText}>مفيش نماذج محمّلة بعد</Text>
               )}
-              {localModels.map((m) => (
-                <TouchableOpacity key={m.uri} style={styles.modelRow} onPress={() => handleSelectModel(m)}>
-                  <MaterialCommunityIcons name="cube-outline" size={20} color={C.accent} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modelName} numberOfLines={1}>{m.name}</Text>
-                    <Text style={styles.modelSize}>{m.sizeGB} GB</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={C.textDim} />
-                </TouchableOpacity>
-              ))}
+              {localModels.map((m) => {
+                const active = getLoadedModel()?.uri === m.uri;
+                return (
+                  <TouchableOpacity key={m.uri} style={styles.modelRow}
+                    onPress={() => m.isProjector
+                      ? Alert.alert('ملف رؤية', 'ده ملف mmproj للرؤية — بيتربط تلقائياً مع النموذج الأساسي لما تحمّله.')
+                      : handleSelectModel(m)}>
+                    <MaterialCommunityIcons name={m.isProjector ? 'eye-outline' : 'cube-outline'}
+                      size={20} color={active ? C.green : C.accent} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modelName} numberOfLines={1}>{m.name}</Text>
+                      <Text style={styles.modelSize}>
+                        {m.sizeGB} GB{m.isProjector ? ' · رؤية' : ''}{active ? ' · محمّل' : ''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleDeleteModel(m)} hitSlop={8}>
+                      <Ionicons name="trash-outline" size={18} color={C.textDim} />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             {modelLoading && (
@@ -525,6 +631,17 @@ export default function App() {
               <Text style={styles.importBtnText}>استيراد نموذج GGUF من الجهاز</Text>
             </TouchableOpacity>
 
+            <Text style={[styles.modalTitle, { marginTop: 18, fontSize: 16, marginBottom: 8 }]}>الصلاحيات</Text>
+            <View style={styles.permWrap}>
+              {PERM_KEYS.map((k) => (
+                <TouchableOpacity key={k} style={styles.permChip} onPress={() => handlePermission(k)}>
+                  <View style={[styles.permDot, {
+                    backgroundColor: perms[k] === 'granted' ? C.green : perms[k] === 'denied' ? C.error : C.textDim,
+                  }]} />
+                  <Text style={styles.permText}>{PERMISSION_LABELS[k]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <View style={styles.infoBox}>
               <MaterialCommunityIcons name="information-outline" size={14} color={C.textDim} />
               <Text style={styles.infoText}>
@@ -633,4 +750,9 @@ const styles = StyleSheet.create({
   infoText:        { color: C.textDim, fontSize:11, lineHeight:17, flex:1 },
   closeBtn:        { borderRadius:14, padding:15, alignItems:'center', marginTop:20, overflow:'hidden' },
   closeBtnText:    { color:'#fff', fontWeight:'800', fontSize:16 },
+  permWrap:        { flexDirection:'row', flexWrap:'wrap', gap:8 },
+  permChip:        { flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:10, paddingVertical:7,
+                     borderRadius:12, borderWidth:1, borderColor: C.border, backgroundColor:'rgba(255,255,255,0.04)' },
+  permDot:         { width:7, height:7, borderRadius:4 },
+  permText:        { color: C.text, fontSize:12 },
 });

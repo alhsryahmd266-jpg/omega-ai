@@ -1,139 +1,371 @@
 /**
- * localLLM.ts — Local inference via llama.cpp running inside proot+Alpine
+ * localLLM.ts — on-device model management + inference (llama.rn)
+ * =================================================================
+ * Everything App.tsx / gvrEngine.ts / attachments.ts need from the model layer:
+ *   listLocalModels, importModelFromDevice, loadModel, unloadModel, deleteModel,
+ *   autoLoadLastModel, isModelLoaded, isVisionReady, analyzeImage, ...
  *
- * Instead of llama.rn (which has RN 0.74 compatibility issues),
- * we download the llama.cpp ARM64 binary once and run it through
- * the terminal module. This gives us full llama.cpp power:
- *   • Any GGUF model (text, vision with mmproj, tool-use)
- *   • All generation parameters
- *   • Streaming output via tail -f
- *   • Vision: llama-llava-cli for multimodal models
+ * Models live in <documentDirectory>/models/. A model is any *.gguf file.
+ * A file whose name contains "mmproj" is a vision projector: it is not loaded
+ * by itself, it is paired automatically with the text model on load.
  */
+import { initLlama, type LlamaContext } from 'llama.rn';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import Terminal from '../modules/terminal/src';
+const MODELS_DIR = `${FileSystem.documentDirectory}models/`;
+const LAST_MODEL_KEY = 'gvr_last_model_uri';
+const LOADING_FLAG_KEY = 'gvr_model_loading_flag';
+const GGUF_MAGIC_B64 = 'R0dVRg=='; // base64 of the ASCII bytes "GGUF"
 
-const LLAMA_BIN_URL =
-  'https://github.com/ggerganov/llama.cpp/releases/download/b3668/llama-b3668-bin-android-arm64-v8a.zip';
-const LLAMA_DIR = '/opt/llama';
-
-export interface GenerateOptions {
-  modelPath: string;       // path on device, e.g. /sdcard/models/mistral.gguf
-  prompt: string;
-  systemPrompt?: string;
-  maxTokens?: number;      // default 512
-  temperature?: number;    // default 0.7
-  topP?: number;           // default 0.9
-  mmprojPath?: string;     // for vision models (Qwen-VL, LLaVA)
-  imagePath?: string;      // image to analyse (requires mmprojPath)
-  stopWords?: string[];
+/* ── TYPES ─────────────────────────────────────────────────────────────── */
+export interface ModelInfo {
+  uri: string;
+  name: string;
+  sizeBytes: number;
+  sizeGB: string;
+  isProjector: boolean;
 }
 
-/** Returns true when llama-cli is ready inside Alpine */
-export async function isLlamaReady(): Promise<boolean> {
-  const out = await Terminal.run(`[ -f ${LLAMA_DIR}/llama-cli ] && echo YES || echo NO`, 5);
-  return out.trim().startsWith('YES');
+export interface LoadOptions {
+  /** Context size in tokens. Default: tries 8192, then 4096, then 2048. */
+  nCtx?: number;
+  nThreads?: number;
+  gpuLayers?: number;
+  /** Force a specific mmproj file instead of auto-pairing. */
+  mmprojUri?: string;
 }
 
-/**
- * Download and install llama.cpp ARM64 inside Alpine (one-time setup, ~8 MB)
- */
-export async function setupLlama(): Promise<string> {
-  const log: string[] = [];
+/* ── STATE ─────────────────────────────────────────────────────────────── */
+let ctx: LlamaContext | null = null;
+let loadedModel: ModelInfo | null = null;
+let loadedCtxSize = 0;
+let visionOn = false;
+let visionNote = '';
 
-  // ensure Alpine is up first
-  const alpineOut = await Terminal.run('which apk 2>/dev/null || echo MISSING', 5);
-  if (alpineOut.includes('MISSING')) {
-    log.push('Setting up Alpine first...');
-    await Terminal.setupTerminal();
-    log.push('Alpine ready');
+export const isModelLoaded = (): boolean => ctx !== null;
+export const isVisionReady = (): boolean => ctx !== null && visionOn;
+export const getLoadedModel = (): ModelInfo | null => loadedModel;
+export const getLoadedContextSize = (): number => loadedCtxSize;
+export const getVisionNote = (): string => visionNote;
+
+export function getContext(): LlamaContext {
+  if (!ctx) throw new Error('مفيش نموذج متحمّل — حمّل نموذج من الإعدادات الأول.');
+  return ctx;
+}
+
+/* ── GENERATION LOCK (one completion at a time per context) ────────────── */
+let lockChain: Promise<unknown> = Promise.resolve();
+export function withGenerationLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = lockChain.then(fn, fn);
+  lockChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+export async function stopGeneration(): Promise<void> {
+  try {
+    if (ctx) await ctx.stopCompletion();
+  } catch {
+    /* nothing running */
   }
+}
 
-  log.push('Installing llama.cpp dependencies...');
-  await Terminal.run('apk add --no-cache wget unzip libstdc++ 2>&1 | tail -3', 60);
+/** Removes <think>…</think> reasoning blocks some models emit. */
+export function stripThinking(text: string): string {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/^[\s\S]*?<\/think>/, '')
+    .trim();
+}
 
-  log.push(`Downloading llama.cpp binary (~8 MB)...`);
-  const dl = await Terminal.run(
-    `mkdir -p ${LLAMA_DIR} && ` +
-    `wget -q --show-progress -O /tmp/llama.zip "${LLAMA_BIN_URL}" && echo OK`,
-    120
+/* ── FILE HELPERS ──────────────────────────────────────────────────────── */
+async function ensureModelsDir(): Promise<void> {
+  const info = await FileSystem.getInfoAsync(MODELS_DIR);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(MODELS_DIR, { intermediates: true });
+  }
+}
+
+const isProjectorName = (name: string): boolean => /mmproj/i.test(name);
+
+function toModelInfo(name: string, sizeBytes: number): ModelInfo {
+  return {
+    uri: MODELS_DIR + name,
+    name,
+    sizeBytes,
+    sizeGB: (sizeBytes / 1e9).toFixed(2),
+    isProjector: isProjectorName(name),
+  };
+}
+
+function safeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|\s]+/g, '_');
+}
+
+/* ── LIST / IMPORT / DELETE ────────────────────────────────────────────── */
+export async function listLocalModels(): Promise<ModelInfo[]> {
+  await ensureModelsDir();
+  const names = await FileSystem.readDirectoryAsync(MODELS_DIR);
+  const out: ModelInfo[] = [];
+  for (const name of names) {
+    if (!/\.gguf$/i.test(name)) continue;
+    const info = await FileSystem.getInfoAsync(MODELS_DIR + name, { size: true });
+    if (info.exists && !info.isDirectory) out.push(toModelInfo(name, info.size));
+  }
+  out.sort(
+    (a, b) => Number(a.isProjector) - Number(b.isProjector) || a.name.localeCompare(b.name),
   );
-  if (!dl.includes('OK')) {
-    // fallback: try building from source via apk
-    log.push('Direct download failed — trying apk...');
-    const apkInstall = await Terminal.run('apk add --no-cache llama-cpp 2>&1', 120);
-    log.push(apkInstall.slice(0, 200));
-    // symlink
-    await Terminal.run(`ln -sf /usr/bin/llama-cli ${LLAMA_DIR}/llama-cli 2>/dev/null || true`, 5);
-  } else {
-    log.push('Extracting...');
-    await Terminal.run(
-      `unzip -o /tmp/llama.zip -d ${LLAMA_DIR} 2>&1 | tail -5 && ` +
-      `chmod +x ${LLAMA_DIR}/llama-cli 2>/dev/null || true && ` +
-      `chmod +x ${LLAMA_DIR}/llama-llava-cli 2>/dev/null || true`,
-      30
-    );
-    await Terminal.run('rm /tmp/llama.zip', 5);
-  }
-
-  const check = await isLlamaReady();
-  log.push(check ? '✅ llama-cli ready' : '⚠️  llama-cli not found — will try at inference time');
-  return log.join('\n');
+  return out;
 }
 
 /**
- * Run inference — streams output, returns full completion
+ * Lets the user pick a .gguf file anywhere on the device and copies it into
+ * the app's private models folder. Validates the GGUF header after copying so
+ * a truncated / wrong file is reported clearly instead of crashing at load.
  */
-export async function generate(opts: GenerateOptions): Promise<string> {
-  const {
-    modelPath,
-    prompt,
-    systemPrompt = 'You are GVR, a helpful on-device AI assistant.',
-    maxTokens = 512,
-    temperature = 0.7,
-    topP = 0.9,
-    mmprojPath,
-    imagePath,
-    stopWords = [],
-  } = opts;
+export async function importModelFromDevice(): Promise<ModelInfo | null> {
+  const res = await DocumentPicker.getDocumentAsync({
+    type: '*/*',
+    copyToCacheDirectory: false, // avoid a second multi-GB copy in the cache
+    multiple: false,
+  });
+  if (res.canceled || !res.assets?.[0]) return null;
 
-  // Make model accessible inside Alpine via bind-mount (/host maps to host filesDir)
-  // The proot setup already binds /sdcard → use the absolute path directly
-  const modelArg = modelPath.startsWith('/') ? modelPath : `/host/${modelPath}`;
-
-  const fullPrompt = systemPrompt
-    ? `<|system|>\n${systemPrompt}\n<|end|>\n<|user|>\n${prompt}\n<|end|>\n<|assistant|>`
-    : prompt;
-
-  // Stop words
-  const stopArgs = stopWords.map(s => `--stop "${s}"`).join(' ');
-
-  let cmd: string;
-  if (mmprojPath && imagePath) {
-    // Vision model (LLaVA / Qwen-VL)
-    cmd =
-      `${LLAMA_DIR}/llama-llava-cli ` +
-      `-m "${modelArg}" ` +
-      `--mmproj "${mmprojPath}" ` +
-      `--image "${imagePath}" ` +
-      `-p "${fullPrompt.replace(/"/g, '\\"')}" ` +
-      `-n ${maxTokens} ` +
-      `--temp ${temperature} ` +
-      `--top-p ${topP} ` +
-      `--no-display-prompt ` +
-      `${stopArgs} 2>/dev/null`;
-  } else {
-    cmd =
-      `${LLAMA_DIR}/llama-cli ` +
-      `-m "${modelArg}" ` +
-      `-p "${fullPrompt.replace(/"/g, '\\"')}" ` +
-      `-n ${maxTokens} ` +
-      `--temp ${temperature} ` +
-      `--top-p ${topP} ` +
-      `--no-display-prompt ` +
-      `-e ` +
-      `${stopArgs} 2>/dev/null`;
+  const asset = res.assets[0];
+  const name = safeFileName(asset.name || 'model.gguf');
+  if (!/\.gguf$/i.test(name)) {
+    throw new Error(`الملف "${asset.name}" مش بصيغة .gguf — اختار ملف نموذج GGUF.`);
   }
 
-  const timeoutSec = Math.max(120, Math.ceil(maxTokens / 8));
-  return Terminal.run(cmd, timeoutSec);
+  await ensureModelsDir();
+  const dest = MODELS_DIR + name;
+  const wantBytes = asset.size ?? 0;
+
+  const existing = await FileSystem.getInfoAsync(dest, { size: true });
+  const alreadyThere = existing.exists && wantBytes > 0 && existing.size === wantBytes;
+
+  if (!alreadyThere) {
+    if (existing.exists) await FileSystem.deleteAsync(dest, { idempotent: true });
+
+    if (wantBytes > 0) {
+      const free = await FileSystem.getFreeDiskStorageAsync();
+      const need = wantBytes + 300 * 1024 * 1024; // file + 300 MB headroom
+      if (free < need) {
+        throw new Error(
+          `المساحة الفاضية مش كفاية. محتاج ~${(need / 1e9).toFixed(1)} GB وعندك ${(free / 1e9).toFixed(1)} GB.`,
+        );
+      }
+    }
+
+    try {
+      await FileSystem.copyAsync({ from: asset.uri, to: dest });
+    } catch (e: any) {
+      await FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => {});
+      throw new Error(`فشل نسخ الملف: ${e?.message || e}`);
+    }
+  }
+
+  const head = await FileSystem.readAsStringAsync(dest, {
+    encoding: FileSystem.EncodingType.Base64,
+    position: 0,
+    length: 4,
+  });
+  if (head !== GGUF_MAGIC_B64) {
+    await FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => {});
+    throw new Error('الملف مش GGUF صالح (الـ header غلط). ممكن يكون ناقص أو تالف — حمّله تاني.');
+  }
+
+  const info = await FileSystem.getInfoAsync(dest, { size: true });
+  return toModelInfo(name, info.exists ? info.size : wantBytes);
+}
+
+export async function deleteModel(model: ModelInfo): Promise<void> {
+  if (loadedModel && loadedModel.uri === model.uri) await unloadModel();
+  await FileSystem.deleteAsync(model.uri, { idempotent: true });
+  const last = await AsyncStorage.getItem(LAST_MODEL_KEY);
+  if (last === model.uri) await AsyncStorage.removeItem(LAST_MODEL_KEY);
+}
+
+/* ── VISION PROJECTOR PAIRING ──────────────────────────────────────────── */
+function stem(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\.gguf$/, '')
+    .replace(/mmproj/g, '')
+    .replace(/[-_.](f16|f32|bf16|q\d\w*)/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function commonPrefixLen(a: string, b: string): number {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
+}
+
+function findProjector(model: ModelInfo, all: ModelInfo[]): ModelInfo | null {
+  const projectors = all.filter(m => m.isProjector);
+  if (projectors.length === 0) return null;
+
+  const base = stem(model.name);
+  let best: ModelInfo | null = null;
+  let bestScore = 0;
+  for (const p of projectors) {
+    const score = commonPrefixLen(base, stem(p.name));
+    if (score > bestScore) { best = p; bestScore = score; }
+  }
+  if (best && bestScore >= 4) return best;
+
+  // Single projector + single text model: assume they belong together.
+  const textModels = all.filter(m => !m.isProjector);
+  if (projectors.length === 1 && textModels.length === 1) return projectors[0];
+  return null;
+}
+
+/* ── LOAD / UNLOAD ─────────────────────────────────────────────────────── */
+export async function unloadModel(): Promise<void> {
+  if (ctx) {
+    try { await ctx.release(); } catch { /* already gone */ }
+  }
+  ctx = null;
+  loadedModel = null;
+  loadedCtxSize = 0;
+  visionOn = false;
+  visionNote = '';
+}
+
+const MEMORY_ERR = /context|memory|alloc|kv|out of|oom/i;
+
+/**
+ * Loads a text model (and its vision projector if one is paired).
+ * onProgress receives 0..1.
+ */
+export async function loadModel(
+  model: ModelInfo,
+  opts: LoadOptions = {},
+  onProgress?: (pct: number) => void,
+): Promise<void> {
+  if (model.isProjector) {
+    throw new Error('ده ملف mmproj (للرؤية) مش نموذج. اختار النموذج الأساسي — الـ mmproj بيتربط بيه تلقائياً.');
+  }
+
+  await unloadModel();
+  await AsyncStorage.setItem(LOADING_FLAG_KEY, model.uri);
+
+  const sizes = opts.nCtx ? [opts.nCtx] : [8192, 4096, 2048];
+  let lastError: any = null;
+
+  for (const nCtx of sizes) {
+    try {
+      ctx = await initLlama(
+        {
+          model: model.uri,
+          n_ctx: nCtx,
+          n_threads: opts.nThreads ?? 4,
+          n_gpu_layers: opts.gpuLayers ?? 0,
+          use_mlock: false,
+        },
+        (p: number) => onProgress?.(Math.max(0, Math.min(1, p / 100))),
+      );
+      loadedModel = model;
+      loadedCtxSize = nCtx;
+      lastError = null;
+      break;
+    } catch (e: any) {
+      lastError = e;
+      ctx = null;
+      // Only a memory-related failure can be fixed with a smaller context.
+      if (!MEMORY_ERR.test(String(e?.message || e))) break;
+    }
+  }
+
+  if (!ctx || !loadedModel) {
+    await AsyncStorage.removeItem(LOADING_FLAG_KEY);
+    const reason = String(lastError?.message || lastError || 'سبب غير معروف');
+    throw new Error(
+      `فشل تحميل "${model.name}": ${reason}\n` +
+      'تأكد إن الملف GGUF كامل، وإن النموذج مدعوم (موديلات حديثة ممكن تحتاج إصدار أحدث من llama.rn).',
+    );
+  }
+
+  // Vision (optional)
+  try {
+    const all = await listLocalModels();
+    const proj = opts.mmprojUri
+      ? all.find(m => m.uri === opts.mmprojUri) ?? null
+      : findProjector(model, all);
+    if (proj) {
+      const ok = await ctx.initMultimodal({ path: proj.uri, use_gpu: false });
+      if (ok) {
+        const support = await ctx.getMultimodalSupport();
+        visionOn = !!support.vision;
+        visionNote = visionOn ? `رؤية: ${proj.name}` : 'ملف mmproj اتحمّل بس بدون دعم صور.';
+      } else {
+        visionNote = `فشل تحميل ملف الرؤية ${proj.name} (ممكن مش مطابق للنموذج).`;
+      }
+    } else {
+      visionNote = '';
+    }
+  } catch (e: any) {
+    visionOn = false;
+    visionNote = `فشل تفعيل الرؤية: ${e?.message || e}`;
+  }
+
+  await AsyncStorage.setItem(LAST_MODEL_KEY, model.uri);
+  await AsyncStorage.removeItem(LOADING_FLAG_KEY);
+}
+
+export type AutoLoadStatus = 'loaded' | 'none' | 'skipped_after_crash';
+
+/**
+ * Re-loads the last used model on startup. If the previous attempt never
+ * finished (the app was killed mid-load, e.g. out of memory), it is skipped
+ * once instead of crash-looping.
+ */
+export async function autoLoadLastModel(
+  onProgress?: (pct: number) => void,
+): Promise<{ status: AutoLoadStatus; model?: ModelInfo }> {
+  const flag = await AsyncStorage.getItem(LOADING_FLAG_KEY);
+  if (flag) {
+    await AsyncStorage.removeItem(LOADING_FLAG_KEY);
+    await AsyncStorage.removeItem(LAST_MODEL_KEY);
+    return { status: 'skipped_after_crash' };
+  }
+  const last = await AsyncStorage.getItem(LAST_MODEL_KEY);
+  if (!last) return { status: 'none' };
+
+  const models = await listLocalModels();
+  const m = models.find(x => x.uri === last && !x.isProjector);
+  if (!m) return { status: 'none' };
+
+  await loadModel(m, {}, onProgress);
+  return { status: 'loaded', model: m };
+}
+
+/* ── VISION HELPER (used by attachments.ts for video frames) ───────────── */
+export async function analyzeImage(
+  imageUri: string,
+  prompt: string,
+  maxTokens = 400,
+): Promise<string> {
+  const c = getContext();
+  if (!visionOn) throw new Error('مفيش نموذج رؤية (mmproj) متحمّل.');
+  const url = imageUri.startsWith('/') ? `file://${imageUri}` : imageUri;
+
+  return withGenerationLock(async () => {
+    const r = await c.completion({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url } },
+          ],
+        },
+      ],
+      n_predict: maxTokens,
+      temperature: 0.2,
+    });
+    return stripThinking(r.text || '');
+  });
 }

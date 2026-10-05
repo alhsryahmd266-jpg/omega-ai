@@ -99,6 +99,56 @@ class TerminalModule : Module() {
     val stdout: String, val stderr: String, val exitCode: Int
   )
 
+  /**
+   * Starts the process and reads stdout/stderr on separate threads WHILE it runs.
+   * (Reading only after waitFor() deadlocks as soon as output exceeds the pipe
+   * buffer, ~64 KB.) Output is capped so a runaway command can't exhaust memory.
+   */
+  private fun runProcess(pb: ProcessBuilder, timeoutMs: Long): ExecOutcome {
+    val maxChars = 200000
+    val process = pb.start()
+    try { process.outputStream.close() } catch (e: Exception) { }
+
+    val outBuf = StringBuffer()
+    val errBuf = StringBuffer()
+
+    val tOut = Thread {
+      try {
+        val reader = process.inputStream.bufferedReader()
+        val buf = CharArray(4096)
+        while (true) {
+          val n = reader.read(buf)
+          if (n < 0) break
+          if (outBuf.length < maxChars) { outBuf.append(buf, 0, n) }
+        }
+      } catch (e: Exception) { }
+    }
+    val tErr = Thread {
+      try {
+        val reader = process.errorStream.bufferedReader()
+        val buf = CharArray(4096)
+        while (true) {
+          val n = reader.read(buf)
+          if (n < 0) break
+          if (errBuf.length < maxChars) { errBuf.append(buf, 0, n) }
+        }
+      } catch (e: Exception) { }
+    }
+    tOut.start()
+    tErr.start()
+
+    val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+    if (!finished) {
+      process.destroyForcibly()
+      tOut.join(1000)
+      tErr.join(1000)
+      return ExecOutcome(outBuf.toString(), errBuf.toString() + "\nCommand timed out after ${timeoutMs}ms", -1)
+    }
+    tOut.join(2000)
+    tErr.join(2000)
+    return ExecOutcome(outBuf.toString(), errBuf.toString(), process.exitValue())
+  }
+
   /** Core: runs `bashArgs` through proot with termux-exec's LD_PRELOAD hook active. */
   private fun execViaProot(bashArgs: List<String>, timeoutMs: Long, extraBinds: List<String> = emptyList()): ExecOutcome {
     val bash = ensureRootfsExtracted()
@@ -130,15 +180,7 @@ class TerminalModule : Module() {
     env["PATH"] = "/bin:/usr/bin:/system/bin"
     env["TERM"] = "xterm-256color"
 
-    val process = pb.start()
-    val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-    if (!finished) {
-      process.destroyForcibly()
-      return ExecOutcome("", "Command timed out after ${timeoutMs}ms", -1)
-    }
-    val stdout = process.inputStream.bufferedReader().readText()
-    val stderr = process.errorStream.bufferedReader().readText()
-    return ExecOutcome(stdout, stderr, process.exitValue())
+    return runProcess(pb, timeoutMs)
   }
 
   override fun definition() = ModuleDefinition {
@@ -179,6 +221,29 @@ class TerminalModule : Module() {
         ))
       } catch (e: Exception) {
         promise.reject("EXEC_ERROR", "Command execution failed: ${e.message}", e)
+      }
+    }
+
+    AsyncFunction("runShell") { command: String, timeoutMs: Int, promise: expo.modules.kotlin.Promise ->
+      try {
+        val home = File(context.filesDir, "home")
+        home.mkdirs()
+        val pb = ProcessBuilder("/system/bin/sh", "-c", command)
+        pb.directory(home)
+        val env = pb.environment()
+        env["HOME"] = home.absolutePath
+        env["TMPDIR"] = context.cacheDir.absolutePath
+        env["PATH"] = "/system/bin:/system/xbin:/vendor/bin"
+        env["TERM"] = "xterm-256color"
+        val result = runProcess(pb, timeoutMs.toLong())
+        promise.resolve(mapOf(
+          "stdout" to result.stdout,
+          "stderr" to result.stderr,
+          "exitCode" to result.exitCode,
+          "success" to (result.exitCode == 0)
+        ))
+      } catch (e: Exception) {
+        promise.reject("EXEC_ERROR", "Shell execution failed: ${e.message}", e)
       }
     }
 

@@ -34,6 +34,7 @@ interface TerminalNative {
   isSetupDone(): Promise<boolean>;
   setupTerminal(): Promise<{ bashPath: string; nativeLibDir: string; rootfsDir: string }>;
   run(command: string, timeoutMs: number): Promise<NativeExecResult>;
+  runShell(command: string, timeoutMs: number): Promise<NativeExecResult>;
   runPython(code: string, timeoutMs: number): Promise<NativeExecResult>;
   installPackage(packageName: string): Promise<NativeExecResult>;
   writeFile(path: string, content: string): Promise<boolean>;
@@ -45,7 +46,10 @@ const Native = requireNativeModule<TerminalNative>('Terminal');
 /** Formats a native exec result into the single-string shape tools.ts expects. */
 function formatResult(r: NativeExecResult): string {
   if (r.success) {
-    return r.stdout.trim() || '(command ran with no output)';
+    const err = r.stderr.trim();
+    const out = r.stdout.trim();
+    if (out && err) return `${out}\nstderr: ${err}`;
+    return out || (err ? `stderr: ${err}` : '(command ran with no output)');
   }
   const parts: string[] = [];
   if (r.stdout.trim()) parts.push(r.stdout.trim());
@@ -67,12 +71,27 @@ const Terminal = {
     return Native.setupTerminal();
   },
 
+  /**
+   * Default shell: Android's own /system/bin/sh (toybox: ls, cat, grep, sed,
+   * find, tar, ps, df, ping ...). Needs no setup and does not depend on the
+   * proot chain, so it works on every device. Working dir = <filesDir>/home.
+   */
   async run(command: string, timeoutSeconds = 30): Promise<string> {
+    try {
+      const result = await Native.runShell(command, timeoutSeconds * 1000);
+      return formatResult(result);
+    } catch (e: any) {
+      return `Terminal execution failed: ${e.message || e}`;
+    }
+  },
+
+  /** Experimental: bash inside proot (builtins only — no coreutils are bundled). */
+  async runProot(command: string, timeoutSeconds = 30): Promise<string> {
     try {
       const result = await Native.run(command, timeoutSeconds * 1000);
       return formatResult(result);
     } catch (e: any) {
-      return `Terminal execution failed: ${e.message || e}`;
+      return `Proot execution failed: ${e.message || e}`;
     }
   },
 
