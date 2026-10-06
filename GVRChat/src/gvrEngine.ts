@@ -1,21 +1,27 @@
 /**
  * gvrEngine.ts — GVR agent loop
  * ==============================
- * The model asks for a tool by writing exactly one tag and stopping:
+ * Two ways a tool gets used:
+ *  1. AUTO-ROUTED by the app (router.ts): obvious requests ("open the terminal",
+ *     "search for X", a pasted URL, a shell command) run BEFORE the model, and the
+ *     results are handed to it. This works even with tiny / non-instruct models.
+ *  2. REQUESTED by the model, by writing one tag and stopping:
+ *         <tool name="terminal">ls -la</tool>
+ *     (the Hermes/Qwen form <tool_call>{"name":..,"arguments":{..}}</tool_call> is accepted too)
  *
- *     <tool name="terminal">ls -la</tool>
- *
- * The engine runs the tool, feeds the result back as the next message, and
- * lets the model continue until it answers without a tool call (or the round
- * limit is reached). The conversation is kept in memory between calls so the
- * model sees previous turns; resetConversation() clears it.
+ * Generation is protected against runaway repetition: sampling penalties + DRY,
+ * end-of-turn stop words, a hard token cap, and a live loop detector that stops
+ * the model the moment it starts repeating itself.
  */
 import type { RNLlamaOAICompatibleMessage } from 'llama.rn';
 import {
-  getContext, getLoadedContextSize, isModelLoaded, isVisionReady,
-  stripThinking, withGenerationLock,
+  collapseLoop, detectLoop, getContext, getLoadedContextSize, getModelProfile, isModelLoaded,
+  isVisionReady, samplingFor, STOP_WORDS, stripThinking, withGenerationLock,
 } from './localLLM';
-import { dispatchTool, memoryDigest, normalizeToolName, toolPromptLines } from './tools';
+import {
+  CORE_TOOLS, dispatchTool, isLinuxReady, memoryDigest, normalizeToolName, toolPromptLines,
+} from './tools';
+import { autoRoute, type RouteHit } from './router';
 import type { PreparedAttachment } from './attachments';
 
 /* ── TYPES (App.tsx depends on these exact shapes) ─────────────────────── */
@@ -29,6 +35,8 @@ export interface AgentStep {
   tool: string;
   arg: string;
   result: string;
+  /** true when the app ran it automatically (router), not the model */
+  auto?: boolean;
 }
 
 export interface AgentResult {
@@ -40,14 +48,17 @@ export interface AgentResult {
 }
 
 /* ── CONSTANTS ─────────────────────────────────────────────────────────── */
-const N_PREDICT = 1024;
+const N_PREDICT_FULL = 900;
+const N_PREDICT_WEAK = 450;
 const TOOL_RESULT_CHARS = 3000;
+const ROUTED_RESULT_CHARS = 3500;
 const HISTORY_MAX_MESSAGES = 12;
-const CHARS_PER_TOKEN = 2.8; // conservative (Arabic + code tokenise poorly)
+const CHARS_PER_TOKEN = 2.8;
 
 const TOOL_TAG_RE = /<tool\s+name\s*=\s*["']?([a-zA-Z_]+)["']?\s*>([\s\S]*?)(?:<\/tool>|$)/;
-// Same shape, global: used to remove tool tags that must never reach the user.
 const STRAY_TOOL_RE = /<tool\s+name\s*=\s*["']?[a-zA-Z_]+["']?\s*>[\s\S]*?(?:<\/tool>|$)/g;
+const HERMES_RE = /<tool_call>\s*(\{[\s\S]*?\})\s*(?:<\/tool_call>|$)/;
+const STRAY_HERMES_RE = /<tool_call>[\s\S]*?(?:<\/tool_call>|$)/g;
 
 /* ── CONVERSATION STATE ────────────────────────────────────────────────── */
 let history: RNLlamaOAICompatibleMessage[] = [];
@@ -56,10 +67,26 @@ export function resetConversation(): void {
   history = [];
 }
 
+const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}\n…[truncated]` : s);
+
 /* ── SYSTEM PROMPT ─────────────────────────────────────────────────────── */
-async function buildSystemPrompt(): Promise<string> {
-  const mem = await memoryDigest();
+type PromptMode = 'minimal' | 'compact' | 'full';
+
+function promptMode(): PromptMode {
+  const p = getModelProfile();
+  if (!p) return 'full';
+  if (p.looksBase) return 'minimal';
+  if (p.tier === 'tiny') return 'compact';
+  return 'full';
+}
+
+async function buildSystemPrompt(mode: PromptMode): Promise<string> {
   const now = new Date().toString();
+  if (mode === 'minimal') {
+    return 'You are a helpful assistant. Answer briefly and clearly in the same language as the user. Do not repeat yourself.';
+  }
+  const mem = await memoryDigest();
+  const tools = toolPromptLines(mode === 'compact' ? CORE_TOOLS : undefined);
   return [
     'You are GVR, an AI assistant running entirely on the user\'s Android phone, with tools.',
     '',
@@ -67,15 +94,21 @@ async function buildSystemPrompt(): Promise<string> {
     '<tool name="TOOL_NAME">argument</tool>',
     'The result comes back in the next message. Then continue, or answer the user.',
     '',
+    'Example:',
+    'User: ابحث عن أحدث إصدار من أندرويد',
+    'Assistant: <tool name="search">أحدث إصدار من أندرويد</tool>',
+    '',
     'TOOLS:',
-    toolPromptLines(),
+    tools,
     '',
     'RULES:',
-    '- Use a tool only when it is really needed. Simple questions: just answer.',
+    '- Use a tool only when it is really needed. Simple questions: just answer, briefly.',
     '- Never invent tool output. If a tool fails, say so and try another way or explain.',
-    '- One tool call per message. Do not write anything after the closing tag.',
+    '- One tool call per message. Nothing after the closing tag.',
+    '- If the message already contains tool results, use them to answer; do not call the same tool again.',
     '- Before destructive actions (deleting, overwriting), make sure the user asked for it.',
-    '- Reply in the same language the user writes in (Arabic dialects are fine). Be concise.',
+    '- Reply in the same language the user writes in (Arabic dialects are fine). Be concise. Never repeat sentences.',
+    isLinuxReady() ? '- A real Linux (Alpine) is available: python3, apk, git, node can be used through the terminal.' : '',
     '',
     `Current time: ${now}`,
     mem ? `Saved memory: ${mem}` : '',
@@ -85,20 +118,66 @@ async function buildSystemPrompt(): Promise<string> {
 /* ── CONTEXT BUDGET ────────────────────────────────────────────────────── */
 function contentChars(m: RNLlamaOAICompatibleMessage): number {
   if (typeof m.content === 'string') return m.content.length;
-  if (Array.isArray(m.content)) {
-    return m.content.reduce((n, p) => n + (p.text ? p.text.length : 300), 0);
-  }
+  if (Array.isArray(m.content)) return m.content.reduce((n, p) => n + (p.text ? p.text.length : 300), 0);
   return 0;
 }
+const totalChars = (msgs: RNLlamaOAICompatibleMessage[]): number => msgs.reduce((n, m) => n + contentChars(m), 0);
 
-function totalChars(msgs: RNLlamaOAICompatibleMessage[]): number {
-  return msgs.reduce((n, m) => n + contentChars(m), 0);
-}
-
-function charBudget(): number {
+function charBudget(nPredict: number): number {
   const nCtx = getLoadedContextSize() || 4096;
-  return Math.floor(Math.max(512, nCtx - N_PREDICT - 200) * CHARS_PER_TOKEN);
+  return Math.floor(Math.max(512, nCtx - nPredict - 200) * CHARS_PER_TOKEN);
 }
+
+/* ── TOOL-CALL PARSING ─────────────────────────────────────────────────── */
+interface ParsedCall { before: string; tool: string; arg: string }
+
+function hermesArg(tool: string, args: unknown): string {
+  if (typeof args === 'string') return args;
+  if (!args || typeof args !== 'object') return '';
+  const o = args as Record<string, unknown>;
+  const pick = (...keys: string[]) => keys.map(k => o[k]).find(v => typeof v === 'string') as string | undefined;
+  switch (normalizeToolName(tool)) {
+    case 'terminal': return pick('command', 'cmd', 'script') ?? JSON.stringify(o);
+    case 'search': return pick('query', 'q', 'text') ?? JSON.stringify(o);
+    case 'fetch_url': return Object.keys(o).length === 1 && typeof o.url === 'string' ? o.url : JSON.stringify(o);
+    case 'calc': return pick('expression', 'expr', 'query') ?? JSON.stringify(o);
+    case 'python': return pick('code', 'script') ?? JSON.stringify(o);
+    case 'javascript': return pick('code', 'script') ?? JSON.stringify(o);
+    case 'read_file': case 'list_dir': case 'delete_file': case 'inspect_file':
+      return pick('path', 'file', 'dir') ?? JSON.stringify(o);
+    case 'write_file': {
+      const path = pick('path', 'file');
+      const content = pick('content', 'text', 'data');
+      return path !== undefined ? `${path}\n${content ?? ''}` : JSON.stringify(o);
+    }
+    default: {
+      const first = Object.values(o).find(v => typeof v === 'string') as string | undefined;
+      return first ?? JSON.stringify(o);
+    }
+  }
+}
+
+export function parseToolCall(raw: string): ParsedCall | null {
+  const m = TOOL_TAG_RE.exec(raw);
+  if (m) return { before: raw.slice(0, m.index).trim(), tool: normalizeToolName(m[1]), arg: (m[2] || '').trim() };
+  const h = HERMES_RE.exec(raw);
+  if (h) {
+    try {
+      const j = JSON.parse(h[1]);
+      const name = String(j.name || j.tool || '');
+      if (name) {
+        return {
+          before: raw.slice(0, h.index).trim(),
+          tool: normalizeToolName(name),
+          arg: hermesArg(name, j.arguments ?? j.args ?? j.parameters).trim(),
+        };
+      }
+    } catch { /* malformed JSON: ignore */ }
+  }
+  return null;
+}
+
+const stripToolMarkup = (s: string): string => s.replace(STRAY_TOOL_RE, '').replace(STRAY_HERMES_RE, '').trim();
 
 /* ── MAIN ENTRY ────────────────────────────────────────────────────────── */
 export async function runWithAttachment(
@@ -108,7 +187,6 @@ export async function runWithAttachment(
   maxToolRounds = 5,
 ): Promise<AgentResult> {
   if (!isModelLoaded()) throw new Error('مفيش نموذج متحمّل — حمّل نموذج من الإعدادات الأول.');
-
   return withGenerationLock(() => runLocked(userText, attachment, onEvent, maxToolRounds));
 }
 
@@ -120,24 +198,42 @@ async function runLocked(
 ): Promise<AgentResult> {
   const t0 = Date.now();
   const ctx = getContext();
+  const profile = getModelProfile();
+  const weak = !!profile && (profile.tier === 'tiny' || profile.looksBase);
+  const mode = promptMode();
+  const nPredict = weak ? N_PREDICT_WEAK : N_PREDICT_FULL;
   const warnings: string[] = attachment ? [...attachment.warnings] : [];
   const steps: AgentStep[] = [];
   const answerParts: string[] = [];
+  const question = userText.trim();
 
-  const system = await buildSystemPrompt();
+  const system = await buildSystemPrompt(mode);
+  const budget = charBudget(nPredict);
 
-  /* ── build the user message (text + attachment) ──────────────────────── */
-  const budget = charBudget();
-  const sysChars = system.length;
+  /* ── 1) tools the app runs on its own ────────────────────────────────── */
+  const routed: RouteHit[] = autoRoute(question, { hasAttachment: !!attachment });
+  const routedBlocks: string[] = [];
+  for (const hit of routed) {
+    onEvent({ type: 'tool_call', tool: hit.tool, arg: hit.arg });
+    const result = await dispatchTool(hit.tool, hit.arg);
+    onEvent({ type: 'tool_result', tool: hit.tool, result });
+    steps.push({ tool: hit.tool, arg: hit.arg, result, auto: true });
+    routedBlocks.push(`[${hit.tool}${hit.arg ? `: ${clip(hit.arg, 120)}` : ''}]\n${clip(result, ROUTED_RESULT_CHARS)}`);
+  }
+
+  /* ── 2) build the user message ───────────────────────────────────────── */
   let histCopy = [...history];
-  // Drop the oldest turns until the history fits in ~40% of the budget.
   while (histCopy.length > 0 && totalChars(histCopy) > budget * 0.4) histCopy = histCopy.slice(2);
+
+  const routedText = routedBlocks.length
+    ? `\n\n[Results the app already obtained for this request — use them to answer; do not call these tools again]\n${routedBlocks.join('\n\n')}`
+    : '';
 
   let attachmentText = '';
   if (attachment && attachment.extractedContent) {
     const room = Math.max(
       500,
-      budget - sysChars - totalChars(histCopy) - userText.length - 400,
+      budget - system.length - totalChars(histCopy) - question.length - routedText.length - 400,
     );
     attachmentText = attachment.extractedContent;
     if (attachmentText.length > room) {
@@ -145,11 +241,9 @@ async function runLocked(
       warnings.push(`المرفق اتقصّ لأول ${room} حرف عشان يناسب حجم الـ context.`);
     }
   }
-
   const header = attachment
-    ? `[Attached ${attachment.kind}: ${attachment.name}]\n${attachmentText ? attachmentText + '\n[End of attachment]\n\n' : ''}`
+    ? `[Attached ${attachment.kind}: ${attachment.name}]\n${attachmentText ? `${attachmentText}\n[End of attachment]\n\n` : ''}`
     : '';
-  const question = userText.trim();
 
   let userMsg: RNLlamaOAICompatibleMessage;
   if (attachment?.kind === 'image' && isVisionReady()) {
@@ -157,7 +251,7 @@ async function runLocked(
     userMsg = {
       role: 'user',
       content: [
-        { type: 'text', text: `${header}${question}` },
+        { type: 'text', text: `${header}${question}${routedText}` },
         { type: 'image_url', image_url: { url } },
       ],
     };
@@ -165,15 +259,19 @@ async function runLocked(
     if (attachment?.kind === 'image' && !isVisionReady()) {
       warnings.push('الصورة متحلّلتش: محتاج نموذج رؤية + ملف mmproj.');
     }
-    userMsg = { role: 'user', content: `${header}${question}` };
+    userMsg = { role: 'user', content: `${header}${question}${routedText}` };
   }
 
   const turn: RNLlamaOAICompatibleMessage[] = [userMsg];
+  const sampling = samplingFor(profile);
+  const stopBase = [...STOP_WORDS];
   let finalText = '';
+  // Auto-routed results already count as tool use for the model.
+  const maxRounds = routed.length ? Math.max(1, maxToolRounds - 2) : maxToolRounds;
 
-  /* ── tool loop ───────────────────────────────────────────────────────── */
-  for (let round = 0; round <= maxToolRounds; round++) {
-    const lastRound = round === maxToolRounds;
+  /* ── 3) model loop (the model may request more tools) ────────────────── */
+  for (let round = 0; round <= maxRounds; round++) {
+    const lastRound = round === maxRounds;
     onEvent({ type: 'thought', text: round === 0 ? 'يفكر...' : 'بيراجع النتيجة...' });
 
     const messages: RNLlamaOAICompatibleMessage[] = [
@@ -181,81 +279,84 @@ async function runLocked(
       ...histCopy,
       ...turn,
     ];
-    if (lastRound) {
-      messages.push({
-        role: 'user',
-        content: 'Do not call any more tools. Answer the user now using what you already have.',
-      });
+    if (lastRound && round > 0) {
+      messages.push({ role: 'user', content: 'Do not call any more tools. Answer the user now using what you already have.' });
     }
 
+    let acc = '';
     let tokens = 0;
+    let looped = false;
     let result;
     try {
       result = await ctx.completion(
         {
           messages,
-          n_predict: N_PREDICT,
-          temperature: 0.6,
-          top_p: 0.9,
+          n_predict: nPredict,
+          ...sampling,
           enable_thinking: false,
-          stop: lastRound ? [] : ['</tool>'],
+          stop: lastRound || mode === 'minimal' ? stopBase : [...stopBase, '</tool>', '</tool_call>'],
         },
-        () => {
+        (data) => {
+          acc += data.token;
           tokens++;
-          if (tokens % 24 === 0) onEvent({ type: 'thought', text: `يكتب الرد... (${tokens})` });
+          if (tokens % 10 === 0) {
+            if (!looped && detectLoop(acc)) {
+              looped = true;
+              ctx.stopCompletion().catch(() => {});
+            }
+            if (tokens % 30 === 0) onEvent({ type: 'thought', text: `يكتب الرد... (${tokens})` });
+          }
         },
       );
     } catch (e: any) {
       throw new Error(`فشل التوليد: ${e?.message || e}`);
     }
 
-    const raw = stripThinking(result.text || '');
-    const match = lastRound ? null : TOOL_TAG_RE.exec(raw);
+    let raw = stripThinking(result.text || '');
+    if (looped) {
+      raw = collapseLoop(raw);
+      warnings.push('النموذج دخل في تكرار فاتوقّفته. جرّب نموذج Instruct أكبر لنتيجة أحسن.');
+    }
 
-    if (!match) {
-      // On the last round the model may still emit a tool tag; never show it raw.
-      finalText = raw.replace(STRAY_TOOL_RE, '').trim();
+    const call = lastRound || mode === 'minimal' ? null : parseToolCall(raw);
+    if (!call) {
+      finalText = stripToolMarkup(raw);
       if (result.context_full) warnings.push('الـ context امتلى — الرد ممكن يكون ناقص.');
       break;
     }
 
-    // Narrative before the tag is part of the answer the user sees.
-    const before = raw.slice(0, match.index).trim();
-    if (before) answerParts.push(before);
+    if (call.before) answerParts.push(call.before);
+    onEvent({ type: 'tool_call', tool: call.tool, arg: call.arg });
+    const toolResult = await dispatchTool(call.tool, call.arg);
+    onEvent({ type: 'tool_result', tool: call.tool, result: toolResult });
+    steps.push({ tool: call.tool, arg: call.arg, result: toolResult });
 
-    const tool = normalizeToolName(match[1]);
-    const arg = (match[2] || '').trim();
-
-    onEvent({ type: 'tool_call', tool, arg });
-    const toolResult = await dispatchTool(tool, arg);
-    onEvent({ type: 'tool_result', tool, result: toolResult });
-    steps.push({ tool, arg, result: toolResult });
-
-    turn.push({ role: 'assistant', content: `${before ? before + '\n' : ''}<tool name="${tool}">${arg}</tool>` });
-    turn.push({
-      role: 'user',
-      content: `<tool_result name="${tool}">\n${toolResult.slice(0, TOOL_RESULT_CHARS)}\n</tool_result>`,
-    });
-
-    // Keep the loop from overflowing the context: drop the oldest tool pair.
+    turn.push({ role: 'assistant', content: `${call.before ? `${call.before}\n` : ''}<tool name="${call.tool}">${call.arg}</tool>` });
+    turn.push({ role: 'user', content: `<tool_result name="${call.tool}">\n${toolResult.slice(0, TOOL_RESULT_CHARS)}\n</tool_result>` });
     while (turn.length > 3 && totalChars(turn) > budget * 0.7) turn.splice(1, 2);
   }
 
+  /* ── 4) assemble the answer ──────────────────────────────────────────── */
   if (finalText) answerParts.push(finalText);
   let answer = answerParts.join('\n\n').trim();
+
+  // Weak / base models often can't summarise tool output: always show the raw results too.
+  if (weak && steps.length) {
+    const raws = steps.map(s => `▸ ${s.tool}${s.arg ? ` (${clip(s.arg, 60)})` : ''}:\n${clip(s.result, 900)}`).join('\n\n');
+    answer = `${answer}${answer ? '\n\n' : ''}— نتائج الأدوات —\n${raws}`.trim();
+  }
   if (!answer) {
     const last = steps[steps.length - 1];
     answer = last
-      ? `(النموذج ما ردّش بنص بعد الأداة.) آخر نتيجة من ${last.tool}:\n${last.result.slice(0, 800)}`
+      ? `(النموذج ما ردّش بنص بعد الأداة.) آخر نتيجة من ${last.tool}:\n${clip(last.result, 800)}`
       : '(النموذج ما رجّعش رد. جرّب تعيد الصياغة أو تجرب نموذج تاني.)';
   }
 
-  // Remember this exchange (attachment bodies are not kept to save context).
   history.push({
     role: 'user',
     content: attachment ? `[Attached ${attachment.kind}: ${attachment.name}] ${question}` : question,
   });
-  history.push({ role: 'assistant', content: answer });
+  history.push({ role: 'assistant', content: clip(answer, 2500) });
   if (history.length > HISTORY_MAX_MESSAGES) history = history.slice(-HISTORY_MAX_MESSAGES);
 
   return {

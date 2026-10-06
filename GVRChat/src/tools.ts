@@ -15,6 +15,7 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking, Platform, Share } from 'react-native';
 import Terminal from '../modules/terminal/src';
+import { inspectFile } from './fileInspect';
 import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, normalizePermKey, requestPermission,
 } from './permissions';
@@ -704,10 +705,47 @@ export async function memoryDigest(maxChars = 600): Promise<string> {
   return clip(parts.join('; '), maxChars);
 }
 
+/* ── LINUX (Alpine) STATE ──────────────────────────────────────────────── */
+let linuxReady = false;
+export const isLinuxReady = (): boolean => linuxReady;
+
+/** Re-checks whether Alpine Linux is installed and usable; call at startup and after installing. */
+export async function refreshLinuxState(): Promise<boolean> {
+  try {
+    const st = await Terminal.alpineStatus();
+    linuxReady = !!(st && st.installed && st.prootPresent && st.tallocPresent && st.shmemPresent);
+  } catch {
+    linuxReady = false;
+  }
+  return linuxReady;
+}
+
+/* ── OPEN THE TERMINAL PANEL ───────────────────────────────────────────── */
+let openTerminalHandler: (() => void) | null = null;
+export function setOpenTerminalHandler(fn: (() => void) | null): void {
+  openTerminalHandler = fn;
+}
+export async function toolOpenTerminal(): Promise<string> {
+  if (!openTerminalHandler) return 'The terminal panel is not available.';
+  openTerminalHandler();
+  const mode = await Terminal.mode();
+  return `Terminal panel opened for the user (shell: ${mode === 'alpine' ? 'Alpine Linux' : 'Android shell'}).`;
+}
+
+/* ── INSPECT ANY FILE (APK, zip, office, pdf, binary) ──────────────────── */
+export async function toolInspectFile(arg: string): Promise<string> {
+  const { uri } = resolvePath(arg.split('\n')[0]);
+  const info = await FileSystem.getInfoAsync(uri, { size: true });
+  if (!info.exists) return `File not found: ${uri}`;
+  if (info.isDirectory) return `That is a directory. Use list_dir on: ${uri}`;
+  const name = uri.split('/').pop() || 'file';
+  return inspectFile({ uri, name, size: info.size }, 14000);
+}
+
 /* ── TOOL REGISTRY ─────────────────────────────────────────────────────── */
 export type ToolName =
   | 'search' | 'fetch_url' | 'download_file' | 'terminal' | 'javascript' | 'calc' | 'datetime'
-  | 'read_file' | 'write_file' | 'list_dir' | 'delete_file'
+  | 'read_file' | 'write_file' | 'list_dir' | 'delete_file' | 'inspect_file' | 'open_terminal'
   | 'device_info' | 'open_url' | 'share_text' | 'permission'
   | 'mem_save' | 'mem_get' | 'mem_list' | 'mem_delete'
   | 'python' | 'pkg_install';
@@ -715,11 +753,11 @@ export type ToolName =
 interface ToolSpec {
   name: ToolName;
   /** Shown to the model. */
-  usage: string;
+  usage: string | (() => string);
   /** Needs the user's OK before running. */
   confirm: boolean;
-  /** Advertised to the model? (python / pkg_install are kept only for compatibility) */
-  advertise: boolean;
+  /** Advertised to the model? May depend on runtime state (e.g. Linux installed). */
+  advertise: boolean | (() => boolean);
   run: (arg: string) => Promise<string>;
 }
 
@@ -734,7 +772,9 @@ const TOOLS: ToolSpec[] = [
     usage: 'download a file from the internet into the phone. Argument: url | path (path optional; relative = app workspace).',
     run: toolDownloadFile },
   { name: 'terminal', confirm: true, advertise: true,
-    usage: 'run a shell command on the phone (Android toybox: ls cat grep sed find tar ps df ping …). The folder you cd into is remembered between calls. Multi-line scripts work. Start with a line "#timeout=120" for long jobs. No package manager, no python. Argument: the command.',
+    usage: () => linuxReady
+      ? 'run a shell command inside Alpine Linux on the phone (apk, python3, node, git, curl, grep, sed, awk …). The folder you cd into is remembered between calls. Multi-line scripts work. Start with a line "#timeout=120" for long jobs. Argument: the command.'
+      : 'run a shell command on the phone (Android toybox: ls cat grep sed find tar ps df ping …). The folder you cd into is remembered. Multi-line scripts work. Start with a line "#timeout=120" for long jobs. No python/package manager until Alpine Linux is installed from Settings. Argument: the command.',
     run: toolTerminal },
   { name: 'javascript', confirm: true, advertise: true,
     usage: 'run JavaScript for calculations or data processing. Use console.log(...) or return a value. No infinite loops.',
@@ -754,6 +794,12 @@ const TOOLS: ToolSpec[] = [
   { name: 'list_dir', confirm: false, advertise: true,
     usage: 'list a folder. Argument: a path (empty = app workspace).',
     run: toolListDir },
+  { name: 'inspect_file', confirm: false, advertise: true,
+    usage: 'analyse ANY file: APK (package, permissions, components, signing), zip/office/pdf (text), or unknown binaries. Argument: a path.',
+    run: toolInspectFile },
+  { name: 'open_terminal', confirm: false, advertise: true,
+    usage: 'open the terminal window for the user. No argument.',
+    run: () => toolOpenTerminal() },
   { name: 'delete_file', confirm: true, advertise: true,
     usage: 'delete a file or folder inside the app workspace. Argument: the path.',
     run: toolDeleteFile },
@@ -784,18 +830,33 @@ const TOOLS: ToolSpec[] = [
   { name: 'mem_delete', confirm: false, advertise: true,
     usage: 'delete one saved memory. Argument: key.',
     run: toolMemoryDelete },
-  // Kept so old tags don't break; they report honestly that they are unavailable.
-  { name: 'python', confirm: false, advertise: false,
-    usage: '', run: async a => Terminal.runPython(a, 60) },
-  { name: 'pkg_install', confirm: false, advertise: false,
-    usage: '', run: async a => Terminal.installPackage(a) },
+  // Real tools once Alpine Linux is installed (Settings → Linux); otherwise hidden but still answer honestly.
+  { name: 'python', confirm: true, advertise: () => linuxReady,
+    usage: 'run Python 3 code inside Alpine Linux and return its output. Argument: the code.',
+    run: async a => {
+      const r = await Terminal.runPython(a, 60);
+      return r;
+    } },
+  { name: 'pkg_install', confirm: true, advertise: () => linuxReady,
+    usage: 'install Alpine packages with apk. Argument: package names separated by spaces (e.g. python3 py3-pip git nodejs).',
+    run: async a => Terminal.installPackages(a) },
 ];
 
-export const AVAILABLE_TOOLS: ToolName[] = TOOLS.filter(t => t.advertise).map(t => t.name);
+const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
+const usageOf = (t: ToolSpec): string => (typeof t.usage === 'function' ? t.usage() : t.usage);
+
+export function availableTools(): ToolName[] {
+  return TOOLS.filter(isAdvertised).map(t => t.name);
+}
+export const AVAILABLE_TOOLS: ToolName[] = TOOLS.filter(t => typeof t.advertise === 'boolean' && t.advertise).map(t => t.name);
+
+/** The small set shown to weak models so they are not overwhelmed. */
+export const CORE_TOOLS: ToolName[] = ['search', 'fetch_url', 'terminal', 'calc', 'datetime', 'read_file', 'list_dir', 'open_terminal', 'mem_save', 'mem_get'];
 
 /** Lines for the system prompt: "- name: usage" */
-export function toolPromptLines(): string {
-  return TOOLS.filter(t => t.advertise).map(t => `- ${t.name}: ${t.usage}`).join('\n');
+export function toolPromptLines(only?: ToolName[]): string {
+  return TOOLS.filter(t => isAdvertised(t) && (!only || only.includes(t.name)))
+    .map(t => `- ${t.name}: ${usageOf(t)}`).join('\n');
 }
 
 const ALIASES: Record<string, ToolName> = {
@@ -810,6 +871,9 @@ const ALIASES: Record<string, ToolName> = {
   rm: 'delete_file', delete: 'delete_file',
   device: 'device_info', info: 'device_info',
   open: 'open_url', share: 'share_text',
+  inspect: 'inspect_file', analyze: 'inspect_file', apk_info: 'inspect_file', file_info: 'inspect_file',
+  terminal_open: 'open_terminal', open_shell: 'open_terminal',
+  py: 'python', python3: 'python', apk: 'pkg_install', install: 'pkg_install',
   permissions: 'permission', perm: 'permission',
   memory_save: 'mem_save', remember: 'mem_save', memory_get: 'mem_get', memory_list: 'mem_list',
   memory_delete: 'mem_delete', forget: 'mem_delete',
@@ -823,7 +887,10 @@ export function normalizeToolName(raw: string): string {
 export async function dispatchTool(rawTool: string, arg: string): Promise<string> {
   const name = normalizeToolName(rawTool);
   const spec = TOOLS.find(t => t.name === name);
-  if (!spec) return `Unknown tool '${rawTool}'. Available: ${AVAILABLE_TOOLS.join(', ')}`;
+  if ((name === 'python' || name === 'pkg_install') && !linuxReady) {
+    return 'Alpine Linux is not installed yet. Ask the user to install it from Settings → Linux, then try again.';
+  }
+  if (!spec) return `Unknown tool '${rawTool}'. Available: ${availableTools().join(', ')}`;
 
   if (spec.confirm && !alwaysAllowed.has(spec.name)) {
     if (!confirmHandler) return 'Denied: no confirmation UI is available for this action.';

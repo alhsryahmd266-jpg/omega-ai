@@ -37,18 +37,135 @@ export interface LoadOptions {
   mmprojUri?: string;
 }
 
+export interface ModelProfile {
+  name: string;
+  paramsB: number;
+  hasChatTemplate: boolean;
+  /** Looks like a raw (non-instruction-tuned) model: it will not follow instructions or use tools. */
+  looksBase: boolean;
+  tier: 'tiny' | 'small' | 'ok';
+  /** Warnings in Arabic, ready to show to the user. */
+  warnings: string[];
+}
+
 /* ── STATE ─────────────────────────────────────────────────────────────── */
 let ctx: LlamaContext | null = null;
 let loadedModel: ModelInfo | null = null;
 let loadedCtxSize = 0;
 let visionOn = false;
 let visionNote = '';
+let profile: ModelProfile | null = null;
+let activeDownload: FileSystem.DownloadResumable | null = null;
 
 export const isModelLoaded = (): boolean => ctx !== null;
 export const isVisionReady = (): boolean => ctx !== null && visionOn;
 export const getLoadedModel = (): ModelInfo | null => loadedModel;
 export const getLoadedContextSize = (): number => loadedCtxSize;
 export const getVisionNote = (): string => visionNote;
+export const getModelProfile = (): ModelProfile | null => profile;
+
+/** Decides, from the GGUF metadata + file name, how capable this model is. */
+function analyzeModel(c: LlamaContext, fileName: string): ModelProfile {
+  const info: any = c.model || {};
+  const meta: Record<string, unknown> = info.metadata || {};
+  const label = [meta['general.name'], meta['general.basename'], meta['general.finetune'], meta['general.size_label'], fileName]
+    .filter(Boolean).join(' ');
+  const paramsB = (Number(info.nParams) || 0) / 1e9;
+  const templates = info.chatTemplates || {};
+  const hasChatTemplate = !!(meta['tokenizer.chat_template'] || templates.llamaChat || templates.jinja?.default);
+  const instructHint = /(instruct|chat|[-_. ]it\b|assistant|hermes|coder|thinking)/i.test(label);
+  const baseWord = /base/i.test(label) && !instructHint;
+  const looksBase = !hasChatTemplate || baseWord;
+  const tier: ModelProfile['tier'] = paramsB > 0 && paramsB < 1.5 ? 'tiny' : paramsB > 0 && paramsB < 3.5 ? 'small' : 'ok';
+
+  const warnings: string[] = [];
+  if (looksBase) {
+    warnings.push(
+      'ده نموذج Base (مش Instruct): مبيفهمش الأوامر، بيكرر كلامه، ومش هينفّذ أدوات. ' +
+      'حمّل نموذج Instruct (مثلاً Qwen2.5-3B-Instruct) من قائمة النماذج المقترحة.',
+    );
+  }
+  if (tier === 'tiny') {
+    warnings.push(
+      `حجم النموذج صغير جداً (~${paramsB.toFixed(1)}B). الأدوات هتشتغل تلقائياً من التطبيق، لكن جودة الردود هتكون ضعيفة. ` +
+      'للأدوات والكود استخدم 3B أو أكبر.',
+    );
+  }
+  return { name: String(meta['general.name'] || fileName), paramsB, hasChatTemplate, looksBase, tier, warnings };
+}
+
+/** Sampling that stops repetition loops (tiny / base models need it most). */
+export function samplingFor(p: ModelProfile | null) {
+  const weak = !p || p.tier === 'tiny' || p.looksBase;
+  return {
+    temperature: weak ? 0.45 : 0.6,
+    top_k: 40,
+    top_p: 0.9,
+    min_p: 0.05,
+    penalty_repeat: weak ? 1.18 : 1.08,
+    penalty_last_n: 256,
+    dry_multiplier: 0.8,
+    dry_base: 1.75,
+    dry_allowed_length: 2,
+    dry_penalty_last_n: 512,
+    dry_sequence_breakers: ['\n', ':', '"', '*'],
+  };
+}
+
+/** End-of-turn markers of the common chat formats (so generation always stops). */
+export const STOP_WORDS = ['<|im_end|>', '<|endoftext|>', '<|im_start|>', '<|eot_id|>', '<end_of_turn>', '</s>', '<|user|>', '<|end|>'];
+
+/** True when the tail of the text is the same chunk repeated 3+ times. */
+export function detectLoop(text: string): boolean {
+  if (text.length < 150) return false;
+  const tail = text.slice(-700);
+  for (const len of [20, 40, 80]) {
+    if (tail.length < len * 3) continue;
+    const unit = tail.slice(-len);
+    let count = 0;
+    let idx = tail.indexOf(unit);
+    while (idx !== -1) { count++; idx = tail.indexOf(unit, idx + len); }
+    if (count >= 3) return true;
+  }
+  return false;
+}
+
+/** Cuts a looping text back to a single copy of the repeated chunk. */
+export function collapseLoop(text: string): string {
+  const unit = text.slice(-40);
+  const first = text.indexOf(unit);
+  if (first === -1 || first + unit.length >= text.length - 5) return text;
+  return text.slice(0, first + unit.length).trim();
+}
+
+/* ── RECOMMENDED MODELS (downloaded straight from Hugging Face) ────────── */
+export interface RecommendedModel {
+  id: string;
+  title: string;
+  file: string;
+  url: string;
+  sizeGB: number;
+  note: string;
+}
+
+export const RECOMMENDED_MODELS: RecommendedModel[] = [
+  {
+    id: 'qwen25-3b-instruct',
+    title: 'Qwen2.5-3B-Instruct (Q4_K_M)',
+    file: 'Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+    sizeGB: 1.93,
+    note: 'سريع، بيفهم الأوامر وبينفّذ الأدوات — بداية موصى بيها',
+  },
+  {
+    id: 'qwen25-7b-instruct',
+    title: 'Qwen2.5-7B-Instruct (Q4_K_M)',
+    file: 'Qwen2.5-7B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf',
+    sizeGB: 4.68,
+    note: 'أذكى بكتير وأحسن في الأدوات والعربي، أبطأ وبياخد ~6GB رام',
+  },
+];
 
 export function getContext(): LlamaContext {
   if (!ctx) throw new Error('مفيش نموذج متحمّل — حمّل نموذج من الإعدادات الأول.');
@@ -232,6 +349,7 @@ export async function unloadModel(): Promise<void> {
   loadedCtxSize = 0;
   visionOn = false;
   visionNote = '';
+  profile = null;
 }
 
 const MEMORY_ERR = /context|memory|alloc|kv|out of|oom/i;
@@ -288,6 +406,8 @@ export async function loadModel(
     );
   }
 
+  try { profile = analyzeModel(ctx, model.name); } catch { profile = null; }
+
   // Vision (optional)
   try {
     const all = await listLocalModels();
@@ -340,6 +460,56 @@ export async function autoLoadLastModel(
 
   await loadModel(m, {}, onProgress);
   return { status: 'loaded', model: m };
+}
+
+/* ── DOWNLOAD A RECOMMENDED MODEL ──────────────────────────────────────── */
+export async function downloadRecommendedModel(
+  rec: RecommendedModel,
+  onProgress: (fraction: number, writtenBytes: number, totalBytes: number) => void,
+): Promise<ModelInfo> {
+  await ensureModelsDir();
+  const dest = MODELS_DIR + rec.file;
+  const part = `${dest}.part`;
+
+  const needBytes = rec.sizeGB * 1e9 * 1.05 + 300 * 1024 * 1024;
+  const free = await FileSystem.getFreeDiskStorageAsync();
+  if (free < needBytes) {
+    throw new Error(`المساحة الفاضية مش كفاية. محتاج ~${(needBytes / 1e9).toFixed(1)} GB وعندك ${(free / 1e9).toFixed(1)} GB.`);
+  }
+  await FileSystem.deleteAsync(part, { idempotent: true });
+
+  const dl = FileSystem.createDownloadResumable(rec.url, part, {}, (p) => {
+    const total = p.totalBytesExpectedToWrite || rec.sizeGB * 1e9;
+    onProgress(Math.min(1, p.totalBytesWritten / total), p.totalBytesWritten, total);
+  });
+  activeDownload = dl;
+  let res;
+  try {
+    res = await dl.downloadAsync();
+  } finally {
+    activeDownload = null;
+  }
+  if (!res || res.status !== 200) {
+    await FileSystem.deleteAsync(part, { idempotent: true });
+    throw new Error(`فشل التنزيل (HTTP ${res?.status ?? 'cancelled'}).`);
+  }
+  await FileSystem.deleteAsync(dest, { idempotent: true });
+  await FileSystem.moveAsync({ from: part, to: dest });
+
+  const head = await FileSystem.readAsStringAsync(dest, {
+    encoding: FileSystem.EncodingType.Base64, position: 0, length: 4,
+  });
+  if (head !== GGUF_MAGIC_B64) {
+    await FileSystem.deleteAsync(dest, { idempotent: true });
+    throw new Error('الملف اللي اتنزّل مش GGUF صالح. جرّب تاني.');
+  }
+  const info = await FileSystem.getInfoAsync(dest, { size: true });
+  return toModelInfo(rec.file, info.exists ? info.size : 0);
+}
+
+export async function cancelDownload(): Promise<void> {
+  try { await activeDownload?.pauseAsync(); } catch { /* already finished */ }
+  activeDownload = null;
 }
 
 /* ── VISION HELPER (used by attachments.ts for video frames) ───────────── */

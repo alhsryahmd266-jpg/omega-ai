@@ -15,11 +15,16 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   listLocalModels, importModelFromDevice, loadModel, deleteModel, autoLoadLastModel,
   isModelLoaded, isVisionReady, getLoadedModel, getVisionNote, stopGeneration,
+  getModelProfile, downloadRecommendedModel, cancelDownload, RECOMMENDED_MODELS, type RecommendedModel,
   type ModelInfo,
 } from './src/localLLM';
 import { runWithAttachment, resetConversation, type StepEvent } from './src/gvrEngine';
 import { prepareAttachment, pickAnyFile, type PreparedAttachment } from './src/attachments';
-import { setToolConfirmHandler, resetToolApprovals, resetTerminalState } from './src/tools';
+import {
+  setToolConfirmHandler, resetToolApprovals, resetTerminalState, toolTerminal,
+  setOpenTerminalHandler, refreshLinuxState,
+} from './src/tools';
+import Terminal from './modules/terminal/src';
 import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, requestPermission,
   type PermKey, type PermStatus,
@@ -274,6 +279,20 @@ export default function App() {
   const [modelLoading, setModelLoading] = useState(false);
   const [modelLoadPct, setModelLoadPct] = useState(0);
   const [perms, setPerms] = useState<Partial<Record<PermKey, PermStatus>>>({});
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [termLines, setTermLines] = useState<{ cmd: string; out: string }[]>([]);
+  const [termInput, setTermInput] = useState('');
+  const [termBusy, setTermBusy] = useState(false);
+  const [termMode, setTermMode] = useState<'alpine' | 'android'>('android');
+  const termScroll = useRef<ScrollView>(null);
+  const [dl, setDl] = useState<{ id: string; pct: number } | null>(null);
+  const [linuxReady, setLinuxReady] = useState(false);
+  const [linuxBusy, setLinuxBusy] = useState('');
+
+  const showProfileWarnings = () => {
+    const w = getModelProfile()?.warnings ?? [];
+    if (w.length) Alert.alert('تنبيه عن النموذج', w.join('\n\n'));
+  };
 
   const listRef = useRef<FlatList>(null);
 
@@ -301,6 +320,7 @@ export default function App() {
         setModelLoadPct(0);
         setModelReady(isModelLoaded());
         setVisionReadyState(isVisionReady());
+        if (isModelLoaded()) showProfileWarnings();
       }
     })();
   }, []);
@@ -326,6 +346,16 @@ export default function App() {
   useEffect(() => {
     if (showSettings) getPermissionsStatus().then(setPerms).catch(() => {});
   }, [showSettings]);
+
+  useEffect(() => {
+    setOpenTerminalHandler(() => setShowTerminal(true));
+    refreshLinuxState().then(setLinuxReady).catch(() => {});
+    return () => setOpenTerminalHandler(null);
+  }, []);
+
+  useEffect(() => {
+    if (showTerminal) Terminal.mode().then(setTermMode).catch(() => {});
+  }, [showTerminal]);
 
   const save = async (m: Msg[]) => AsyncStorage.setItem('gvr_msgs', JSON.stringify(m.slice(-80)));
 
@@ -415,6 +445,7 @@ export default function App() {
     setVisionReadyState(isVisionReady());
     const note = getVisionNote();
     if (note) Alert.alert('الرؤية', note);
+    showProfileWarnings();
   };
 
   const handleImportModel = async () => {
@@ -475,6 +506,88 @@ export default function App() {
     if (r.status !== 'granted') Alert.alert(PERMISSION_LABELS[k], r.message);
   };
 
+  const handleDownloadModel = async (rec: RecommendedModel) => {
+    if (dl) return;
+    setDl({ id: rec.id, pct: 0 });
+    try {
+      const m = await downloadRecommendedModel(rec, (f) => setDl({ id: rec.id, pct: f }));
+      setLocalModels(await listLocalModels());
+      Alert.alert('تم التنزيل', `${rec.title} جاهز. تحمّله دلوقتي؟`, [
+        { text: 'لاحقاً', style: 'cancel' },
+        { text: 'حمّله', onPress: () => handleSelectModel(m) },
+      ]);
+    } catch (e: any) {
+      Alert.alert('فشل التنزيل', e.message);
+    } finally {
+      setDl(null);
+    }
+  };
+
+  const pushTerminal = (cmd: string, out: string) => {
+    setTermLines((l) => [...l, { cmd, out }]);
+    setTimeout(() => termScroll.current?.scrollToEnd({ animated: true }), 50);
+  };
+
+  const runTerminal = async () => {
+    const cmd = termInput.trim();
+    if (!cmd || termBusy) return;
+    setTermInput('');
+    setTermBusy(true);
+    try {
+      const out = await toolTerminal(cmd);
+      pushTerminal(cmd, out);
+      setTermMode(await Terminal.mode());
+    } catch (e: any) {
+      pushTerminal(cmd, `خطأ: ${e?.message || e}`);
+    } finally {
+      setTermBusy(false);
+    }
+  };
+
+  const handleInstallLinux = async () => {
+    if (linuxBusy) return;
+    setLinuxBusy('بنبدأ...');
+    try {
+      await Terminal.installAlpine((msg, frac) =>
+        setLinuxBusy(frac !== undefined ? `${msg} ${Math.round(frac * 100)}%` : msg));
+      setLinuxReady(await refreshLinuxState());
+      setTermMode(await Terminal.mode());
+      Alert.alert('تم', 'Alpine Linux اتثبّت. دلوقتي ثبّت python وgit وnode من الزرار اللي تحت.');
+    } catch (e: any) {
+      Alert.alert('فشل تثبيت Linux', e.message);
+    } finally {
+      setLinuxBusy('');
+    }
+  };
+
+  const handleInstallDevTools = async () => {
+    if (linuxBusy) return;
+    setLinuxBusy('بننزّل python وgit وnode (ممكن ياخد كام دقيقة)...');
+    try {
+      const out = await Terminal.installPackages('python3 py3-pip git nodejs npm curl');
+      setShowSettings(false);
+      setShowTerminal(true);
+      pushTerminal('apk add python3 py3-pip git nodejs npm curl', out.slice(-1500));
+    } catch (e: any) {
+      Alert.alert('فشل تثبيت الأدوات', e.message);
+    } finally {
+      setLinuxBusy('');
+    }
+  };
+
+  const handleSelfTest = async () => {
+    if (linuxBusy) return;
+    setLinuxBusy('بيفحص...');
+    try {
+      const out = await Terminal.selfTest();
+      setShowSettings(false);
+      setShowTerminal(true);
+      pushTerminal('self-test', out);
+    } finally {
+      setLinuxBusy('');
+    }
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#05050f" translucent />
@@ -492,7 +605,7 @@ export default function App() {
               <View style={styles.statusRow}>
                 <View style={[styles.statusDot, { backgroundColor: modelReady ? C.green : C.textDim }]} />
                 <Text style={styles.statusText}>
-                  {modelLoading ? 'جارٍ تحميل النموذج…' : modelReady ? (visionReady ? 'نص + رؤية' : 'نص فقط') : 'مفيش نموذج'}
+                  {modelLoading ? 'جارٍ تحميل النموذج…' : modelReady ? `${visionReady ? 'نص + رؤية' : 'نص فقط'}${getModelProfile()?.warnings.length ? ' ⚠' : ''}` : 'مفيش نموذج'}
                 </Text>
               </View>
             </View>
@@ -500,6 +613,9 @@ export default function App() {
           <View style={styles.headerRight}>
             <TouchableOpacity onPress={clearAll} style={styles.hBtn}>
               <Ionicons name="trash-outline" size={19} color={C.textDim} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowTerminal(true)} style={styles.hBtn}>
+              <MaterialCommunityIcons name="console" size={20} color={C.textDim} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.hBtn}>
               <Ionicons name="settings-outline" size={19} color={C.textDim} />
@@ -588,6 +704,8 @@ export default function App() {
             <LinearGradient colors={['rgba(109,40,217,0.2)','rgba(6,182,212,0.05)']}
                             start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} />
             <View style={styles.modalHandle} />
+            <ScrollView style={{ maxHeight: H * 0.82 }} showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: 8 }}>
             <Text style={styles.modalTitle}>النماذج</Text>
 
             <ScrollView style={{ maxHeight: H * 0.3 }}>
@@ -631,6 +749,66 @@ export default function App() {
               <Text style={styles.importBtnText}>استيراد نموذج GGUF من الجهاز</Text>
             </TouchableOpacity>
 
+            {!!getModelProfile()?.warnings.length && (
+              <TouchableOpacity style={styles.modelWarnBox} onPress={showProfileWarnings}>
+                <Ionicons name="warning-outline" size={16} color="#f59e0b" />
+                <Text style={styles.modelWarnText}>{getModelProfile()!.warnings[0]}</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={[styles.modalTitle, { marginTop: 18, fontSize: 16, marginBottom: 8 }]}>نماذج مقترحة (تنزيل مباشر)</Text>
+            {RECOMMENDED_MODELS.map((rec) => {
+              const have = localModels.some((m) => m.name === rec.file);
+              const busy = dl?.id === rec.id;
+              return (
+                <View key={rec.id} style={styles.recRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modelName}>{rec.title}</Text>
+                    <Text style={styles.modelSize}>{rec.sizeGB} GB · {rec.note}</Text>
+                    {busy && <Text style={styles.progressText}>تنزيل... {Math.round((dl?.pct ?? 0) * 100)}%</Text>}
+                  </View>
+                  {busy ? (
+                    <TouchableOpacity style={styles.recBtn} onPress={() => cancelDownload()}>
+                      <Text style={styles.recBtnText}>إلغاء</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.recBtn, (have || !!dl) && { opacity: 0.45 }]}
+                      disabled={have || !!dl} onPress={() => handleDownloadModel(rec)}>
+                      <Text style={styles.recBtnText}>{have ? 'موجود' : 'نزّل'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+
+            <Text style={[styles.modalTitle, { marginTop: 18, fontSize: 16, marginBottom: 8 }]}>Linux (ترمنال قوي)</Text>
+            <Text style={styles.infoText}>
+              {linuxReady
+                ? 'Alpine Linux شغّال: python وapk وgit وnode متاحين في الترمنال.'
+                : 'بيثبّت Alpine Linux (حوالي 3MB) جوه التطبيق، وبعدها تقدر تثبّت python وgit وnode بـ apk.'}
+            </Text>
+            {!!linuxBusy && (
+              <View style={styles.progressBox}>
+                <ActivityIndicator size="small" color={C.accent} />
+                <Text style={styles.progressText}>{linuxBusy}</Text>
+              </View>
+            )}
+            <View style={styles.permWrap}>
+              {!linuxReady && (
+                <TouchableOpacity style={styles.recBtn} onPress={handleInstallLinux} disabled={!!linuxBusy}>
+                  <Text style={styles.recBtnText}>تثبيت Alpine</Text>
+                </TouchableOpacity>
+              )}
+              {linuxReady && (
+                <TouchableOpacity style={styles.recBtn} onPress={handleInstallDevTools} disabled={!!linuxBusy}>
+                  <Text style={styles.recBtnText}>تثبيت python + git + node</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.recBtn} onPress={handleSelfTest} disabled={!!linuxBusy}>
+                <Text style={styles.recBtnText}>اختبار ذاتي</Text>
+              </TouchableOpacity>
+            </View>
+
             <Text style={[styles.modalTitle, { marginTop: 18, fontSize: 16, marginBottom: 8 }]}>الصلاحيات</Text>
             <View style={styles.permWrap}>
               {PERM_KEYS.map((k) => (
@@ -655,7 +833,52 @@ export default function App() {
                               style={[StyleSheet.absoluteFill, { borderRadius: 14 }]} />
               <Text style={styles.closeBtnText}>حسناً</Text>
             </TouchableOpacity>
+            </ScrollView>
           </BlurView>
+        </Modal>
+
+        <Modal visible={showTerminal} animationType="slide" onRequestClose={() => setShowTerminal(false)}>
+          <SafeAreaView style={styles.termRoot}>
+            <View style={styles.termHeader}>
+              <TouchableOpacity onPress={() => setShowTerminal(false)} style={styles.hBtn}>
+                <Ionicons name="close" size={22} color="#e2e8f0" />
+              </TouchableOpacity>
+              <Text style={styles.termTitle}>الترمنال</Text>
+              <View style={styles.termBadge}>
+                <Text style={styles.termBadgeText}>{termMode === 'alpine' ? 'Alpine Linux' : 'Android shell'}</Text>
+              </View>
+              <TouchableOpacity onPress={() => { setTermLines([]); resetTerminalState(); }} style={styles.hBtn}>
+                <Ionicons name="trash-outline" size={19} color={C.textDim} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView ref={termScroll} style={styles.termBody} contentContainerStyle={{ padding: 12 }}
+                        keyboardShouldPersistTaps="handled">
+              {termLines.length === 0 && (
+                <Text style={styles.termHint}>
+                  اكتب أمر واضغط ▶. الفولدر اللي بتعمله cd بيتحفظ.{'\n'}
+                  {termMode === 'alpine' ? 'جرّب: apk add python3  |  python3 -V' : 'جرّب: ls /sdcard  |  df -h  |  ps'}
+                </Text>
+              )}
+              {termLines.map((l, i) => (
+                <View key={i} style={{ marginBottom: 10 }}>
+                  <Text style={styles.termCmd} selectable>$ {l.cmd}</Text>
+                  <Text style={styles.termOut} selectable>{l.out}</Text>
+                </View>
+              ))}
+              {termBusy && <ActivityIndicator size="small" color={C.accent} />}
+            </ScrollView>
+            <View style={styles.termInputRow}>
+              <TextInput
+                style={styles.termInput} value={termInput} onChangeText={setTermInput}
+                placeholder="اكتب الأمر..." placeholderTextColor="#64748b"
+                autoCapitalize="none" autoCorrect={false} multiline
+                onSubmitEditing={runTerminal} editable={!termBusy}
+              />
+              <TouchableOpacity style={[styles.termRun, termBusy && { opacity: 0.5 }]} onPress={runTerminal} disabled={termBusy}>
+                <Ionicons name="play" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </Modal>
 
       </SafeAreaView>
@@ -755,4 +978,29 @@ const styles = StyleSheet.create({
                      borderRadius:12, borderWidth:1, borderColor: C.border, backgroundColor:'rgba(255,255,255,0.04)' },
   permDot:         { width:7, height:7, borderRadius:4 },
   permText:        { color: C.text, fontSize:12 },
+  modelWarnBox:         { flexDirection:'row', gap:8, alignItems:'flex-start', marginTop:12, padding:10, borderRadius:12,
+                     backgroundColor:'rgba(245,158,11,0.12)', borderWidth:1, borderColor:'rgba(245,158,11,0.35)' },
+  modelWarnText:        { flex:1, color:'#fcd34d', fontSize:12, lineHeight:18 },
+  recRow:          { flexDirection:'row', alignItems:'center', gap:10, padding:10, marginBottom:8, borderRadius:12,
+                     backgroundColor:'rgba(255,255,255,0.04)', borderWidth:1, borderColor: C.border },
+  recBtn:          { paddingHorizontal:14, paddingVertical:9, borderRadius:12, backgroundColor:'rgba(124,58,237,0.35)',
+                     borderWidth:1, borderColor:'rgba(167,139,250,0.5)', marginTop:6 },
+  recBtnText:      { color:'#e9d5ff', fontSize:12, fontWeight:'700' },
+  termRoot:        { flex:1, backgroundColor:'#050509' },
+  termHeader:      { flexDirection:'row', alignItems:'center', gap:8, paddingHorizontal:8, paddingVertical:6,
+                     borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.08)' },
+  termTitle:       { flex:1, color:'#f1f5f9', fontSize:17, fontWeight:'800' },
+  termBadge:       { paddingHorizontal:10, paddingVertical:4, borderRadius:10, backgroundColor:'rgba(16,185,129,0.15)' },
+  termBadgeText:   { color:'#6ee7b7', fontSize:11, fontWeight:'700' },
+  termBody:        { flex:1 },
+  termHint:        { color:'#64748b', fontSize:13, lineHeight:20 },
+  termCmd:         { color:'#67e8f9', fontSize:13, fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
+  termOut:         { color:'#e2e8f0', fontSize:12.5, lineHeight:18, marginTop:2,
+                     fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
+  termInputRow:    { flexDirection:'row', alignItems:'flex-end', gap:8, padding:10,
+                     borderTopWidth:1, borderTopColor:'rgba(255,255,255,0.08)' },
+  termInput:       { flex:1, maxHeight:110, minHeight:42, color:'#e2e8f0', backgroundColor:'rgba(255,255,255,0.06)',
+                     borderRadius:12, paddingHorizontal:12, paddingVertical:8, fontSize:14,
+                     fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
+  termRun:         { width:44, height:44, borderRadius:22, backgroundColor:'#7c3aed', alignItems:'center', justifyContent:'center' },
 });

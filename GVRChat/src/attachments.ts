@@ -17,6 +17,7 @@
  * RAM and a finite context window; pretending otherwise would just crash.
  */
 import * as FileSystem from 'expo-file-system';
+import { inspectFile } from './fileInspect';
 import * as DocumentPicker from 'expo-document-picker';
 import { analyzeImage, isVisionReady } from './localLLM';
 import { prepareVideoForAnalysis, VIDEO_LIMITS } from '../modules/video-processor/src';
@@ -47,7 +48,7 @@ export const LIMITS = {
   maxImageDimPx: 1536,        // images larger than this get downscaled first
 };
 
-export type AttachmentKind = 'text' | 'pdf' | 'image' | 'video' | 'unsupported';
+export type AttachmentKind = 'text' | 'pdf' | 'image' | 'video' | 'file' | 'unsupported';
 
 export interface PreparedAttachment {
   kind: AttachmentKind;
@@ -65,7 +66,7 @@ function detectKind(name: string, mime?: string | null): AttachmentKind {
   if (mime?.startsWith('video/') || ['mp4','mov','mkv','avi','webm','3gp'].includes(ext)) return 'video';
   if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
   if (mime?.startsWith('text/') || ['txt','md','json','csv','log','ts','js','py','java','c','cpp','html','css','xml','yaml','yml'].includes(ext)) return 'text';
-  return 'unsupported';
+  return 'file';   // APK, zip, office, binary ... handled by fileInspect.ts
 }
 
 /* ── PICK ANY FILE (the single attach button) ─────────────────────────── */
@@ -81,7 +82,7 @@ export async function pickAnyFile(): Promise<DocumentPicker.DocumentPickerAsset 
 /* ── TEXT ──────────────────────────────────────────────────────────────── */
 async function prepareText(asset: DocumentPicker.DocumentPickerAsset): Promise<PreparedAttachment> {
   const warnings: string[] = [];
-  let content = await FileSystem.readAsStringAsync(asset.uri);
+  let content = await FileSystem.readAsStringAsync(asset.uri, { length: LIMITS.maxTextChars * 4 });
   if (content.length > LIMITS.maxTextChars) {
     content = content.slice(0, LIMITS.maxTextChars);
     warnings.push(`File truncated to ${LIMITS.maxTextChars} characters (was longer).`);
@@ -92,43 +93,31 @@ async function prepareText(asset: DocumentPicker.DocumentPickerAsset): Promise<P
   };
 }
 
-/* ── PDF (text extraction only — no OCR, stated honestly) ────────────── */
+/* ── PDF (Flate streams are decoded; no OCR — stated honestly) ───────── */
 async function preparePdf(asset: DocumentPicker.DocumentPickerAsset): Promise<PreparedAttachment> {
+  return prepareFile(asset, 'pdf');
+}
+
+/* ── ANY OTHER FILE: APK, ZIP, Office, binaries ... ───────────────────── */
+async function prepareFile(
+  asset: DocumentPicker.DocumentPickerAsset,
+  kind: AttachmentKind = 'file',
+): Promise<PreparedAttachment> {
   const warnings: string[] = [];
-  // Minimal, dependency-free PDF text extraction: pull text between
-  // BT/ET operators. Works for text-based PDFs; scanned/image PDFs will
-  // yield little — we say so rather than silently returning nothing.
-  const raw = await FileSystem.readAsStringAsync(asset.uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  const bytes = base64ToBinary(raw);
-
-  let text = '';
-  const btEtRegex = /BT([\s\S]*?)ET/g;
-  const tjRegex = /\(((?:[^()\\]|\\.)*)\)\s*Tj/g;
-  let m;
-  while ((m = btEtRegex.exec(bytes)) && text.length < LIMITS.maxTextChars) {
-    let tm;
-    while ((tm = tjRegex.exec(m[1]))) {
-      text += tm[1].replace(/\\(.)/g, '$1') + ' ';
-    }
+  let content = '';
+  try {
+    content = await inspectFile({ uri: asset.uri, name: asset.name, size: asset.size || 0, mime: asset.mimeType });
+  } catch (e: any) {
+    warnings.push(`Could not fully read this file: ${e?.message || e}`);
+    content = `File: ${asset.name}\nsize: ${asset.size || 0} bytes\ntype: ${asset.mimeType || 'unknown'}`;
   }
-  text = text.trim();
-
-  if (text.length < 20) {
-    warnings.push(
-      'Little or no extractable text found — this PDF may be scanned images ' +
-      'rather than real text. On-device OCR is not available in this build.'
-    );
+  if (content.length > LIMITS.maxTextChars) {
+    content = content.slice(0, LIMITS.maxTextChars);
+    warnings.push(`Report truncated to ${LIMITS.maxTextChars} characters.`);
   }
-  if (text.length > LIMITS.maxTextChars) {
-    text = text.slice(0, LIMITS.maxTextChars);
-    warnings.push(`PDF text truncated to ${LIMITS.maxTextChars} characters.`);
-  }
-
   return {
-    kind: 'pdf', name: asset.name, uri: asset.uri,
-    sizeBytes: asset.size || 0, extractedContent: text, warnings,
+    kind, name: asset.name, uri: asset.uri,
+    sizeBytes: asset.size || 0, extractedContent: content, warnings,
   };
 }
 
@@ -206,11 +195,6 @@ export async function prepareAttachment(
     case 'pdf':   return preparePdf(asset);
     case 'image': return prepareImage(asset);
     case 'video': return prepareVideo(asset);
-    default:
-      return {
-        kind: 'unsupported', name: asset.name, uri: asset.uri,
-        sizeBytes: asset.size || 0, extractedContent: '',
-        warnings: [`File type not supported: ${asset.mimeType || 'unknown'}.`],
-      };
+    default:  return prepareFile(asset, 'file');
   }
 }
