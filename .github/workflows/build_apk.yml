@@ -156,7 +156,8 @@ jobs:
         working-directory: GVRChat/android
         run: |
           set +e
-          ./gradlew assembleRelease --no-daemon --stacktrace \
+          # codegen of every library must exist before the app's CMake configure step runs
+          ./gradlew generateCodegenArtifactsFromSchema assembleRelease --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
             2>&1 | tee ../../gradle.log
           GRADLE_EXIT=${PIPESTATUS[0]}
