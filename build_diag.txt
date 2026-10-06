@@ -1,0 +1,10 @@
+--- gradle.properties (sdk related)
+33:# ./gradlew <task> -PreactNativeArchitectures=x86_64
+34:reactNativeArchitectures=arm64-v8a
+41:newArchEnabled=true
+58:# Use legacy packaging to compress native libraries in the resulting APK.
+59:expo.useLegacyPackaging=true
+61:android.minSdkVersion=24
+62:android.compileSdkVersion=34
+65:android.packagingOptions.pickFirsts=**/libc++_shared.so,**/libfbjni.so
+69:android.targetSdkVersion=28
