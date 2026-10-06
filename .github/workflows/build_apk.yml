@@ -91,29 +91,32 @@ jobs:
         working-directory: GVRChat/android
         run: |
           echo "=== gradle.properties BEFORE ==="
-          grep -n -i "newArch" gradle.properties || echo "(newArchEnabled not present)"
-          if grep -q "^newArchEnabled=" gradle.properties; then
-            sed -i 's/^newArchEnabled=.*/newArchEnabled=true/' gradle.properties
-          else
-            echo "newArchEnabled=true" >> gradle.properties
-          fi
+          grep -n -i -E "newArch|reactNativeArchitectures|useLegacyPackaging|targetSdk" gradle.properties || true
+          # The generated file may NOT end with a newline: a bare append would glue the new key
+          # onto the last line (this silently broke targetSdkVersion and the jitpack repo before).
+          [ -n "$(tail -c1 gradle.properties)" ] && echo >> gradle.properties
+          setprop() {
+            if grep -q "^$1=" gradle.properties; then
+              sed -i "s|^$1=.*|$1=$2|" gradle.properties
+            else
+              echo "$1=$2" >> gradle.properties
+            fi
+          }
+          # llama.rn 0.12.x needs the New Architecture (Expo SDK 51 ignores app.json's newArchEnabled)
+          setprop newArchEnabled true
           # arm64 only: the phone is arm64; 4 ABIs made the APK 185 MB and the build 4x slower
-          grep -q '^reactNativeArchitectures=' gradle.properties \
-            && sed -i 's/^reactNativeArchitectures=.*/reactNativeArchitectures=arm64-v8a/' gradle.properties \
-            || echo 'reactNativeArchitectures=arm64-v8a' >> gradle.properties
-          # native libs must be extracted to disk so proot can be executed from nativeLibraryDir
-          grep -q '^expo.useLegacyPackaging=' gradle.properties \
-            && sed -i 's/^expo.useLegacyPackaging=.*/expo.useLegacyPackaging=true/' gradle.properties \
-            || echo 'expo.useLegacyPackaging=true' >> gradle.properties
-          # targetSdk 28: apps targeting < 29 may execute files from their own data dir (needed by Alpine/proot).
+          setprop reactNativeArchitectures arm64-v8a
+          # native libs must be real files on disk so proot can be executed from nativeLibraryDir
+          setprop expo.useLegacyPackaging true
+          # targetSdk 28: apps targeting < 29 may execute files from their own data dir (Alpine/proot).
           # expo-build-properties refuses values < 31, so it is set here (the Expo template reads this property).
-          grep -q '^android.targetSdkVersion=' gradle.properties \
-            && sed -i 's/^android.targetSdkVersion=.*/android.targetSdkVersion=28/' gradle.properties \
-            || echo 'android.targetSdkVersion=28' >> gradle.properties
+          setprop android.targetSdkVersion 28
           echo "=== gradle.properties AFTER ==="
-          grep -n -i -E "newArch|reactNativeArchitectures|useLegacyPackaging|targetSdk" gradle.properties
+          grep -n -i -E "newArch|reactNativeArchitectures|useLegacyPackaging|targetSdk|extraMavenRepos" gradle.properties
           echo "=== build.gradle effective targetSdk line ==="
           grep -n "targetSdkVersion" build.gradle || true
+          # keep diagnostics in the repo (Actions logs are not always reachable)
+          { echo "--- gradle.properties (sdk related)"; grep -n -i -E "Sdk|newArch|Architectures|Packaging" gradle.properties; } > ../../build_diag.txt
 
       - name: Gradle init script (lint must not block a sideload-only targetSdk)
         run: |
@@ -167,7 +170,7 @@ jobs:
       - name: Save gradle log
         if: always()
         run: |
-          git add gradle.log 2>/dev/null || true
+          git add gradle.log build_diag.txt 2>/dev/null || true
           git commit -m "build: gradle log [skip ci]" --allow-empty 2>/dev/null || true
           git push 2>/dev/null || true
 
@@ -183,6 +186,26 @@ jobs:
           APK=$(find GVRChat/android -name "*.apk" | grep -v test | head -1)
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
           ls -lh "$APK"
+
+      - name: Record APK facts (targetSdk, libs) in the repo
+        if: always()
+        run: |
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 2>/dev/null | tail -1)
+          {
+            echo "=== APK facts ($(date -u +%FT%TZ)) ==="
+            echo "apk: $APK_PATH ($(stat -c %s "$APK_PATH" 2>/dev/null) bytes)"
+            if [ -n "$AAPT2" ] && [ -f "$APK_PATH" ]; then
+              "$AAPT2" dump badging "$APK_PATH" 2>/dev/null | grep -E "^package:|^sdkVersion|^targetSdkVersion|native-code" || true
+            fi
+            echo "--- proot runtime inside the APK:"
+            unzip -l "$APK_PATH" 2>/dev/null | grep -E "libproot|libtalloc|libandroid-shmem|librnllama" || true
+          } >> build_diag.txt
+          cat build_diag.txt
+          git config --global user.email "bot@gvr.com"
+          git config --global user.name "GVR Bot"
+          git add build_diag.txt || true
+          git commit -m "build: diagnostics [skip ci]" || true
+          for i in 1 2 3 4; do git pull --rebase origin main && git push && break; sleep $((i*4)); done || true
 
       - name: Upload to HuggingFace
         env:
