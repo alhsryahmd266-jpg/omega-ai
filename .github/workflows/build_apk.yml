@@ -105,8 +105,15 @@ jobs:
           grep -q '^expo.useLegacyPackaging=' gradle.properties \
             && sed -i 's/^expo.useLegacyPackaging=.*/expo.useLegacyPackaging=true/' gradle.properties \
             || echo 'expo.useLegacyPackaging=true' >> gradle.properties
+          # targetSdk 28: apps targeting < 29 may execute files from their own data dir (needed by Alpine/proot).
+          # expo-build-properties refuses values < 31, so it is set here (the Expo template reads this property).
+          grep -q '^android.targetSdkVersion=' gradle.properties \
+            && sed -i 's/^android.targetSdkVersion=.*/android.targetSdkVersion=28/' gradle.properties \
+            || echo 'android.targetSdkVersion=28' >> gradle.properties
           echo "=== gradle.properties AFTER ==="
-          grep -n -i -E "newArch|reactNativeArchitectures|useLegacyPackaging" gradle.properties
+          grep -n -i -E "newArch|reactNativeArchitectures|useLegacyPackaging|targetSdk" gradle.properties
+          echo "=== build.gradle effective targetSdk line ==="
+          grep -n "targetSdkVersion" build.gradle || true
 
       - name: Gradle init script (lint must not block a sideload-only targetSdk)
         run: |
