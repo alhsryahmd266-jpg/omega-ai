@@ -62,6 +62,22 @@ interface TerminalNative {
 const Native = requireNativeModule<TerminalNative>('Terminal');
 
 /** Formats a native exec result into the single-string shape tools.ts expects. */
+const SIGNAL_NAMES: Record<number, string> = {
+  4: 'SIGILL (illegal instruction)', 6: 'SIGABRT (aborted)', 7: 'SIGBUS (bus error)',
+  8: 'SIGFPE (arithmetic error)', 9: 'SIGKILL (killed — often low memory)',
+  11: 'SIGSEGV (crashed / segfault)', 13: 'SIGPIPE', 15: 'SIGTERM (terminated)',
+};
+
+/** A process killed by a signal exits with 128+signal (e.g. 139 = 128+11 = SIGSEGV). */
+function describeExitCode(code: number): string {
+  if (code >= 129 && code <= 192) {
+    const sig = code - 128;
+    const name = SIGNAL_NAMES[sig];
+    return name ? `exit code ${code} — ${name}` : `exit code ${code} — killed by signal ${sig}`;
+  }
+  return `exit code ${code}`;
+}
+
 function formatResult(r: NativeExecResult): string {
   if (r.success) {
     const err = r.stderr.trim();
@@ -72,7 +88,7 @@ function formatResult(r: NativeExecResult): string {
   const parts: string[] = [];
   if (r.stdout.trim()) parts.push(r.stdout.trim());
   if (r.stderr.trim()) parts.push(`stderr: ${r.stderr.trim()}`);
-  parts.push(`(exit code ${r.exitCode})`);
+  parts.push(`(${describeExitCode(r.exitCode)})`);
   return parts.join('\n');
 }
 

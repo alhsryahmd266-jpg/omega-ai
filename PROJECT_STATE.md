@@ -1,4 +1,4 @@
-# GVR-Chat Project State (آخر تحديث: 2026-10-06)
+# GVR-Chat Project State (آخر تحديث: 2026-10-07)
 
 ## جلسة 2026-10-06: مراجعة فيديو التجربة على الجهاز (Android 12) وإصلاحات
 
@@ -23,6 +23,32 @@
 - تثبيت Alpine ثم `apk add python3`
 - أندرويد 12: ممكن يقتل العمليات الطويلة (Phantom Process Killer) — لو حصل: `adb shell settings put global settings_enable_monitor_phantom_procs false`
 - جودة الأدوات تعتمد على النموذج: استخدم Instruct ≥3B
+
+## جلسة 2026-10-07: تجربة حقيقية على الجهاز (فيديو + سكرين شوت) — Alpine شغّال فعلاً!
+
+### تأكيد من الجهاز الحقيقي (Android 12، Redmagic)
+- ✅ الـ APK اتثبّت (targetSdk 28 عدّى)
+- ✅ Alpine Linux اتثبّت والشارة الخضرا "Alpine Linux" ظاهرة فعلاً في شاشة الترمنال = proot شغّال
+- ✅ `search` و`fetch_url` شغّالين ممتاز على الإنترنت الحقيقي (طقس، أغاني، نتائج بالعربي ومصادر حقيقية)
+- ❌ `apk add python3 py3-pip git nodejs npm curl` → **exit code 139 (SIGSEGV)** فوراً
+
+### السبب (اتأكد من مصدرين مستقلين عبر البحث، منهم مشروع مشابه بالظبط - Cinder: Claude Code على أندرويد بنفس stack الـ proot+Alpine)
+كيرنلات أندرويد (خصوصاً Qualcomm) بتتبني من غير `CONFIG_SYSVIPC`. و`apk-tools v3` بيقفل قاعدة بياناته بـ SysV semaphore وقت أي تثبيت/تحديث. الكيرنل مارفضش بس، بيخلي apk يعمل segfault. الحل: فلاج `--sysvipc` في proot (بيحاكي الـ SysV IPC في الـ userspace) — ده بالظبط اللي بتعمله Termux's proot-distro افتراضياً مع Alpine.
+
+### الإصلاح
+- `TerminalModule.kt`: ضفت `--sysvipc` لقائمة فلاجز proot في `alpineProotCommand()`
+- `terminal/src/index.ts`: `formatResult()` دلوقتي بيفسّر أكواد الخروج بإشارة تلقائياً (`exit code 139 — SIGSEGV (crashed / segfault)` بدل رقم غامض) — أي كراش شبيه في المستقبل هيفهم سببه على طول
+
+### واجهة جديدة: الترمنال بقى جوه الشات نفسه (مش شاشة منفصلة)
+بناءً على طلب المستخدم ("زي Gemini، تفكير بصري حديث، مش شاشة لوحدها"):
+- `gvrEngine.ts`: كل `StepEvent`/`AgentStep` بقاله `id` بيربط بداية التنفيذ بنهايته
+- `router.ts`: "افتح الترمنال" دلوقتي بيشغّل أمر فحص فوري (`TERMINAL_PROBE`) كأداة `terminal` عادية بدل ما يفتح شاشة — يعني بيظهر كارت ترمنال حقيقي جوه الشات على طول
+- `App.tsx`: مكونات جديدة — `ThinkingDots` (نقط نابضة متحركة)، `StepCard` (كارت لكل أداة، بيعرض كونسول حقيقي أسود مع بادج للأوامر terminal/python/apk)، `LiveTrace` (التفكير الحي وقت التوليد)، `ToolTrace` (سجل قابل للطي تحت كل رد خلص). أيقونة الترمنال في الهيدر لسه موجودة لمين عايز شاشة كاملة يدوي
+- 95 اختبار (منطق + TypeScript + Kotlin syntax check) عدّوا قبل الـ build
+
+### ⚠️ لسه محتاج تأكيد من الجهاز:
+- `apk add python3 py3-pip git nodejs npm curl` بعد إضافة `--sysvipc` — المفروض يشتغل، لازم تجربة فعلية
+- شكل الواجهة الجديدة (الكروت والتفكير الحي) على الجهاز
 
 ## الحالة الحالية: الـ APK بيتبني وبيتنشر — محتاج تجربة على الجهاز
 

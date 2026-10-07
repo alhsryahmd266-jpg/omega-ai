@@ -27,11 +27,12 @@ import type { PreparedAttachment } from './attachments';
 /* ── TYPES (App.tsx depends on these exact shapes) ─────────────────────── */
 export type StepEvent =
   | { type: 'thought'; text: string }
-  | { type: 'tool_call'; tool: string; arg: string }
-  | { type: 'tool_result'; tool: string; result: string }
+  | { type: 'tool_call'; id: string; tool: string; arg: string }
+  | { type: 'tool_result'; id: string; tool: string; result: string }
   | { type: 'branch_score'; branch: string | number; score: number };
 
 export interface AgentStep {
+  id: string;
   tool: string;
   arg: string;
   result: string;
@@ -204,6 +205,8 @@ async function runLocked(
   const nPredict = weak ? N_PREDICT_WEAK : N_PREDICT_FULL;
   const warnings: string[] = attachment ? [...attachment.warnings] : [];
   const steps: AgentStep[] = [];
+  let stepSeq = 0;
+  const nextId = () => `s${++stepSeq}`;
   const answerParts: string[] = [];
   const question = userText.trim();
 
@@ -214,10 +217,11 @@ async function runLocked(
   const routed: RouteHit[] = autoRoute(question, { hasAttachment: !!attachment });
   const routedBlocks: string[] = [];
   for (const hit of routed) {
-    onEvent({ type: 'tool_call', tool: hit.tool, arg: hit.arg });
+    const id = nextId();
+    onEvent({ type: 'tool_call', id, tool: hit.tool, arg: hit.arg });
     const result = await dispatchTool(hit.tool, hit.arg);
-    onEvent({ type: 'tool_result', tool: hit.tool, result });
-    steps.push({ tool: hit.tool, arg: hit.arg, result, auto: true });
+    onEvent({ type: 'tool_result', id, tool: hit.tool, result });
+    steps.push({ id, tool: hit.tool, arg: hit.arg, result, auto: true });
     routedBlocks.push(`[${hit.tool}${hit.arg ? `: ${clip(hit.arg, 120)}` : ''}]\n${clip(result, ROUTED_RESULT_CHARS)}`);
   }
 
@@ -326,10 +330,11 @@ async function runLocked(
     }
 
     if (call.before) answerParts.push(call.before);
-    onEvent({ type: 'tool_call', tool: call.tool, arg: call.arg });
+    const id = nextId();
+    onEvent({ type: 'tool_call', id, tool: call.tool, arg: call.arg });
     const toolResult = await dispatchTool(call.tool, call.arg);
-    onEvent({ type: 'tool_result', tool: call.tool, result: toolResult });
-    steps.push({ tool: call.tool, arg: call.arg, result: toolResult });
+    onEvent({ type: 'tool_result', id, tool: call.tool, result: toolResult });
+    steps.push({ id, tool: call.tool, arg: call.arg, result: toolResult });
 
     turn.push({ role: 'assistant', content: `${call.before ? `${call.before}\n` : ''}<tool name="${call.tool}">${call.arg}</tool>` });
     turn.push({ role: 'user', content: `<tool_result name="${call.tool}">\n${toolResult.slice(0, TOOL_RESULT_CHARS)}\n</tool_result>` });

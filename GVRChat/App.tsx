@@ -18,7 +18,7 @@ import {
   getModelProfile, downloadRecommendedModel, cancelDownload, RECOMMENDED_MODELS, type RecommendedModel,
   type ModelInfo,
 } from './src/localLLM';
-import { runWithAttachment, resetConversation, type StepEvent } from './src/gvrEngine';
+import { runWithAttachment, resetConversation, type StepEvent, type AgentStep } from './src/gvrEngine';
 import { prepareAttachment, pickAnyFile, type PreparedAttachment } from './src/attachments';
 import {
   setToolConfirmHandler, resetToolApprovals, resetTerminalState, toolTerminal,
@@ -111,35 +111,165 @@ const TOOL_LABELS: Record<string, { icon: string; label: string }> = {
   mem_get:      { icon: 'brain',                label: 'يسترجع من الذاكرة' },
   mem_list:     { icon: 'format-list-bulleted', label: 'يراجع الذاكرة' },
   mem_delete:   { icon: 'delete-outline',       label: 'يمسح من الذاكرة' },
+  inspect_file: { icon: 'file-search-outline',  label: 'يفحص الملف' },
+  open_terminal:{ icon: 'console',              label: 'يفتح الترمنال' },
+  python:       { icon: 'language-python',      label: 'ينفّذ بايثون' },
+  pkg_install:  { icon: 'package-variant',      label: 'يثبّت حزمة' },
 };
 
-function LiveStatus({ event }: { event: StepEvent | null }) {
-  const fade = useRef(new Animated.Value(0)).current;
+/** Tools whose output is rendered as a real console block, not a generic card. */
+const CONSOLE_TOOLS = new Set(['terminal', 'python', 'pkg_install']);
+
+
+/** Three staggered pulsing dots — the "thinking" / "running" indicator used everywhere below. */
+function ThinkingDots({ color = C.accentB, size = 5 }: { color?: string; size?: number }) {
+  const vals = useRef([0, 1, 2].map(() => new Animated.Value(0.3))).current;
   useEffect(() => {
-    Animated.timing(fade, { toValue: event ? 1 : 0, duration: 200, useNativeDriver: true }).start();
-  }, [event]);
+    const loops = vals.map((v, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(v, { toValue: 1, duration: 420, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0.3, duration: 420, useNativeDriver: true }),
+          Animated.delay((2 - i) * 160),
+        ]),
+      ),
+    );
+    loops.forEach(l => l.start());
+    return () => loops.forEach(l => l.stop());
+  }, []);
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+      {vals.map((v, i) => (
+        <Animated.View key={i} style={{
+          width: size, height: size, borderRadius: size / 2, backgroundColor: color,
+          opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0.3, 1], outputRange: [0.7, 1.15] }) }],
+        }} />
+      ))}
+    </View>
+  );
+}
 
-  if (!event) return null;
+/** Check mark that pops in with a spring the instant a step finishes. */
+function DonePop({ color = C.green }: { color?: string }) {
+  const s = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.spring(s, { toValue: 1, speed: 20, bounciness: 10, useNativeDriver: true }).start(); }, []);
+  return (
+    <Animated.View style={{ transform: [{ scale: s }] }}>
+      <Ionicons name="checkmark-circle" size={15} color={color} />
+    </Animated.View>
+  );
+}
 
-  let icon = 'dots-horizontal';
-  let label = 'يفكر...';
-
-  if (event.type === 'tool_call') {
-    const t = TOOL_LABELS[event.tool] || { icon: 'tools', label: event.tool };
-    icon = t.icon; label = `${t.label}: ${event.arg.slice(0, 40)}`;
-  } else if (event.type === 'tool_result') {
-    icon = 'check-circle-outline'; label = 'استلم النتيجة...';
-  } else if (event.type === 'thought') {
-    icon = 'thought-bubble'; label = event.text;
-  } else if (event.type === 'branch_score') {
-    icon = 'source-branch'; label = `مسار ${event.branch}: ${(event.score * 100).toFixed(0)}%`;
-  }
+/** A tool step — running or finished. Terminal-family tools render a real console block. */
+function StepCard({ tool, arg, result, done, defaultOpen }: {
+  tool: string; arg: string; result?: string; done: boolean; defaultOpen?: boolean;
+}) {
+  const meta = TOOL_LABELS[tool] || { icon: 'tools', label: tool };
+  const isConsole = CONSOLE_TOOLS.has(tool);
+  const [open, setOpen] = useState(!!defaultOpen || (isConsole && done));
+  const mount = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(mount, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+  }, []);
+  useEffect(() => { if (isConsole && done) setOpen(true); }, [done, isConsole]);
 
   return (
-    <Animated.View style={[styles.liveStatus, { opacity: fade }]}>
-      <MaterialCommunityIcons name={icon as any} size={13} color={C.accentB} />
-      <Text style={styles.liveStatusText} numberOfLines={1}>{label}</Text>
+    <Animated.View style={{
+      opacity: mount, transform: [{ translateY: mount.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+    }}>
+      <TouchableOpacity
+        activeOpacity={0.75}
+        style={[styles.stepRow, isConsole && styles.stepRowConsole]}
+        onPress={() => setOpen(o => !o)}
+      >
+        <MaterialCommunityIcons name={meta.icon as any} size={15} color={isConsole ? C.accentB : C.accent} />
+        <Text style={styles.stepLabel} numberOfLines={1}>{meta.label}</Text>
+        {!!arg && (
+          <Text style={[styles.stepArg, isConsole && styles.stepArgMono]} numberOfLines={1}>
+            {isConsole ? arg.split('\n')[0] : arg}
+          </Text>
+        )}
+        <View style={{ marginLeft: 'auto' }}>{done ? <DonePop /> : <ThinkingDots />}</View>
+        {!!result && (
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={C.textDim} style={{ marginStart: 2 }} />
+        )}
+      </TouchableOpacity>
+
+      {open && !!result && (
+        isConsole ? (
+          <View style={styles.consoleBlock}>
+            <View style={styles.consoleHeader}>
+              <View style={styles.consoleDot} /><View style={styles.consoleDot} /><View style={styles.consoleDot} />
+              <Text style={styles.consoleHeaderText}>{tool === 'python' ? 'python3' : tool === 'pkg_install' ? 'apk' : 'شل'}</Text>
+            </View>
+            {!!arg && <Text style={styles.consoleCmd} selectable>$ {arg}</Text>}
+            <Text style={styles.consoleOut} selectable>
+              {result.length > 1600 ? `${result.slice(0, 1600)}\n… (القص؛ التفاصيل كاملة في الترمنال)` : result}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.stepResultBox}>
+            <Text style={styles.stepResultText} selectable>
+              {result.length > 1200 ? `${result.slice(0, 1200)}…` : result}
+            </Text>
+          </View>
+        )
+      )}
     </Animated.View>
+  );
+}
+
+export interface LiveStep { id: string; tool: string; arg: string; result?: string; done: boolean }
+
+/** The "thinking" trace shown live while generating: pulsing header + steps appearing one by one. */
+function LiveTrace({ thought, steps }: { thought: string; steps: LiveStep[] }) {
+  const shimmer = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 1100, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 1100, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  return (
+    <View style={styles.liveTrace}>
+      <View style={styles.liveTraceHeader}>
+        <Animated.View style={{ opacity: shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }}>
+          <MaterialCommunityIcons name="atom-variant" size={15} color={C.accent} />
+        </Animated.View>
+        <Text style={styles.liveTraceThought} numberOfLines={1}>{thought || 'يفكر...'}</Text>
+        <ThinkingDots />
+      </View>
+      {steps.map(st => (
+        <StepCard key={st.id} tool={st.tool} arg={st.arg} result={st.result} done={st.done} />
+      ))}
+    </View>
+  );
+}
+
+/** Finished steps attached to a sent message — collapsed by default unless a console tool ran. */
+function ToolTrace({ steps, elapsed }: { steps?: AgentStep[]; elapsed?: number }) {
+  const hasConsole = !!steps?.some(s => CONSOLE_TOOLS.has(s.tool));
+  const [open, setOpen] = useState(hasConsole);
+  if (!steps || steps.length === 0) return null;
+  return (
+    <View style={styles.toolTraceWrap}>
+      <TouchableOpacity style={styles.toolTraceHeader} onPress={() => setOpen(o => !o)} activeOpacity={0.7}>
+        <MaterialCommunityIcons name="layers-outline" size={13} color={C.textDim} />
+        <Text style={styles.toolTraceHeaderText}>
+          {steps.length} {steps.length === 1 ? 'أداة' : 'أدوات'}{elapsed ? ` · ${elapsed}s` : ''}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={13} color={C.textDim} />
+      </TouchableOpacity>
+      {open && steps.map(st => (
+        <StepCard key={st.id} tool={st.tool} arg={st.arg} result={st.result} done defaultOpen={CONSOLE_TOOLS.has(st.tool)} />
+      ))}
+    </View>
   );
 }
 
@@ -163,7 +293,7 @@ interface Msg {
   id: number; role: 'user' | 'assistant';
   content: string; attachmentName?: string; attachmentKind?: string;
   elapsed?: number; score?: number; warnings?: string[]; isError?: boolean;
-  toolsUsed?: string[];
+  toolsUsed?: string[]; steps?: AgentStep[];
 }
 
 function Bubble({ msg }: { msg: Msg }) {
@@ -197,6 +327,8 @@ function Bubble({ msg }: { msg: Msg }) {
             <Text style={styles.msgAttachTagText}>{msg.attachmentName}</Text>
           </View>
         )}
+
+        {!isUser && <ToolTrace steps={msg.steps} elapsed={msg.elapsed} />}
 
         <Text style={[styles.bubbleText, isUser && styles.bubbleTextUser]}>{msg.content}</Text>
 
@@ -269,7 +401,8 @@ export default function App() {
   const [msgs, setMsgs]           = useState<Msg[]>([]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
-  const [liveEvent, setLiveEvent] = useState<StepEvent | null>(null);
+  const [liveThought, setLiveThought] = useState('');
+  const [liveSteps, setLiveSteps] = useState<LiveStep[]>([]);
   const [modelReady, setModelReady] = useState(false);
   const [visionReady, setVisionReadyState] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -397,13 +530,21 @@ export default function App() {
     const next = [...msgs, userMsg];
     setMsgs(next);
     setLoading(true);
-    setLiveEvent({ type: 'thought', text: 'يفكر...' });
+    setLiveThought('يفكر...');
+    setLiveSteps([]);
 
     try {
       const res = await runWithAttachment(
         msg || 'صف/حلل المرفق ده',
         attachment,
-        (e) => setLiveEvent(e),
+        (e) => {
+          if (e.type === 'thought') setLiveThought(e.text);
+          else if (e.type === 'tool_call') {
+            setLiveSteps(prev => [...prev, { id: e.id, tool: e.tool, arg: e.arg, done: false }]);
+          } else if (e.type === 'tool_result') {
+            setLiveSteps(prev => prev.map(st => (st.id === e.id ? { ...st, result: e.result, done: true } : st)));
+          }
+        },
         5
       );
 
@@ -415,6 +556,7 @@ export default function App() {
         score: res.score,
         warnings: res.attachmentWarnings,
         toolsUsed: toolsUsed.length ? toolsUsed : undefined,
+        steps: res.steps.length ? res.steps : undefined,
       };
       const final = [...next, aiMsg];
       setMsgs(final);
@@ -427,7 +569,8 @@ export default function App() {
       setMsgs([...next, errMsg]);
     } finally {
       setLoading(false);
-      setLiveEvent(null);
+      setLiveThought('');
+      setLiveSteps([]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [input, msgs, loading, modelReady, pendingAttachment]);
@@ -633,12 +776,16 @@ export default function App() {
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
+        {loading && liveSteps.length > 0 && (() => {
+          setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 0);
+          return null;
+        })()}
 
         {loading && (
           <View style={styles.loadingRow}>
             <AIAvatar size={28} />
             <View style={styles.liveStatusWrap}>
-              <LiveStatus event={liveEvent} />
+              <LiveTrace thought={liveThought} steps={liveSteps} />
             </View>
           </View>
         )}
@@ -1003,4 +1150,40 @@ const styles = StyleSheet.create({
                      borderRadius:12, paddingHorizontal:12, paddingVertical:8, fontSize:14,
                      fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
   termRun:         { width:44, height:44, borderRadius:22, backgroundColor:'#7c3aed', alignItems:'center', justifyContent:'center' },
+
+  // live "thinking" trace (shown while generating, above the input bar)
+  liveTrace:        { gap:6, paddingVertical:2 },
+  liveTraceHeader:   { flexDirection:'row', alignItems:'center', gap:7 },
+  liveTraceThought:  { flex:1, color:C.accentB, fontSize:12.5, fontWeight:'600' },
+
+  // one tool step (live or finished) — compact card, expands on tap
+  stepRow:          { flexDirection:'row', alignItems:'center', gap:7, paddingHorizontal:10, paddingVertical:8,
+                      borderRadius:12, backgroundColor:'rgba(255,255,255,0.035)', borderWidth:1, borderColor:C.border },
+  stepRowConsole:   { backgroundColor:'rgba(6,182,212,0.07)', borderColor:'rgba(6,182,212,0.25)' },
+  stepLabel:        { color:C.text, fontSize:12.5, fontWeight:'600' },
+  stepArg:          { flex:1, color:C.textDim, fontSize:11.5 },
+  stepArgMono:      { fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier', color:'#67e8f9' },
+  stepResultBox:    { marginTop:-4, marginBottom:2, padding:10, borderRadius:10,
+                      backgroundColor:'rgba(255,255,255,0.03)', borderWidth:1, borderColor:C.border, borderTopWidth:0,
+                      borderTopLeftRadius:0, borderTopRightRadius:0 },
+  stepResultText:   { color:'#cbd5e1', fontSize:12, lineHeight:18 },
+
+  // terminal-style console block (used for terminal/python/pkg_install steps)
+  consoleBlock:     { marginTop:-4, marginBottom:2, borderRadius:10, borderTopLeftRadius:0, borderTopRightRadius:0,
+                      backgroundColor:'#0a0e14', borderWidth:1, borderColor:'rgba(6,182,212,0.25)', borderTopWidth:0,
+                      overflow:'hidden', padding:10 },
+  consoleHeader:    { flexDirection:'row', alignItems:'center', gap:5, marginBottom:7 },
+  consoleDot:       { width:7, height:7, borderRadius:4, backgroundColor:'rgba(255,255,255,0.15)' },
+  consoleHeaderText:{ color:'#64748b', fontSize:10.5, marginStart:4, fontWeight:'700', letterSpacing:0.5 },
+  consoleCmd:       { color:'#67e8f9', fontSize:12.5, marginBottom:5,
+                      fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
+  consoleOut:       { color:'#d1d9e0', fontSize:12, lineHeight:17.5,
+                      fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
+
+  // collapsible "N tools · X.Xs" header attached to a finished assistant message
+  toolTraceWrap:       { gap:6, marginBottom:8 },
+  toolTraceHeader:     { flexDirection:'row', alignItems:'center', gap:5, alignSelf:'flex-start',
+                        paddingHorizontal:9, paddingVertical:5, borderRadius:10,
+                        backgroundColor:'rgba(255,255,255,0.03)' },
+  toolTraceHeaderText: { color:C.textDim, fontSize:11, fontWeight:'600' },
 });

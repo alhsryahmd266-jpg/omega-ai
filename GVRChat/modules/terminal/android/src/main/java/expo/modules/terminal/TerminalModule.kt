@@ -366,7 +366,12 @@ class TerminalModule : Module() {
   private fun alpineProotCommand(command: String): List<String> {
     val nlib = nativeLibDir()
     val cmd = mutableListOf(
-      "$nlib/libproot.so", "--kill-on-exit", "-0", "--link2symlink",
+      // --sysvipc: most Android kernels (esp. Qualcomm) ship without CONFIG_SYSVIPC.
+      // apk-tools v3 locks its database with a SysV semaphore on every install/upgrade,
+      // so without this flag "apk add" segfaults (exit code 139) the instant it tries
+      // to write. This emulates SysV IPC in userspace, exactly like Termux's proot-distro
+      // does for Alpine. Confirmed against the user's own on-device crash log.
+      "$nlib/libproot.so", "--kill-on-exit", "-0", "--link2symlink", "--sysvipc",
       "-r", alpineRoot().absolutePath,
       "-b", "/dev", "-b", "/proc", "-b", "/sys"
     )

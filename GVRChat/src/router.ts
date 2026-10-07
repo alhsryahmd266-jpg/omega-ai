@@ -47,6 +47,15 @@ const PACKAGES: Array<[RegExp, string]> = [
 
 const FILE_LIKE = /\.(apk|apks|xapk|zip|jar|aar|pdf|docx|xlsx|pptx|odt|epub|gz|tar|7z|rar|db|sqlite|so|dex|bin|gguf)$/i;
 
+/**
+ * Run inline (no separate screen) the moment the user asks to "open the
+ * terminal" — gives an immediate, real console card right in the chat
+ * instead of navigating away.
+ */
+export const TERMINAL_PROBE =
+  'echo "📂 $(pwd)"; id -un 2>/dev/null; uname -sm 2>/dev/null; ' +
+  '(command -v apk >/dev/null 2>&1 && echo "🐧 Alpine Linux ready") || echo "🤖 Android shell (Alpine Linux not installed yet)"';
+
 function cleanPath(p: string): string {
   return p.replace(/^[`"'«»(]+|[`"'«»).,،؛;:!?؟]+$/g, '');
 }
@@ -64,9 +73,9 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   const urls = raw.match(/https?:\/\/[^\s<>"'`)\]]+/gi) || [];
   for (const u of urls.slice(0, 2)) add('fetch_url', u.replace(/[.,،;:!?؟]+$/, ''), 'url');
 
-  // 2) open the terminal panel
+  // 2) "open the terminal" → run a real probe command inline, right now
   if (/(افتح|شغل|اعرض|وريني|اظهر|open|show|launch|start|run)\s+(?:the\s+)?(ال)?(ترمنال|تيرمنال|تريمنال|ترمينال|تيرمينال|terminal|shell|console|طرفيه)/.test(n)) {
-    add('open_terminal', '', 'open_terminal');
+    add('terminal', TERMINAL_PROBE, 'open_terminal');
   }
 
   // 3) explicit shell commands: fenced block, or "run: cmd"
