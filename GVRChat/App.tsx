@@ -25,6 +25,7 @@ import {
   setOpenTerminalHandler, refreshLinuxState,
 } from './src/tools';
 import Terminal from './modules/terminal/src';
+import * as Clipboard from 'expo-clipboard';
 import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, requestPermission,
   type PermKey, type PermStatus,
@@ -115,6 +116,8 @@ const TOOL_LABELS: Record<string, { icon: string; label: string }> = {
   open_terminal:{ icon: 'console',              label: 'يفتح الترمنال' },
   python:       { icon: 'language-python',      label: 'ينفّذ بايثون' },
   pkg_install:  { icon: 'package-variant',      label: 'يثبّت حزمة' },
+  copy_clipboard:{ icon: 'content-copy',        label: 'ينسخ للحافظة' },
+  read_clipboard:{ icon: 'clipboard-text-outline', label: 'يقرأ الحافظة' },
 };
 
 /** Tools whose output is rendered as a real console block, not a generic card. */
@@ -207,6 +210,14 @@ function StepCard({ tool, arg, result, done, defaultOpen }: {
             <Text style={styles.consoleOut} selectable>
               {result.length > 1600 ? `${result.slice(0, 1600)}\n… (القص؛ التفاصيل كاملة في الترمنال)` : result}
             </Text>
+            <TouchableOpacity
+              style={styles.consoleCopyBtn}
+              onPress={async () => { await Clipboard.setStringAsync(result); }}
+              hitSlop={8}
+            >
+              <Ionicons name="copy-outline" size={13} color="#67e8f9" />
+              <Text style={styles.consoleCopyText}>نسخ الناتج</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.stepResultBox}>
@@ -707,10 +718,10 @@ export default function App() {
     if (linuxBusy) return;
     setLinuxBusy('بننزّل python وgit وnode (ممكن ياخد كام دقيقة)...');
     try {
-      const out = await Terminal.installPackages('python3 py3-pip git nodejs npm curl');
+      const out = await Terminal.installPackages('python3 py3-pip git nodejs npm curl ffmpeg');
       setShowSettings(false);
       setShowTerminal(true);
-      pushTerminal('apk add python3 py3-pip git nodejs npm curl', out.slice(-1500));
+      pushTerminal('apk add python3 py3-pip git nodejs npm curl ffmpeg', out.slice(-1500));
     } catch (e: any) {
       Alert.alert('فشل تثبيت الأدوات', e.message);
     } finally {
@@ -1179,6 +1190,10 @@ const styles = StyleSheet.create({
                       fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
   consoleOut:       { color:'#d1d9e0', fontSize:12, lineHeight:17.5,
                       fontFamily: Platform.OS === 'android' ? 'monospace' : 'Courier' },
+  consoleCopyBtn:   { flexDirection:'row', alignItems:'center', gap:4, alignSelf:'flex-end',
+                      marginTop:8, paddingHorizontal:8, paddingVertical:4, borderRadius:8,
+                      backgroundColor:'rgba(103,232,249,0.1)' },
+  consoleCopyText:  { color:'#67e8f9', fontSize:10.5, fontWeight:'700' },
 
   // collapsible "N tools · X.Xs" header attached to a finished assistant message
   toolTraceWrap:       { gap:6, marginBottom:8 },

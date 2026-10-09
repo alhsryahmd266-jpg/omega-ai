@@ -1,4 +1,4 @@
-# GVR-Chat Project State (آخر تحديث: 2026-10-07)
+# GVR-Chat Project State (آخر تحديث: 2026-10-08)
 
 ## جلسة 2026-10-06: مراجعة فيديو التجربة على الجهاز (Android 12) وإصلاحات
 
@@ -49,6 +49,30 @@
 ### ⚠️ لسه محتاج تأكيد من الجهاز:
 - `apk add python3 py3-pip git nodejs npm curl` بعد إضافة `--sysvipc` — المفروض يشتغل، لازم تجربة فعلية
 - شكل الواجهة الجديدة (الكروت والتفكير الحي) على الجهاز
+
+## جلسة 2026-10-08: Foreground Service + الحافظة + مراجعة قايمة أدوات
+
+### Foreground Service (حماية الأوامر الطويلة)
+- مشكلة حقيقية: أندرويد 12+ بيقفل العمليات الطويلة (apk add، pip install) لو قفلت الشاشة أو بدّلت تطبيق (phantom process killer / Doze)
+- الحل: `GvrJobService.kt` — خدمة foreground حقيقية، بس بتظهر لو الأمر فعلاً أخد أكتر من 1.5 ثانية (تأخير + إلغاء تلقائي، فأوامر زي `ls` السريعة مش بتظهرلها إشعار أبداً)
+- `targetSdk 28` معناه مش محتاجين نعلن `foregroundServiceType` (ده بقى إجباري بس من targetSdk 34) — تأكدت من ده عبر توثيق أندرويد الرسمي قبل التنفيذ
+- التسجيل في المانيفست عن طريق `modules/terminal/android/src/main/AndroidManifest.xml` (ملف manifest بيتضم تلقائياً مع كل build، عكس `android/` اللي بيتمسح ويتبنى من جديد كل مرة بـ `expo prebuild --clean`)
+- صلاحية `FOREGROUND_SERVICE` مضافة في app.json
+
+### الحافظة (نسخ/لصق)
+- أداتين: `copy_clipboard` و`read_clipboard` (+ aliases: copy/paste)
+- زرار "نسخ الناتج" حقيقي على كل كارت ترمنال/بايثون/apk في الشات — نسخ فوري للـ clipboard
+
+### مراجعة قايمة أدوات (ملف HTML من المستخدم فيه أدوات بيئة Claude نفسها)
+فحصت فعلياً (مش تخمين) إمكانية إضافة كل أداة لـ Alpine على الموبايل:
+- 🟢 آمن (hecho الآن أو قريب): ffmpeg (~30-50MB على arm64، مضاف لزرار التثبيت الافتراضي)، numpy/pandas/scipy/pillow (لها wheels جاهزة لـ musllinux+aarch64 — اتأكد من PyPI مباشرة، يدوي عند الحاجة، مش افتراضي)
+- 🔴 خطر/غير مناسب: opencv-python و scikit-learn (معندهومش musllinux wheel، هيحاولوا يتكومبايلوا من المصدر على الموبايل)، playwright+متصفح (متصفح جوه proot = خطر كراش عالي زي مشكلة apk)، libreoffice/java الكاملة (كبار جداً)، tesseract (بديل أفضل موجود: OCR عبر نموذج الرؤية المحمّل بالفعل، بدون تحميل إضافي)
+- apk-tools v3 مؤكد في فروع Alpine الحالية (فحصت pkgs.alpinelinux.org) — بيأكد تشخيص الـ sysvipc
+
+### ⚠️ لسه محتاج تأكيد من الجهاز:
+- `apk add python3 py3-pip git nodejs npm curl ffmpeg` بعد إصلاح sysvipc — هل نجح فعلاً؟
+- هل الـ Foreground Service بيظهر إشعار ومنع القتل فعلاً وقت تثبيت حزمة كبيرة والشاشة مقفولة؟
+- زرار نسخ الناتج شغال؟
 
 ## الحالة الحالية: الـ APK بيتبني وبيتنشر — محتاج تجربة على الجهاز
 

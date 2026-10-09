@@ -28,7 +28,8 @@
     "llama.rn": "0.12.9",
     "expo-video-processor": "file:./modules/video-processor",
     "terminal": "file:./modules/terminal",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "expo-clipboard": "~6.0.3"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",

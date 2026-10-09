@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking, Platform, Share } from 'react-native';
 import Terminal from '../modules/terminal/src';
 import { inspectFile } from './fileInspect';
+import * as Clipboard from 'expo-clipboard';
 import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, normalizePermKey, requestPermission,
 } from './permissions';
@@ -614,6 +615,29 @@ export async function toolShareText(arg: string): Promise<string> {
   }
 }
 
+/* ── CLIPBOARD ─────────────────────────────────────────────────────────── */
+export async function toolCopyClipboard(arg: string): Promise<string> {
+  const text = arg;
+  if (!text) return 'Nothing to copy (empty argument).';
+  try {
+    await Clipboard.setStringAsync(text);
+    return `Copied ${text.length} chars to the clipboard.`;
+  } catch (e: any) {
+    return `Copy failed: ${e?.message || e}`;
+  }
+}
+
+export async function toolReadClipboard(): Promise<string> {
+  try {
+    const has = await Clipboard.hasStringAsync();
+    if (!has) return '(the clipboard is empty or holds a non-text item)';
+    const text = await Clipboard.getStringAsync();
+    return text || '(the clipboard is empty)';
+  } catch (e: any) {
+    return `Reading the clipboard failed: ${e?.message || e}`;
+  }
+}
+
 export async function toolPermission(arg: string): Promise<string> {
   const a = arg.trim().toLowerCase();
   if (!a || a === 'status' || a === 'list') {
@@ -748,6 +772,7 @@ export type ToolName =
   | 'read_file' | 'write_file' | 'list_dir' | 'delete_file' | 'inspect_file' | 'open_terminal'
   | 'device_info' | 'open_url' | 'share_text' | 'permission'
   | 'mem_save' | 'mem_get' | 'mem_list' | 'mem_delete'
+  | 'copy_clipboard' | 'read_clipboard'
   | 'python' | 'pkg_install';
 
 interface ToolSpec {
@@ -812,6 +837,12 @@ const TOOLS: ToolSpec[] = [
   { name: 'share_text', confirm: true, advertise: true,
     usage: 'open the Android share sheet with some text. Argument: the text.',
     run: toolShareText },
+  { name: 'copy_clipboard', confirm: false, advertise: true,
+    usage: 'copy text to the system clipboard so the user can paste it anywhere. Argument: the text to copy.',
+    run: toolCopyClipboard },
+  { name: 'read_clipboard', confirm: false, advertise: true,
+    usage: 'read whatever text is currently on the system clipboard. No argument.',
+    run: () => toolReadClipboard() },
   { name: 'permission', confirm: false, advertise: true,
     usage: 'check or request an Android permission. Argument: "status", or one of storage, all_files, camera, microphone, location, notifications.',
     run: toolPermission },
@@ -871,6 +902,7 @@ const ALIASES: Record<string, ToolName> = {
   rm: 'delete_file', delete: 'delete_file',
   device: 'device_info', info: 'device_info',
   open: 'open_url', share: 'share_text',
+  copy: 'copy_clipboard', clipboard_copy: 'copy_clipboard', paste: 'read_clipboard', clipboard_read: 'read_clipboard', clipboard: 'read_clipboard',
   inspect: 'inspect_file', analyze: 'inspect_file', apk_info: 'inspect_file', file_info: 'inspect_file',
   terminal_open: 'open_terminal', open_shell: 'open_terminal',
   py: 'python', python3: 'python', apk: 'pkg_install', install: 'pkg_install',

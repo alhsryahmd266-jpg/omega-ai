@@ -110,49 +110,69 @@ class TerminalModule : Module() {
    * (Reading only after waitFor() deadlocks as soon as output exceeds the pipe
    * buffer, ~64 KB.) Output is capped so a runaway command can't exhaust memory.
    */
-  private fun runProcess(pb: ProcessBuilder, timeoutMs: Long): ExecOutcome {
+  /**
+   * Runs `pb`, protected by a foreground-service notification — but only if it's
+   * actually still running after 1.5s. Fast commands (ls, pwd, cat ...) never show
+   * anything; a slow one (apk add, pip install, a big git clone) gets protected
+   * from being killed while the screen is off or the app is in the background.
+   */
+  private fun jobLabelFor(cmd: String): String {
+    val oneLine = cmd.trim().replace(Regex("\\s+"), " ")
+    return if (oneLine.length > 60) oneLine.take(60) + "…" else oneLine.ifEmpty { "تنفيذ أمر" }
+  }
+
+  private fun runProcess(pb: ProcessBuilder, timeoutMs: Long, jobLabel: String? = null): ExecOutcome {
     val maxChars = 200000
-    val process = pb.start()
-    try { process.outputStream.close() } catch (e: Exception) { }
+    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    val showJob = Runnable { GvrJobService.start(context, jobLabel ?: "تنفيذ أمر في الترمنال") }
+    mainHandler.postDelayed(showJob, 1500)
 
-    val outBuf = StringBuffer()
-    val errBuf = StringBuffer()
+    try {
+      val process = pb.start()
+      try { process.outputStream.close() } catch (e: Exception) { }
 
-    val tOut = Thread {
-      try {
-        val reader = process.inputStream.bufferedReader()
-        val buf = CharArray(4096)
-        while (true) {
-          val n = reader.read(buf)
-          if (n < 0) break
-          if (outBuf.length < maxChars) { outBuf.append(buf, 0, n) }
-        }
-      } catch (e: Exception) { }
-    }
-    val tErr = Thread {
-      try {
-        val reader = process.errorStream.bufferedReader()
-        val buf = CharArray(4096)
-        while (true) {
-          val n = reader.read(buf)
-          if (n < 0) break
-          if (errBuf.length < maxChars) { errBuf.append(buf, 0, n) }
-        }
-      } catch (e: Exception) { }
-    }
-    tOut.start()
-    tErr.start()
+      val outBuf = StringBuffer()
+      val errBuf = StringBuffer()
 
-    val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-    if (!finished) {
-      process.destroyForcibly()
-      tOut.join(1000)
-      tErr.join(1000)
-      return ExecOutcome(outBuf.toString(), errBuf.toString() + "\nCommand timed out after ${timeoutMs}ms", -1)
+      val tOut = Thread {
+        try {
+          val reader = process.inputStream.bufferedReader()
+          val buf = CharArray(4096)
+          while (true) {
+            val n = reader.read(buf)
+            if (n < 0) break
+            if (outBuf.length < maxChars) { outBuf.append(buf, 0, n) }
+          }
+        } catch (e: Exception) { }
+      }
+      val tErr = Thread {
+        try {
+          val reader = process.errorStream.bufferedReader()
+          val buf = CharArray(4096)
+          while (true) {
+            val n = reader.read(buf)
+            if (n < 0) break
+            if (errBuf.length < maxChars) { errBuf.append(buf, 0, n) }
+          }
+        } catch (e: Exception) { }
+      }
+      tOut.start()
+      tErr.start()
+
+      val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+      if (!finished) {
+        process.destroyForcibly()
+        tOut.join(1000)
+        tErr.join(1000)
+        return ExecOutcome(outBuf.toString(), errBuf.toString() + "\nCommand timed out after ${timeoutMs}ms", -1)
+      }
+      tOut.join(2000)
+      tErr.join(2000)
+      return ExecOutcome(outBuf.toString(), errBuf.toString(), process.exitValue())
+    } finally {
+      mainHandler.removeCallbacks(showJob)
+      GvrJobService.stop(context)
     }
-    tOut.join(2000)
-    tErr.join(2000)
-    return ExecOutcome(outBuf.toString(), errBuf.toString(), process.exitValue())
   }
 
   /** Core: runs `bashArgs` through proot with termux-exec's LD_PRELOAD hook active. */
@@ -186,7 +206,7 @@ class TerminalModule : Module() {
     env["PATH"] = "/bin:/usr/bin:/system/bin"
     env["TERM"] = "xterm-256color"
 
-    return runProcess(pb, timeoutMs)
+    return runProcess(pb, timeoutMs, jobLabelFor(bashArgs.lastOrNull() ?: "proot"))
   }
 
 
@@ -412,7 +432,7 @@ class TerminalModule : Module() {
     }
     val pb = ProcessBuilder(alpineProotCommand(command))
     applyProotEnv(pb)
-    return runProcess(pb, timeoutMs)
+    return runProcess(pb, timeoutMs, jobLabelFor(command))
   }
 
   override fun definition() = ModuleDefinition {
@@ -467,7 +487,7 @@ class TerminalModule : Module() {
         env["TMPDIR"] = context.cacheDir.absolutePath
         env["PATH"] = "/system/bin:/system/xbin:/vendor/bin"
         env["TERM"] = "xterm-256color"
-        val result = runProcess(pb, timeoutMs.toLong())
+        val result = runProcess(pb, timeoutMs.toLong(), jobLabelFor(command))
         promise.resolve(mapOf(
           "stdout" to result.stdout,
           "stderr" to result.stderr,
