@@ -1,4 +1,4 @@
-# GVR-Chat Project State (آخر تحديث: 2026-10-08)
+# GVR-Chat Project State (آخر تحديث: 2026-10-11)
 
 ## جلسة 2026-10-06: مراجعة فيديو التجربة على الجهاز (Android 12) وإصلاحات
 
@@ -73,6 +73,29 @@
 - `apk add python3 py3-pip git nodejs npm curl ffmpeg` بعد إصلاح sysvipc — هل نجح فعلاً؟
 - هل الـ Foreground Service بيظهر إشعار ومنع القتل فعلاً وقت تثبيت حزمة كبيرة والشاشة مقفولة؟
 - زرار نسخ الناتج شغال؟
+
+## جلسة 2026-10-11: proot بيعمل crash حتى مع --version — جرّبنا بديل (proroot)
+
+### الاكتشاف الحرج (من فيديو حقيقي + self-test)
+`apk add` فشل تاني بعد إصلاح --sysvipc. فحصنا self-test مفصّل:
+- `exec from app data dir: ALLOWED` ✅ (إصلاح targetSdk 28 شغال)
+- `proot --version: exit=139` ❌ — proot نفسه بيعمل crash حتى من غير apk، من غير sysvipc، من غير أي تفاعل مع Alpine. ده معناه تشخيص sysvipc ماكانش كافي
+- فحصنا الملفات الثنائية نفسها (ELF, readelf, nm): الربط سليم 100%، المكتبات كاملة، الاستهداف صحيح (NDK, API 24). مفيش دليل على خطأ في البناء
+- أقوى احتمال (مش مؤكد 100% بدون adb logcat): نظام أندرويد على الجهاز بيرفض `ptrace()` للتطبيقات العادية (SELinux/seccomp). proot كله مبني على ptrace
+
+### proroot: بديل تجريبي (ضُمّ، مش استبدل)
+بعد بحث عميق ومراجعة (وتصحيح غلطتين مني: SDK 36 حقيقي، وQwen3.6/Gemma4 نماذج حقيقية — معرفتي بتوقف يناير 2026):
+- `github.com/coderredlab/proroot` — إعادة بناء من الصفر بدون ptrace خالص (custom guest linker بدل)
+- **مصدره مغلق.** فحصنا الملفات الثنائية الأربعة بالكامل: SHA-256 مطابق للمنشور، مفيش روابط/IP مدمجة، مفيش بيانات مشفّرة مخبأة، النصوص الداخلية متسقة مع هندسة حقيقية (قراءة سياق SELinux، التعامل مع seccomp)
+- **القرار:** اتضاف **جنب** proot مش بدل منه. الـ self-test دلوقتي بيجرّب الاتنين ويعرض النتيجة جنب بعض للمقارنة الصادقة
+- ملفات جديدة: `libproroot.so`, `libproroot-runtime.so`, `libproroot-bridge.so`, `libproroot-linker.so` في jniLibs
+- `TerminalModule.kt`: `prorootCommand()`, `applyProrootEnv()`, `execProroot()`, `prorootSmokeTest()` + AsyncFunction `runProroot`
+- `terminal/src/index.ts`: `Terminal.runProroot()` — **متاح لكن مش الافتراضي**. الاستخدام التلقائي (`run()`) لسه بيجرّب proot الأول، لحد ما نتأكد proroot شغال فعلاً على الجهاز
+
+### ⚠️ الخطوة الجاية (قرار المستخدم، بالترتيب):
+1. تجربة الـ self-test الجديد على الجهاز — المفروض يطلّع نتيجة proroot جنب proot
+2. لو proroot اشتغل: نربطه كخيار افتراضي بدل proot المكسور
+3. **لو عروروت فشلت برضو → "الحل المضمون" (آخر حل، اتفقنا عليه):** مش محتاج أي sandbox/ptrace خالص — نفس الوصفة اللي نجحت مع proot نفسه (تحميل حزم Termux + patchelf) لكن لـ python3/git/nodejs **الأصليين لـ Bionic** (مش proot-distro، دول حزم Termux العادية اللي أصلاً بتشتغل من غير أي proot). المشكلة الوحيدة المعروفة: مسارات Termux مرمّزة (`/data/data/com.termux/...`) محتاجة patchelf لتغيير RPATH، بالظبط زي ما عملنا مع libproot.so بنجاح. ده "مضمون" لأنه مش معتمد على ptrace يشتغل أصلاً
 
 ## الحالة الحالية: الـ APK بيتبني وبيتنشر — محتاج تجربة على الجهاز
 

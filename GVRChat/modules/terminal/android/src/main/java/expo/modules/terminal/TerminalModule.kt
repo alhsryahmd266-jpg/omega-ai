@@ -422,6 +422,82 @@ class TerminalModule : Module() {
     env.remove("LD_PRELOAD")
   }
 
+  // ─────────────── proroot (experimental alternative to proot) ───────────────
+  // proot itself crashes (SIGSEGV) on this device even for `--version` alone —
+  // confirmed by on-device self-test logs, unrelated to --sysvipc or Alpine.
+  // proroot (github.com/coderredlab/proroot) is a from-scratch, closed-source
+  // reimplementation that avoids ptrace entirely (uses a custom guest dynamic
+  // linker instead). Binaries were verified by SHA-256 against the published
+  // release and inspected with readelf/strings before being bundled here; no
+  // network destinations or obfuscated payloads were found. Still closed-source,
+  // so it is wired in ALONGSIDE proot (never replacing it) and surfaced clearly
+  // in the self-test so it can be compared honestly, not assumed to work.
+  private fun prorootCommand(command: String): List<String> {
+    val nlib = nativeLibDir()
+    // Usage (from the binary's own embedded string):
+    //   proroot [-r rootfs] [-0] [--link2symlink] [-b host:guest] [-w workdir] command [args...]
+    // — deliberately the same grammar as proot, confirmed from libproroot.so's own usage text.
+    val cmd = mutableListOf(
+      "$nlib/libproroot.so",
+      "-r", alpineRoot().absolutePath, "-0", "--link2symlink",
+      "-b", "/dev", "-b", "/proc", "-b", "/sys"
+    )
+    if (File("/storage/emulated/0").exists()) {
+      cmd.add("-b"); cmd.add("/storage/emulated/0:/sdcard")
+    }
+    cmd.addAll(listOf(
+      "-w", "/root",
+      "/usr/bin/env", "-i",
+      "HOME=/root", "USER=root", "LOGNAME=root", "SHELL=/bin/sh",
+      "TERM=xterm-256color", "LANG=C.UTF-8", "TMPDIR=/tmp",
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "/bin/sh", "-c", command
+    ))
+    return cmd
+  }
+
+  private fun applyProrootEnv(pb: ProcessBuilder) {
+    val nlib = nativeLibDir()
+    val tmp = File(context.cacheDir, "proroot-tmp")
+    tmp.mkdirs()
+    val env = pb.environment()
+    // Only variables with an unambiguous, documented meaning are set here.
+    // PROROOT_GUEST_EXE / LINKER_PATH / TRAMPOLINE_PATH / PROBE_PHASE are logged
+    // by the launcher as values it computes *itself* from PROROOT_LIB_PATH and
+    // -r — they look like internal state, not external configuration, so this
+    // does not set them and relies on the documented CLI flags instead.
+    env["PROROOT_LIB_PATH"] = nlib
+    env["PROROOT_TMP_DIR"] = tmp.absolutePath
+    env["PROROOT_NO_SECCOMP"] = "1"
+    env["LD_LIBRARY_PATH"] = nlib
+    env.remove("LD_PRELOAD")
+  }
+
+  /** Runs `libproroot.so` with no arguments: per its own Usage string this should print
+   *  usage and exit cleanly — the minimal "does the launcher even start" smoke test. */
+  private fun prorootSmokeTest(): ExecOutcome {
+    val nlib = nativeLibDir()
+    if (!File(nlib, "libproroot.so").exists()) {
+      return ExecOutcome("", "libproroot.so not found in $nlib", -1)
+    }
+    val pb = ProcessBuilder("$nlib/libproroot.so")
+    applyProrootEnv(pb)
+    return runProcess(pb, 8000, "proroot smoke test")
+  }
+
+  private fun execProroot(command: String, timeoutMs: Long): ExecOutcome {
+    val nlib = nativeLibDir()
+    if (!File(nlib, "libproroot.so").exists()) {
+      return ExecOutcome("", "libproroot.so not found in $nlib (native libs were not extracted)", -1)
+    }
+    if (!alpineInstalled()) {
+      return ExecOutcome("", "Alpine Linux is not installed yet. Install it from Settings first.", -1)
+    }
+    val pb = ProcessBuilder(prorootCommand(command))
+    applyProrootEnv(pb)
+    return runProcess(pb, timeoutMs, jobLabelFor(command))
+  }
+
   private fun execAlpine(command: String, timeoutMs: Long): ExecOutcome {
     val nlib = nativeLibDir()
     if (!File(nlib, "libproot.so").exists()) {
@@ -527,6 +603,7 @@ class TerminalModule : Module() {
           "loaderPresent" to File(nlib, "libproot-loader.so").exists(),
           "tallocPresent" to File(nlib, "libtalloc.so").exists(),
           "shmemPresent" to File(nlib, "libandroid-shmem.so").exists(),
+          "prorootPresent" to File(nlib, "libproroot.so").exists(),
           "targetSdk" to context.applicationInfo.targetSdkVersion,
           "androidSdk" to Build.VERSION.SDK_INT,
           "rootDir" to alpineRoot().absolutePath
@@ -589,7 +666,8 @@ class TerminalModule : Module() {
         val nlib = nativeLibDir()
         sb.appendLine("android_sdk=${Build.VERSION.SDK_INT}  targetSdk=${context.applicationInfo.targetSdkVersion}  abi=${Build.SUPPORTED_ABIS.joinToString()}")
         sb.appendLine("nativeLibraryDir=$nlib")
-        for (n in listOf("libproot.so", "libproot-loader.so", "libtalloc.so", "libandroid-shmem.so")) {
+        for (n in listOf("libproot.so", "libproot-loader.so", "libtalloc.so", "libandroid-shmem.so",
+                         "libproroot.so", "libproroot-runtime.so", "libproroot-bridge.so", "libproroot-linker.so")) {
           val f = File(nlib, n)
           sb.appendLine("lib $n: " + (if (f.exists()) "present (${f.length()} bytes)" else "MISSING"))
         }
@@ -615,13 +693,38 @@ class TerminalModule : Module() {
         }
         if (alpineInstalled()) {
           val r = execAlpine("cat /etc/alpine-release; uname -m; echo guest_ok", 30000)
-          sb.appendLine("alpine: exit=${r.exitCode} ${r.stdout.trim().replace('\n', ' ')} ${r.stderr.take(300)}")
+          sb.appendLine("alpine (via proot): exit=${r.exitCode} ${r.stdout.trim().replace('\n', ' ')} ${r.stderr.take(300)}")
         } else {
-          sb.appendLine("alpine: not installed")
+          sb.appendLine("alpine (via proot): not installed")
+        }
+        // --- proroot: experimental alternative, run in parallel for direct comparison ---
+        try {
+          val r = prorootSmokeTest()
+          val firstLine = (r.stdout.trim().ifEmpty { r.stderr.trim() }).lines().firstOrNull() ?: ""
+          sb.appendLine("proroot (no args): exit=${r.exitCode} $firstLine")
+        } catch (e: Exception) {
+          sb.appendLine("proroot (no args): FAILED (${e.message})")
+        }
+        if (alpineInstalled()) {
+          val r = execProroot("cat /etc/alpine-release; uname -m; echo guest_ok", 30000)
+          sb.appendLine("alpine (via proroot): exit=${r.exitCode} ${r.stdout.trim().replace('\n', ' ')} ${r.stderr.take(300)}")
+        } else {
+          sb.appendLine("alpine (via proroot): not installed")
         }
         promise.resolve(sb.toString())
       } catch (e: Exception) {
         promise.reject("SELFTEST_ERROR", "selfTest failed: ${e.message}", e)
+      }
+    }
+
+    AsyncFunction("runProroot") { command: String, timeoutMs: Int, promise: expo.modules.kotlin.Promise ->
+      try {
+        val result = execProroot(command, timeoutMs.toLong())
+        promise.resolve(mapOf(
+          "stdout" to result.stdout, "stderr" to result.stderr,
+          "exitCode" to result.exitCode, "success" to (result.exitCode == 0)))
+      } catch (e: Exception) {
+        promise.reject("EXEC_ERROR", "proroot execution failed: ${e.message}", e)
       }
     }
 

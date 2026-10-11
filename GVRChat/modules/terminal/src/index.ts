@@ -51,6 +51,7 @@ interface TerminalNative {
   extractTarGz(archivePath: string, destDir: string): Promise<number>;
   prepareAlpine(): Promise<boolean>;
   runAlpine(command: string, timeoutMs: number): Promise<NativeExecResult>;
+  runProroot(command: string, timeoutMs: number): Promise<NativeExecResult>;
   selfTest(): Promise<string>;
   sha256File(path: string): Promise<string>;
   runPython(code: string, timeoutMs: number): Promise<NativeExecResult>;
@@ -177,6 +178,21 @@ const Terminal = {
 
   async alpineStatus(): Promise<AlpineStatus | null> {
     try { return await Native.alpineStatus(); } catch { return null; }
+  },
+
+  /**
+   * Experimental: always inside Alpine via proroot (not proot). proot itself
+   * crashes on this device (confirmed by self-test), so this is wired in
+   * separately rather than silently replacing proot — only use after the
+   * self-test confirms it actually works here.
+   */
+  async runProroot(command: string, timeoutSeconds = 30): Promise<string> {
+    try {
+      const result = await Native.runProroot(command, timeoutSeconds * 1000);
+      return formatResult(result);
+    } catch (e: any) {
+      return `proroot execution failed: ${e.message || e}`;
+    }
   },
 
   /** Which shell `run()` will use right now. */
