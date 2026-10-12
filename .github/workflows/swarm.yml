@@ -15,6 +15,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: aion-swarm
+  cancel-in-progress: false
+
 jobs:
   prepare:
     name: Prepare and Generate Data
@@ -112,7 +116,7 @@ jobs:
             --data data/training_data.json \
             --checkpoint "$CKPT" \
             --out-dir swarm_out \
-            --max-steps 150
+            --max-minutes 40
 
       - name: Upload shard result
         uses: actions/upload-artifact@v4
