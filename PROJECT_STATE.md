@@ -1,4 +1,22 @@
-# GVR-Chat Project State (آخر تحديث: 2026-10-11)
+# GVR-Chat Project State (آخر تحديث: 2026-10-12)
+
+
+## جلسة 2026-10-12: سبب crash الـ proot (فرضية قوية) + إصلاح SWARM
+
+### اللي اتكشف
+- `AION-SWARM` كان فاشل من يونيو (exit code 2): `swarm.yml` بيبعت `--max-steps` والسكريبت بقى بياخد `--max-minutes` بس → اتصلّح في PR #1 (`--max-minutes 40` + concurrency) والـ run خلص ناجح بالكامل (4 shards + تجميع + release)
+- `proot --version` بيطلع SIGSEGV (139) حتى من غير ptrace → المشكلة في الباينري نفسه مش في ptrace/sysvipc. فحص ELF لـ `libproot.so`: الـ PHDR والمحاذاة (16KB) سليمين (فرضية AT_PHDR/16KB اتنفت)، **لكن الملف معدّل بـ patchelf**: الـ workflow القديم كان بيعمل `--replace-needed` و`--set-rpath`، ولقينا segment جديد في آخر الملف فيه INTERP/NOTE (offset 0x40000). ده شكل patchelf ≥0.17 المعروف إنه بيطلّع executables بتعمل segfault وقت التشغيل (NixOS/patchelf#446)
+- `libproroot.so` (مش معدّل) تركيبه سليم
+
+### اللي اتعمل
+- `fetch_proot_runtime.yml`: شلنا patchelf تماماً؛ بنشحن ملفات Termux كما هي (byte-identical) + sha256 وتقرير readelf
+- `TerminalModule.kt`: `libtalloc.so.2` بقى symlink بيتعمل وقت التشغيل في `filesDir/proot-libs/` يشاور على `nativeLibraryDir/libtalloc.so` ويتحط أول واحد في `LD_LIBRARY_PATH`
+- الـ self-test بيطبع دلوقتي: kernel/model + `proot --version` مباشر + عن طريق `/system/bin/linker64`
+
+### ⚠️ لسه محتاج تجربة على الجهاز
+- ثبّت الـ APK الجديد وشغّل "اختبار ذاتي": المتوقع `proot --version: exit=0`
+- لو لسه 139: قارن السطرين (مباشر vs linker64)، وجرّب في Termux: `env -i LD_LIBRARY_PATH=$PWD strace -f ./libproot.so --version` عشان نشوف عنوان الـ crash
+- لو proot مستحيل على الجهاز: بديل `proroot`، أو الربط مع Termux عن طريق `RUN_COMMAND` intent
 
 ## جلسة 2026-10-06: مراجعة فيديو التجربة على الجهاز (Android 12) وإصلاحات
 
