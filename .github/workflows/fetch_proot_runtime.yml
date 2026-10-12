@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Install tools
-        run: sudo apt-get update -y && sudo apt-get install -y patchelf binutils xz-utils
+        run: sudo apt-get update -y && sudo apt-get install -y binutils xz-utils
 
       - name: Download Termux packages (aarch64)
         run: |
@@ -51,14 +51,15 @@ jobs:
           cp -L "$TALLOC" $OUT/libtalloc.so
           cp -L "$SHMEM"  $OUT/libandroid-shmem.so
           cd $OUT
-          patchelf --replace-needed libtalloc.so.2 libtalloc.so libproot.so
-          patchelf --set-soname libtalloc.so libtalloc.so
-          patchelf --set-rpath '$ORIGIN' libproot.so
-          patchelf --set-rpath '$ORIGIN' libtalloc.so
-          patchelf --set-rpath '$ORIGIN' libandroid-shmem.so
+          # NOTE: binaries are shipped byte-for-byte as built by Termux. They must NOT be
+          # rewritten with patchelf: the patched libproot.so (new PT_LOAD appended at the end of
+          # the file) crashed with SIGSEGV on a real device even for `--version`.
+          # libtalloc.so.2 is provided at runtime by a symlink (see TerminalModule.prootLibDir).
           {
+            echo "UNMODIFIED Termux binaries (no patchelf). Sources:"; ls -l ../work/*.deb
             for f in libproot.so libproot-loader.so libtalloc.so libandroid-shmem.so; do
-              echo "=== $f ($(stat -c %s $f) bytes)"
+              echo "=== $f ($(stat -c %s $f) bytes) sha256=$(sha256sum $f | cut -c1-16)"
+              readelf -lW $f 2>/dev/null | grep -E 'PHDR|LOAD|INTERP' || true
               readelf -h $f | grep -E 'Class|Machine|Type'
               readelf -d $f 2>/dev/null | grep -E 'NEEDED|SONAME|RPATH|RUNPATH' || echo '(no dynamic section: static)'
               readelf -l $f 2>/dev/null | grep -E 'INTERP|Requesting' || true
@@ -68,6 +69,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
+          ref: main          # always commit the refreshed binaries to main, even when dispatched from a branch
           token: ${{ secrets.GH_PAT }}
           path: repo
 
@@ -82,7 +84,9 @@ jobs:
           git config user.name "GVR Bot"
           git add -A GVRChat/modules/terminal/android/src/main/jniLibs native_binaries/proot2
           git commit -m "fix: ship complete proot runtime (libtalloc, libandroid-shmem, loader) [skip ci]" || true
+          ok=0
           for i in 1 2 3 4 5 6; do
-            git pull --rebase origin main && git push && break
+            git pull --rebase origin main && git push origin HEAD:main && ok=1 && break
             echo "push attempt $i failed"; sleep $((i*5))
           done
+          test "$ok" = 1   # fail loudly instead of silently dropping the commit

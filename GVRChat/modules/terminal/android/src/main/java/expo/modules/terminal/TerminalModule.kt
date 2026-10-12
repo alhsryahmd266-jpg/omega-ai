@@ -409,6 +409,27 @@ class TerminalModule : Module() {
     return cmd
   }
 
+  /**
+   * proot is shipped byte-for-byte as built by Termux (NOT rewritten with patchelf — a patchelf'd
+   * libproot.so crashed with SIGSEGV even on `--version`). Its DT_NEEDED asks for "libtalloc.so.2",
+   * but Android only unpacks jniLibs named lib*.so, so the real file (libtalloc.so) is exposed under
+   * the expected name through a symlink in a private dir that goes first on LD_LIBRARY_PATH.
+   * Recreated on every launch because nativeLibraryDir changes when the app is updated.
+   */
+  private fun prootLibDir(): File {
+    val dir = File(context.filesDir, "proot-libs")
+    dir.mkdirs()
+    val link = File(dir, "libtalloc.so.2")
+    val target = File(nativeLibDir(), "libtalloc.so")
+    try { android.system.Os.remove(link.absolutePath) } catch (_: Exception) {}
+    try {
+      android.system.Os.symlink(target.absolutePath, link.absolutePath)
+    } catch (_: Exception) {
+      try { target.copyTo(link, overwrite = true); link.setExecutable(true, false) } catch (_: Exception) {}
+    }
+    return dir
+  }
+
   private fun applyProotEnv(pb: ProcessBuilder) {
     val nlib = nativeLibDir()
     val tmp = File(context.cacheDir, "proot-tmp")
@@ -416,7 +437,7 @@ class TerminalModule : Module() {
     val env = pb.environment()
     env["PROOT_TMP_DIR"] = tmp.absolutePath
     env["PROOT_NO_SECCOMP"] = "1"
-    env["LD_LIBRARY_PATH"] = nlib
+    env["LD_LIBRARY_PATH"] = "${prootLibDir().absolutePath}:$nlib"
     val loader = File(nlib, "libproot-loader.so")
     if (loader.exists()) env["PROOT_LOADER"] = loader.absolutePath
     env.remove("LD_PRELOAD")
@@ -666,6 +687,7 @@ class TerminalModule : Module() {
         val nlib = nativeLibDir()
         sb.appendLine("android_sdk=${Build.VERSION.SDK_INT}  targetSdk=${context.applicationInfo.targetSdkVersion}  abi=${Build.SUPPORTED_ABIS.joinToString()}")
         sb.appendLine("nativeLibraryDir=$nlib")
+        sb.appendLine("kernel=${System.getProperty("os.version")} model=${Build.MANUFACTURER} ${Build.MODEL} release=${Build.VERSION.RELEASE}")
         for (n in listOf("libproot.so", "libproot-loader.so", "libtalloc.so", "libandroid-shmem.so",
                          "libproroot.so", "libproroot-runtime.so", "libproroot-bridge.so", "libproroot-linker.so")) {
           val f = File(nlib, n)
@@ -690,6 +712,17 @@ class TerminalModule : Module() {
           sb.appendLine("proot --version: exit=${r.exitCode} $firstLine ${r.stderr.take(240)}")
         } catch (e: Exception) {
           sb.appendLine("proot --version: FAILED (${e.message})")
+        }
+        // Same binary started through the system linker: if THIS works but the direct exec
+        // crashes, the problem is how the kernel loads the executable, not proot itself.
+        try {
+          val pb2 = ProcessBuilder("/system/bin/linker64", "$nlib/libproot.so", "--version")
+          applyProotEnv(pb2)
+          val r2 = runProcess(pb2, 8000)
+          val fl2 = r2.stdout.trim().lines().firstOrNull() ?: ""
+          sb.appendLine("proot --version (via linker64): exit=${r2.exitCode} $fl2 ${r2.stderr.take(240)}")
+        } catch (e: Exception) {
+          sb.appendLine("proot --version (via linker64): FAILED (${e.message})")
         }
         if (alpineInstalled()) {
           val r = execAlpine("cat /etc/alpine-release; uname -m; echo guest_ok", 30000)
