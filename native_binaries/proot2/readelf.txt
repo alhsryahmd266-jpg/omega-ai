@@ -1,29 +1,49 @@
-=== libproot.so (264105 bytes)
+UNMODIFIED Termux binaries (no patchelf). Sources:
+-rw-r--r-- 1 runner runner  7216 Oct 12 19:20 ../work/libandroid-shmem.deb
+-rw-r--r-- 1 runner runner 34036 Oct 12 19:20 ../work/libtalloc.deb
+-rw-r--r-- 1 runner runner 98800 Oct 12 19:20 ../work/proot.deb
+=== libproot.so (247488 bytes) sha256=1545b85b312505db
+  PHDR           0x000040 0x0000000000000040 0x0000000000000040 0x000230 0x000230 R   0x8
+  INTERP         0x000270 0x0000000000000270 0x0000000000000270 0x000015 0x000015 R   0x1
+  LOAD           0x000000 0x0000000000000000 0x0000000000000000 0x038b50 0x038b50 R E 0x4000
+  LOAD           0x038b50 0x000000000003cb50 0x000000000003cb50 0x001690 0x0024b0 RW  0x4000
+  LOAD           0x03a1e0 0x00000000000421e0 0x00000000000421e0 0x001bf8 0x003448 RW  0x4000
   Class:                             ELF64
   Type:                              DYN (Shared object file)
   Machine:                           AArch64
- 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN]
- 0x0000000000000001 (NEEDED)             Shared library: [libtalloc.so]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/data/data/com.termux/files/usr/lib]
+ 0x0000000000000001 (NEEDED)             Shared library: [libtalloc.so.2]
  0x0000000000000001 (NEEDED)             Shared library: [libandroid-shmem.so]
  0x0000000000000001 (NEEDED)             Shared library: [libc.so]
-  INTERP         0x0000000000040000 0x0000000000050000 0x0000000000050000
+  INTERP         0x0000000000000270 0x0000000000000270 0x0000000000000270
       [Requesting program interpreter: /system/bin/linker64]
-=== libproot-loader.so (18136 bytes)
+=== libproot-loader.so (18136 bytes) sha256=cbdef0e652c2b78a
+  PHDR           0x000040 0x0000000000200040 0x0000000000200040 0x0000e0 0x0000e0 R   0x8
+  LOAD           0x000000 0x0000000000200000 0x0000000000200000 0x000120 0x000120 R   0x4000
+  LOAD           0x004000 0x0000002000000000 0x0000002000000000 0x000468 0x000468 R E 0x4000
   Class:                             ELF64
   Type:                              EXEC (Executable file)
   Machine:                           AArch64
 (no dynamic section: static)
-=== libtalloc.so (67545 bytes)
+=== libtalloc.so (33592 bytes) sha256=742b438c4d09e276
+  PHDR           0x000040 0x0000000000000040 0x0000000000000040 0x0001f8 0x0001f8 R   0x8
+  LOAD           0x000000 0x0000000000000000 0x0000000000000000 0x0075e0 0x0075e0 R E 0x4000
+  LOAD           0x0075e0 0x000000000000b5e0 0x000000000000b5e0 0x000418 0x000a20 RW  0x4000
+  LOAD           0x0079f8 0x000000000000f9f8 0x000000000000f9f8 0x000004 0x000048 RW  0x4000
   Class:                             ELF64
   Type:                              DYN (Shared object file)
   Machine:                           AArch64
- 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/data/data/com.termux/files/usr/lib]
  0x0000000000000001 (NEEDED)             Shared library: [libc.so]
- 0x000000000000000e (SONAME)             Library soname: [libtalloc.so]
-=== libandroid-shmem.so (14432 bytes)
+ 0x000000000000000e (SONAME)             Library soname: [libtalloc.so.2]
+=== libandroid-shmem.so (14432 bytes) sha256=84475798e07c8174
+  PHDR           0x000040 0x0000000000000040 0x0000000000000040 0x0001f8 0x0001f8 R   0x8
+  LOAD           0x000000 0x0000000000000000 0x0000000000000000 0x002dc0 0x002dc0 R E 0x4000
+  LOAD           0x002dc0 0x0000000000006dc0 0x0000000000006dc0 0x0002f8 0x001240 RW  0x4000
+  LOAD           0x0030b8 0x000000000000b0b8 0x000000000000b0b8 0x000000 0x000050 RW  0x4000
   Class:                             ELF64
   Type:                              DYN (Shared object file)
   Machine:                           AArch64
- 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/data/data/com.termux/files/usr/lib]
  0x0000000000000001 (NEEDED)             Shared library: [liblog.so]
  0x0000000000000001 (NEEDED)             Shared library: [libc.so]
