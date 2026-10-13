@@ -1,5 +1,32 @@
-# GVR-Chat Project State (آخر تحديث: 2026-10-12)
+# GVR-Chat Project State (آخر تحديث: 2026-10-13)
 
+
+
+## جلسة 2026-10-13: proot اشتغل ✅ + تحسينات الـ agent
+
+### نتيجة التجربة على الجهاز (nubia NX669J / Android 12 / kernel 5.4)
+- `proot` شغّال (باينريات Termux بدون تعديل + symlink لـ `libtalloc.so.2`). `proroot` كان بيرفض `-b /dev` (لازم host:guest) ← اتصلّح (مش مستخدم افتراضياً)
+- فيديو التطبيق: الأدوات شغّالة (datetime ✓، search ✓، terminal جوّه Alpine ✓) لكن النموذج المتحمّل كان tiny/base (وضع "weak") فبيرد كلام غلط. ومشكلتين في الـ router: query البحث كان "علي الانترنت" بدل الموضوع، و"افتح تريمنال" بيشغّل probe جاهز بس
+
+### اللي اتعمل
+- `router.ts`: استخراج كلمة البحث لما الفعل يجي آخر الجملة ("X ابحثلي على النت")، "كم الساعه"، وأسئلة "حاليا/الان" بتتبحث تلقائياً. 23 اختبار (node) عدّت كلها
+- `gvrEngine.ts`: **native tool calling** للنماذج القادرة (مش tiny/base): `tools` + `tool_choice:'auto'` عن طريق llama.rn (Jinja + grammar على JSON الأداة) مع fallback تلقائي للطريقة القديمة (`<tool>` tags). جولات الأدوات بدون DRY وبـ penalty خفيف
+- تحذير سرعة لو التوليد < 5 توكن/ث (عشان نقيس 14B على الجهاز فعلاً)
+- `tools.ts`: schemas لـ 15 أداة، وحارس للأوامر الخطيرة (rm -rf / dd / mkfs / find -delete ...) بيطلب تأكيد حتى لو اخترت "always"
+- `TerminalModule.kt`: bind format لـ proroot
+
+### تصحيحات على الخطة اللي اتنسخت من ذكاء تاني
+- Structured outputs بتضمن **شكل** الرد (JSON صالح) مش **صحة** المحتوى. النموذج لسه ممكن يختار أداة/أمر غلط ← عشان كده التأكيد على الأوامر الخطيرة
+- حلقة الأدوات (`gvrEngine.ts`) والذاكرة (`mem_save/mem_get` في AsyncStorage) **موجودين أصلاً**. SQLite تحسين لاحق مش أولوية
+- 14B على SD888 (CPU): تقدير مني (مش قياس) 2–3 توكن/ث للتوليد وprompt بطيء ← للـ agent الأنسب 7–9B، و14B للمهام الثقيلة المفردة. القياس الفعلي هيظهر في تحذير السرعة
+- PaddleOCR مش مناسب لـ Alpine/musl (حزم Python الجاهزة glibc) ← الأنسب Tesseract (`apk add tesseract-ocr tesseract-ocr-data-ara`)
+- Whisper: الأنسب `whisper.rn` (نفس مطوّر llama.rn) بدل بناء whisper.cpp جوّه Alpine
+
+### المرحلة 2 (الفيديو) — لسه ما اتعملتش
+1. ffmpeg من Alpine (`apk add ffmpeg`): الصوت (`-vn -ac 1 -ar 16000`) + الفريمات. وحدة `expo-video-processor` بتطلّع فريمات بس (الصوت غير منفّذ)
+2. `whisper.rn` + نموذج ggml (large-v3-turbo-q5_0 ≈ 570MB، أو small للسرعة) ← تفريغ الصوت
+3. Tesseract لقراءة نص الفريمات (عربي + إنجليزي)
+4. أداة `analyze_video` واحدة بتجمّع الثلاثة وترجّع نص للنموذج
 
 ## جلسة 2026-10-12: سبب crash الـ proot (فرضية قوية) + إصلاح SWARM
 
@@ -13,10 +40,8 @@
 - `TerminalModule.kt`: `libtalloc.so.2` بقى symlink بيتعمل وقت التشغيل في `filesDir/proot-libs/` يشاور على `nativeLibraryDir/libtalloc.so` ويتحط أول واحد في `LD_LIBRARY_PATH`
 - الـ self-test بيطبع دلوقتي: kernel/model + `proot --version` مباشر + عن طريق `/system/bin/linker64`
 
-### ⚠️ لسه محتاج تجربة على الجهاز
-- ثبّت الـ APK الجديد وشغّل "اختبار ذاتي": المتوقع `proot --version: exit=0`
-- لو لسه 139: قارن السطرين (مباشر vs linker64)، وجرّب في Termux: `env -i LD_LIBRARY_PATH=$PWD strace -f ./libproot.so --version` عشان نشوف عنوان الـ crash
-- لو proot مستحيل على الجهاز: بديل `proroot`، أو الربط مع Termux عن طريق `RUN_COMMAND` intent
+### ✅ اتجرّب على الجهاز (2026-10-13)
+- `proot --version: exit=0` (مباشر وعن طريق linker64) و`alpine (via proot): exit=0 ... guest_ok` ← تشخيص patchelf اتأكد والحل نجح (راجع جلسة 2026-10-13 تحت)
 
 ## جلسة 2026-10-06: مراجعة فيديو التجربة على الجهاز (Android 12) وإصلاحات
 

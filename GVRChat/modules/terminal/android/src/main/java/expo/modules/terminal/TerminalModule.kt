@@ -461,7 +461,8 @@ class TerminalModule : Module() {
     val cmd = mutableListOf(
       "$nlib/libproroot.so",
       "-r", alpineRoot().absolutePath, "-0", "--link2symlink",
-      "-b", "/dev", "-b", "/proc", "-b", "/sys"
+      // proroot (unlike proot) insists on host:guest for every bind — seen on-device: "bad bind format ... /dev"
+      "-b", "/dev:/dev", "-b", "/proc:/proc", "-b", "/sys:/sys"
     )
     if (File("/storage/emulated/0").exists()) {
       cmd.add("-b"); cmd.add("/storage/emulated/0:/sdcard")

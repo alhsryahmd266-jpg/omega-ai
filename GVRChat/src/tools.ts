@@ -916,6 +916,106 @@ export function normalizeToolName(raw: string): string {
   return ALIASES[k] ?? k;
 }
 
+/* ── NATIVE (OpenAI-style) TOOL SCHEMAS ────────────────────────────────── */
+// llama.rn can hand these to the model as `tools` (Jinja chat template + grammar-constrained
+// tool-call JSON). That is far more reliable than asking a model to hand-write <tool> tags:
+// the call is always well-formed JSON with the right argument names.
+interface NativeSpec {
+  props: Record<string, { type: 'string'; description: string }>;
+  required: string[];
+  toArg: (o: Record<string, unknown>) => string;
+}
+const P = (description: string) => ({ type: 'string' as const, description });
+const asStr = (v: unknown): string =>
+  typeof v === 'string' ? v : v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+const NO_ARGS: NativeSpec = { props: {}, required: [], toArg: () => '' };
+
+const NATIVE: Partial<Record<ToolName, NativeSpec>> = {
+  search: { props: { query: P('what to search the web for') }, required: ['query'], toArg: o => asStr(o.query) },
+  fetch_url: { props: { url: P('http(s) URL to read') }, required: ['url'], toArg: o => asStr(o.url) },
+  download_file: {
+    props: { url: P('file URL'), path: P('where to save it (optional)') }, required: ['url'],
+    toArg: o => (o.path ? `${asStr(o.url)} | ${asStr(o.path)}` : asStr(o.url)),
+  },
+  terminal: { props: { command: P('shell command to run (multi-line scripts allowed)') }, required: ['command'], toArg: o => asStr(o.command) },
+  javascript: { props: { code: P('JavaScript code') }, required: ['code'], toArg: o => asStr(o.code) },
+  calc: { props: { expression: P('math expression, e.g. 12*(3+4)') }, required: ['expression'], toArg: o => asStr(o.expression) },
+  datetime: NO_ARGS,
+  read_file: { props: { path: P('file path') }, required: ['path'], toArg: o => asStr(o.path) },
+  write_file: {
+    props: { path: P('file path'), content: P('text to write into the file') }, required: ['path', 'content'],
+    toArg: o => `${asStr(o.path)}\n${asStr(o.content)}`,
+  },
+  list_dir: { props: { path: P('folder path (empty = app workspace)') }, required: [], toArg: o => asStr(o.path) },
+  inspect_file: { props: { path: P('file path') }, required: ['path'], toArg: o => asStr(o.path) },
+  open_terminal: NO_ARGS,
+  delete_file: { props: { path: P('file or folder path') }, required: ['path'], toArg: o => asStr(o.path) },
+  device_info: NO_ARGS,
+  open_url: { props: { url: P('URL or app link (https:, tel:, mailto:, geo:)') }, required: ['url'], toArg: o => asStr(o.url) },
+  share_text: { props: { text: P('text to share') }, required: ['text'], toArg: o => asStr(o.text) },
+  copy_clipboard: { props: { text: P('text to copy') }, required: ['text'], toArg: o => asStr(o.text) },
+  read_clipboard: NO_ARGS,
+  permission: {
+    props: { name: P('"status" or one of storage, all_files, camera, microphone, location, notifications') }, required: [],
+    toArg: o => asStr(o.name) || 'status',
+  },
+  mem_save: {
+    props: { key: P('short memory name'), value: P('what to remember') }, required: ['key', 'value'],
+    toArg: o => `${asStr(o.key)} | ${asStr(o.value)}`,
+  },
+  mem_get: { props: { key: P('memory name') }, required: ['key'], toArg: o => asStr(o.key) },
+  mem_list: NO_ARGS,
+  mem_delete: { props: { key: P('memory name') }, required: ['key'], toArg: o => asStr(o.key) },
+  python: { props: { code: P('Python 3 code to run') }, required: ['code'], toArg: o => asStr(o.code) },
+  pkg_install: { props: { packages: P('space-separated Alpine package names, e.g. "ffmpeg tesseract-ocr"') }, required: ['packages'], toArg: o => asStr(o.packages) },
+};
+
+/** Tools offered to capable models through the native `tools` parameter (kept short: every tool costs prompt tokens). */
+export const NATIVE_TOOLS_DEFAULT: ToolName[] = [
+  'search', 'fetch_url', 'terminal', 'calc', 'datetime', 'read_file', 'write_file', 'list_dir',
+  'inspect_file', 'open_terminal', 'mem_save', 'mem_get', 'python', 'pkg_install', 'download_file',
+];
+
+/** OpenAI-style function schemas for llama.rn's `tools` option. */
+export function nativeToolSpecs(only: ToolName[] = NATIVE_TOOLS_DEFAULT): object[] {
+  return TOOLS
+    .filter(t => isAdvertised(t) && only.includes(t.name) && NATIVE[t.name])
+    .map(t => {
+      const n = NATIVE[t.name] as NativeSpec;
+      const description = usageOf(t).replace(/\s*Arguments?:[^.]*\.?/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+      return {
+        type: 'function',
+        function: { name: t.name, description, parameters: { type: 'object', properties: n.props, required: n.required } },
+      };
+    });
+}
+
+/** Turns the named arguments of a native tool call back into the single string our tools take. */
+export function nativeArgToString(tool: string, args: unknown): string {
+  if (typeof args === 'string') return args;
+  if (!args || typeof args !== 'object') return '';
+  const o = args as Record<string, unknown>;
+  const spec = NATIVE[normalizeToolName(tool) as ToolName];
+  if (spec) return spec.toArg(o);
+  const first = Object.values(o).find(v => typeof v === 'string') as string | undefined;
+  return first ?? JSON.stringify(o);
+}
+
+/* ── DESTRUCTIVE COMMAND GUARD ─────────────────────────────────────────── */
+// Shared storage is mounted inside Alpine (/sdcard), so a hallucinated `rm -rf` could wipe real files.
+// These always need an explicit OK — even if the user ticked "always allow" for the terminal.
+const DESTRUCTIVE_CMD: RegExp[] = [
+  /\brm\s+(?:-\S*\s+)*-\S*[rRfF]/,
+  /\brm\s+--(?:recursive|force)/,
+  /\b(?:mkfs(?:\.\w+)?|shred|wipefs|fdisk|sfdisk|parted)\b/,
+  /\bdd\b[^\n]*\bof=/,
+  /\bfind\b[^\n]*(?:-delete|-exec\s+rm)/,
+  />\s*\/dev\/(?:sd|mmc|block|nvme)/,
+  /\b(?:chmod|chown)\s+-R\b/,
+  /:\(\)\s*\{\s*:\|:&\s*\}\s*;\s*:/,
+];
+export const isDestructiveCommand = (cmd: string): boolean => DESTRUCTIVE_CMD.some(re => re.test(cmd));
+
 export async function dispatchTool(rawTool: string, arg: string): Promise<string> {
   const name = normalizeToolName(rawTool);
   const spec = TOOLS.find(t => t.name === name);
@@ -924,11 +1024,12 @@ export async function dispatchTool(rawTool: string, arg: string): Promise<string
   }
   if (!spec) return `Unknown tool '${rawTool}'. Available: ${availableTools().join(', ')}`;
 
-  if (spec.confirm && !alwaysAllowed.has(spec.name)) {
+  const risky = spec.name === 'terminal' && isDestructiveCommand(arg);
+  if (spec.confirm && (risky || !alwaysAllowed.has(spec.name))) {
     if (!confirmHandler) return 'Denied: no confirmation UI is available for this action.';
-    const decision = await confirmHandler(spec.name, arg);
+    const decision = await confirmHandler(spec.name, risky ? `⚠️ أمر خطير (حذف/تعديل واسع):\n${arg}` : arg);
     if (decision === 'deny') return 'The user denied this action. Do not retry it; explain or ask what they prefer.';
-    if (decision === 'always') alwaysAllowed.add(spec.name);
+    if (decision === 'always' && !risky) alwaysAllowed.add(spec.name);
   }
 
   try {
