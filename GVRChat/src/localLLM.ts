@@ -41,6 +41,8 @@ export interface ModelProfile {
   name: string;
   paramsB: number;
   hasChatTemplate: boolean;
+  /** The chat template knows about tools (native tool calling is safe). Otherwise llama.cpp would force every reply into a generic JSON envelope. */
+  supportsTools: boolean;
   /** Looks like a raw (non-instruction-tuned) model: it will not follow instructions or use tools. */
   looksBase: boolean;
   tier: 'tiny' | 'small' | 'ok';
@@ -73,6 +75,9 @@ function analyzeModel(c: LlamaContext, fileName: string): ModelProfile {
   const paramsB = (Number(info.nParams) || 0) / 1e9;
   const templates = info.chatTemplates || {};
   const hasChatTemplate = !!(meta['tokenizer.chat_template'] || templates.llamaChat || templates.jinja?.default);
+  const templateText = [meta['tokenizer.chat_template'], meta['tokenizer.chat_template.tool_use']]
+    .filter((x): x is string => typeof x === 'string').join('\n');
+  const supportsTools = !!templates.jinja?.toolUse || /\btools?\b|tool_call|tool_use|TOOL_CALLS|tool▁call/i.test(templateText);
   const instructHint = /(instruct|chat|[-_. ]it\b|assistant|hermes|coder|thinking)/i.test(label);
   const baseWord = /base/i.test(label) && !instructHint;
   const looksBase = !hasChatTemplate || baseWord;
@@ -91,7 +96,7 @@ function analyzeModel(c: LlamaContext, fileName: string): ModelProfile {
       'للأدوات والكود استخدم 3B أو أكبر.',
     );
   }
-  return { name: String(meta['general.name'] || fileName), paramsB, hasChatTemplate, looksBase, tier, warnings };
+  return { name: String(meta['general.name'] || fileName), paramsB, hasChatTemplate, supportsTools, looksBase, tier, warnings };
 }
 
 /** Sampling that stops repetition loops (tiny / base models need it most). */
