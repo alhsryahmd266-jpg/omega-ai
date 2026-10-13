@@ -60,6 +60,36 @@ function cleanPath(p: string): string {
   return p.replace(/^[`"'«»(]+|[`"'«»).,،؛;:!?؟]+$/g, '');
 }
 
+/* ── search / time helpers ─────────────────────────────────────────────── */
+const LETTER = /[A-Za-z\u0621-\u064A]/;
+// The search verb may come first ("ابحث عن X") or LAST ("X ... ابحثلي على النت").
+const SEARCH_VERB = /(?:[اأإآ]بحث|دور|سيرش|بحث|search|google|look\s*up|find\s*out)(?:\s*(?:لي|لى|ليا|لينا|عن|في|about|for|on|up))*(?![A-Za-z\u0621-\u064A])/i;
+const ENGINE = '(?:ال[اأإ]نترنت|النت|الويب|جوجل|جوجول|جووجل|قوقل|google|the\\s+(?:web|internet|net)|web|internet|online)';
+const PREP_ENGINE = new RegExp(`(?:^|\\s)(?:على|علي|في|ع|عن طريق|من|on|in|via|using|through)\\s+${ENGINE}(?=\\s|$|[.,،؛;:!?؟])`, 'gi');
+const LEAD_ENGINE = new RegExp(`^${ENGINE}\\s+(?:عن|about|for)\\s+`, 'i');
+const POLITE = /(?:^|\s)(?:لو\s+سمحت|من\s+فضلك|please|plz|pls)(?=\s|$|[.,،؛;:!?؟])/gi;
+const BARE_ENGINE = new RegExp(`^${ENGINE}$`, 'i');
+
+/** Strips "on the internet / on google / please" noise so only the topic is searched. */
+export function cleanQuery(s: string): string {
+  return s
+    .replace(PREP_ENGINE, ' ')
+    .replace(POLITE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(LEAD_ENGINE, '')
+    .replace(/^(?:عن|about|for)\s+/i, '')
+    .replace(/[?؟!.,،؛;:\s]+$/g, '')
+    .replace(/^[.,،؛;:\s]+/g, '')
+    .trim()
+    .replace(BARE_ENGINE, '');   // "search online" -> the topic is in the other half of the sentence
+}
+
+const TIME_QUESTION = /(الساعه كام|كام الساعه|كم الساعه|الساعه كم|الوقت (?:الان|دلوقتي|حاليا)|التاريخ|النهارده|اليوم كام|what time|current time|today'?s date|what'?s the date)/;
+const FRESH_WORDS = /(اخبار|الاخبار|سعر|اسعار|الطقس|درجه الحراره|نتيجه مباراه|نتايج|اخر اصدار|احدث|latest|news|price of|weather|score of)/;
+// "how many people are on earth NOW" — facts that change, asked without an explicit "search".
+const NOW_QUESTION = /(?:^|\s)(?:كم|ما هو|ما هي|من هو|مين|ايه|what is|who is|how many|how much)(?:\s|$).*(?:حاليا|الان|دلوقتي|current|currently|right now|these days|as of now)/;
+
 export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   const hits: RouteHit[] = [];
   const add = (tool: string, arg: string, why: string) => {
@@ -98,20 +128,25 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
     if (pkgs.size) add('pkg_install', Array.from(pkgs).join(' '), 'install');
   }
 
-  // 5) web search
-  const sm = /(?:[اأإآ]بحث|دور|سيرش|بحث|search|google|look\s*up|find\s*out)\s*(?:لي|لى|عن|في|about|for|on|up)?\s*(?:عن|about|for)?\s*(.{2,})/i.exec(raw);
-  if (sm && !opts.hasAttachment) {
-    const q = sm[1].replace(/[?؟!]+$/, '').trim();
-    if (q && q.length <= 200) add('search', q, 'search');
-  } else if (
-    raw.length <= 140 && !fence && !urls.length && !opts.hasAttachment &&
-    /(اخبار|الاخبار|سعر|اسعار|الطقس|درجه الحراره|نتيجه مباراه|نتايج|اخر اصدار|احدث|latest|news|price of|weather|score of)/.test(n)
+  // 5) web search — verb first ("ابحث عن X") or last ("X ... ابحثلي على النت")
+  const timeQuestion = TIME_QUESTION.test(n);
+  let searched = false;
+  const sm = SEARCH_VERB.exec(raw);
+  if (sm && !opts.hasAttachment && (sm.index === 0 || !LETTER.test(raw[sm.index - 1]))) {
+    const after = cleanQuery(raw.slice(sm.index + sm[0].length));
+    const before = cleanQuery(raw.slice(0, sm.index));
+    const q = after.length >= 2 ? after : before;
+    if (q.length >= 2 && q.length <= 200) { add('search', q, 'search'); searched = true; }
+  }
+  if (
+    !searched && !timeQuestion && raw.length <= 140 && !fence && !urls.length && !opts.hasAttachment &&
+    (FRESH_WORDS.test(n) || NOW_QUESTION.test(n))
   ) {
     add('search', raw.replace(/[?؟!]+$/, ''), 'freshness');
   }
 
   // 6) date / time
-  if (/(الساعه كام|كام الساعه|الوقت (?:الان|دلوقتي)|التاريخ|النهارده|اليوم كام|what time|current time|today'?s date|what'?s the date)/.test(n)) {
+  if (timeQuestion) {
     add('datetime', '', 'time');
   }
 

@@ -19,7 +19,8 @@ import {
   isVisionReady, samplingFor, STOP_WORDS, stripThinking, withGenerationLock,
 } from './localLLM';
 import {
-  CORE_TOOLS, dispatchTool, isLinuxReady, memoryDigest, normalizeToolName, toolPromptLines,
+  CORE_TOOLS, dispatchTool, isLinuxReady, memoryDigest, nativeArgToString, nativeToolSpecs,
+  normalizeToolName, toolPromptLines,
 } from './tools';
 import { autoRoute, type RouteHit } from './router';
 import type { PreparedAttachment } from './attachments';
@@ -81,12 +82,30 @@ function promptMode(): PromptMode {
   return 'full';
 }
 
-async function buildSystemPrompt(mode: PromptMode): Promise<string> {
+async function buildSystemPrompt(mode: PromptMode, native = false): Promise<string> {
   const now = new Date().toString();
   if (mode === 'minimal') {
     return 'You are a helpful assistant. Answer briefly and clearly in the same language as the user. Do not repeat yourself.';
   }
   const mem = await memoryDigest();
+  if (native) {
+    // Tool definitions are injected by the chat template (native `tools`), so no tag instructions here.
+    return [
+      'You are GVR, an AI assistant running entirely on the user\'s Android phone, with tools.',
+      '',
+      'RULES:',
+      '- Use a tool only when it is really needed: current facts → search; Linux commands, files, scripts → terminal or python; math → calc. Simple questions: just answer, briefly.',
+      '- Call one tool at a time, wait for its result, then continue or answer.',
+      '- Never invent tool output or facts you did not get. If a tool fails, say so and try another way.',
+      '- If the message already contains results the app obtained, use them; do not call those tools again.',
+      '- Before destructive actions (deleting, overwriting), make sure the user asked for it.',
+      '- Reply in the same language the user writes in (Arabic dialects are fine). Be concise. Never repeat sentences.',
+      isLinuxReady() ? '- A real Linux (Alpine) is available: python3, apk, git, node, ffmpeg can be used through the terminal.' : '',
+      '',
+      `Current time: ${now}`,
+      mem ? `Saved memory: ${mem}` : '',
+    ].filter(Boolean).join('\n');
+  }
   const tools = toolPromptLines(mode === 'compact' ? CORE_TOOLS : undefined);
   return [
     'You are GVR, an AI assistant running entirely on the user\'s Android phone, with tools.',
@@ -210,8 +229,15 @@ async function runLocked(
   const answerParts: string[] = [];
   const question = userText.trim();
 
-  const system = await buildSystemPrompt(mode);
-  const budget = charBudget(nPredict);
+  // Capable models use native tool calling (llama.rn `tools`: Jinja template + grammar-constrained
+  // tool-call JSON). Tiny/base models keep the tag protocol + the app-side router.
+  let useNative = false;
+  try { useNative = !weak && mode === 'full' && ctx.isJinjaSupported(); } catch { useNative = false; }
+  const nativeTools = useNative ? nativeToolSpecs() : [];
+  if (!nativeTools.length) useNative = false;
+  let system = await buildSystemPrompt(mode, useNative);
+  const toolsChars = useNative ? JSON.stringify(nativeTools).length : 0;
+  const budget = Math.max(1500, charBudget(nPredict) - toolsChars);
 
   /* ── 1) tools the app runs on its own ────────────────────────────────── */
   const routed: RouteHit[] = autoRoute(question, { hasAttachment: !!attachment });
@@ -266,22 +292,27 @@ async function runLocked(
     userMsg = { role: 'user', content: `${header}${question}${routedText}` };
   }
 
-  const turn: RNLlamaOAICompatibleMessage[] = [userMsg];
+  // Two encodings of the same conversation so we can fall back from native tools at any round.
+  const turnLegacy: RNLlamaOAICompatibleMessage[] = [userMsg];
+  const turnNative: RNLlamaOAICompatibleMessage[] = [userMsg];
+  const activeTurn = () => (useNative ? turnNative : turnLegacy);
   const sampling = samplingFor(profile);
   const stopBase = [...STOP_WORDS];
   let finalText = '';
+  let slowestTps: number | null = null;
   // Auto-routed results already count as tool use for the model.
   const maxRounds = routed.length ? Math.max(1, maxToolRounds - 2) : maxToolRounds;
 
   /* ── 3) model loop (the model may request more tools) ────────────────── */
   for (let round = 0; round <= maxRounds; round++) {
     const lastRound = round === maxRounds;
+    const nativeRound = useNative && !lastRound;
     onEvent({ type: 'thought', text: round === 0 ? 'يفكر...' : 'بيراجع النتيجة...' });
 
     const messages: RNLlamaOAICompatibleMessage[] = [
       { role: 'system', content: system },
       ...histCopy,
-      ...turn,
+      ...activeTurn(),
     ];
     if (lastRound && round > 0) {
       messages.push({ role: 'user', content: 'Do not call any more tools. Answer the user now using what you already have.' });
@@ -290,15 +321,17 @@ async function runLocked(
     let acc = '';
     let tokens = 0;
     let looped = false;
-    let result;
+    let result: Awaited<ReturnType<typeof ctx.completion>>;
     try {
       result = await ctx.completion(
         {
           messages,
           n_predict: nPredict,
-          ...sampling,
+          // repetition penalties must not bend tool-call JSON (paths/commands legitimately repeat)
+          ...(nativeRound ? { ...sampling, temperature: 0.35, penalty_repeat: 1.04, dry_multiplier: 0 } : sampling),
           enable_thinking: false,
-          stop: lastRound || mode === 'minimal' ? stopBase : [...stopBase, '</tool>', '</tool_call>'],
+          ...(nativeRound ? { jinja: true, tools: nativeTools, tool_choice: 'auto' } : {}),
+          stop: nativeRound || lastRound || mode === 'minimal' ? stopBase : [...stopBase, '</tool>', '</tool_call>'],
         },
         (data) => {
           acc += data.token;
@@ -313,16 +346,45 @@ async function runLocked(
         },
       );
     } catch (e: any) {
+      if (nativeRound) {
+        // This model/template can't do native tools: fall back to the tag protocol and redo this round.
+        useNative = false;
+        system = await buildSystemPrompt(mode, false);
+        warnings.push('الأدوات المهيكلة مش شغّالة مع النموذج ده — رجعت للطريقة التقليدية.');
+        round -= 1;
+        continue;
+      }
       throw new Error(`فشل التوليد: ${e?.message || e}`);
     }
 
-    let raw = stripThinking(result.text || '');
+    const tps = result.timings?.predicted_per_second;
+    if (typeof tps === 'number' && tps > 0 && (result.tokens_predicted ?? 0) >= 24) {
+      slowestTps = slowestTps === null ? tps : Math.min(slowestTps, tps);
+    }
+
+    const nativeCall = nativeRound && Array.isArray(result.tool_calls) && result.tool_calls.length > 0
+      ? result.tool_calls[0]
+      : null;
+    const textOut = nativeRound
+      ? ((result.content || '').trim() ? result.content : nativeCall ? '' : result.text || '')
+      : result.text || '';
+    let raw = stripThinking(textOut);
     if (looped) {
       raw = collapseLoop(raw);
       warnings.push('النموذج دخل في تكرار فاتوقّفته. جرّب نموذج Instruct أكبر لنتيجة أحسن.');
     }
 
-    const call = lastRound || mode === 'minimal' ? null : parseToolCall(raw);
+    let call: ParsedCall | null = null;
+    let callId = '';
+    if (nativeCall) {
+      let parsedArgs: unknown = nativeCall.function.arguments;
+      try { parsedArgs = JSON.parse(nativeCall.function.arguments || '{}'); } catch { /* keep the raw string */ }
+      const toolName = normalizeToolName(nativeCall.function.name);
+      call = { before: stripToolMarkup(raw).trim(), tool: toolName, arg: nativeArgToString(toolName, parsedArgs).trim() };
+      callId = nativeCall.id || `call_${round}`;
+    } else if (!(lastRound || mode === 'minimal')) {
+      call = parseToolCall(raw); // tag / Hermes text form (also catches models that ignore native tools)
+    }
     if (!call) {
       finalText = stripToolMarkup(raw);
       if (result.context_full) warnings.push('الـ context امتلى — الرد ممكن يكون ناقص.');
@@ -336,9 +398,30 @@ async function runLocked(
     onEvent({ type: 'tool_result', id, tool: call.tool, result: toolResult });
     steps.push({ id, tool: call.tool, arg: call.arg, result: toolResult });
 
-    turn.push({ role: 'assistant', content: `${call.before ? `${call.before}\n` : ''}<tool name="${call.tool}">${call.arg}</tool>` });
-    turn.push({ role: 'user', content: `<tool_result name="${call.tool}">\n${toolResult.slice(0, TOOL_RESULT_CHARS)}\n</tool_result>` });
-    while (turn.length > 3 && totalChars(turn) > budget * 0.7) turn.splice(1, 2);
+    turnLegacy.push({ role: 'assistant', content: `${call.before ? `${call.before}\n` : ''}<tool name="${call.tool}">${call.arg}</tool>` });
+    turnLegacy.push({ role: 'user', content: `<tool_result name="${call.tool}">\n${toolResult.slice(0, TOOL_RESULT_CHARS)}\n</tool_result>` });
+    if (nativeCall) {
+      turnNative.push({
+        role: 'assistant',
+        content: call.before || '',
+        tool_calls: [{ type: 'function', id: callId, function: { name: nativeCall.function.name, arguments: nativeCall.function.arguments } }],
+      } as unknown as RNLlamaOAICompatibleMessage);
+      turnNative.push({
+        role: 'tool',
+        tool_call_id: callId,
+        name: nativeCall.function.name,
+        content: toolResult.slice(0, TOOL_RESULT_CHARS),
+      } as unknown as RNLlamaOAICompatibleMessage);
+    } else {
+      turnNative.push(turnLegacy[turnLegacy.length - 2], turnLegacy[turnLegacy.length - 1]);
+    }
+    for (const t of [turnLegacy, turnNative]) {
+      while (t.length > 3 && totalChars(t) > budget * 0.7) t.splice(1, 2);
+    }
+  }
+
+  if (slowestTps !== null && slowestTps < 5) {
+    warnings.push(`⏱ سرعة التوليد ~${slowestTps.toFixed(1)} توكن/ث. لو بطيء عليك جرّب نموذج أصغر (4–9B) للـ agent.`);
   }
 
   /* ── 4) assemble the answer ──────────────────────────────────────────── */
