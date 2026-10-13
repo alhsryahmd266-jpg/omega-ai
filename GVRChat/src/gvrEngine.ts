@@ -232,7 +232,7 @@ async function runLocked(
   // Capable models use native tool calling (llama.rn `tools`: Jinja template + grammar-constrained
   // tool-call JSON). Tiny/base models keep the tag protocol + the app-side router.
   let useNative = false;
-  try { useNative = !weak && mode === 'full' && ctx.isJinjaSupported(); } catch { useNative = false; }
+  try { useNative = !weak && mode === 'full' && (profile?.supportsTools ?? true) && ctx.isJinjaSupported(); } catch { useNative = false; }
   const nativeTools = useNative ? nativeToolSpecs() : [];
   if (!nativeTools.length) useNative = false;
   let system = await buildSystemPrompt(mode, useNative);
