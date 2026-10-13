@@ -587,14 +587,14 @@ C/C++: 138 warnings generated.
 > Task :expo:copyReleaseJniLibsProjectOnly
 > Task :expo-asset:mergeReleaseJniLibFolders
 > Task :expo-asset:mergeReleaseNativeLibs NO-SOURCE
-> Task :expo-asset:copyReleaseJniLibsProjectOnly
 > Task :expo-battery:preBuild UP-TO-DATE
 > Task :expo-battery:preReleaseBuild UP-TO-DATE
+> Task :expo-asset:copyReleaseJniLibsProjectOnly
 > Task :expo-battery:mergeReleaseJniLibFolders
 > Task :expo-battery:mergeReleaseNativeLibs NO-SOURCE
 > Task :expo-blur:preBuild UP-TO-DATE
-> Task :expo-battery:copyReleaseJniLibsProjectOnly
 > Task :expo-blur:preReleaseBuild UP-TO-DATE
+> Task :expo-battery:copyReleaseJniLibsProjectOnly
 > Task :expo-blur:mergeReleaseJniLibFolders
 > Task :expo-blur:mergeReleaseNativeLibs NO-SOURCE
 > Task :expo-blur:copyReleaseJniLibsProjectOnly
@@ -612,19 +612,19 @@ Proceeding without mode-specific .env
 > Task :expo-constants:preReleaseBuild
 > Task :expo-constants:mergeReleaseJniLibFolders
 > Task :expo-constants:mergeReleaseNativeLibs NO-SOURCE
-> Task :expo-document-picker:preBuild UP-TO-DATE
 > Task :expo-constants:copyReleaseJniLibsProjectOnly
+> Task :expo-document-picker:preBuild UP-TO-DATE
 > Task :expo-document-picker:preReleaseBuild UP-TO-DATE
 > Task :expo-document-picker:mergeReleaseJniLibFolders
 > Task :expo-document-picker:mergeReleaseNativeLibs NO-SOURCE
-> Task :expo-document-picker:copyReleaseJniLibsProjectOnly
 > Task :expo-file-system:preBuild UP-TO-DATE
 > Task :expo-file-system:preReleaseBuild UP-TO-DATE
+> Task :expo-document-picker:copyReleaseJniLibsProjectOnly
 > Task :expo-file-system:mergeReleaseJniLibFolders
 > Task :expo-file-system:mergeReleaseNativeLibs NO-SOURCE
-> Task :expo-file-system:copyReleaseJniLibsProjectOnly
 > Task :expo-font:preBuild UP-TO-DATE
 > Task :expo-font:preReleaseBuild UP-TO-DATE
+> Task :expo-file-system:copyReleaseJniLibsProjectOnly
 > Task :expo-font:mergeReleaseJniLibFolders
 > Task :expo-font:mergeReleaseNativeLibs NO-SOURCE
 > Task :expo-font:copyReleaseJniLibsProjectOnly
@@ -632,13 +632,13 @@ Proceeding without mode-specific .env
 > Task :expo-keep-awake:preReleaseBuild UP-TO-DATE
 > Task :expo-keep-awake:mergeReleaseJniLibFolders
 > Task :expo-keep-awake:mergeReleaseNativeLibs NO-SOURCE
-> Task :expo-linear-gradient:preBuild UP-TO-DATE
 > Task :expo-keep-awake:copyReleaseJniLibsProjectOnly
+> Task :expo-linear-gradient:preBuild UP-TO-DATE
 > Task :expo-linear-gradient:preReleaseBuild UP-TO-DATE
 > Task :expo-linear-gradient:mergeReleaseJniLibFolders
 > Task :expo-linear-gradient:mergeReleaseNativeLibs NO-SOURCE
-> Task :expo-linear-gradient:copyReleaseJniLibsProjectOnly
 > Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-linear-gradient:copyReleaseJniLibsProjectOnly
 > Task :expo-modules-core:preReleaseBuild UP-TO-DATE
 > Task :expo-modules-core:configureCMakeRelWithDebInfo[arm64-v8a]
 > Task :expo-modules-core:buildCMakeRelWithDebInfo[arm64-v8a]
@@ -682,11 +682,11 @@ C/C++:     APP_BUILD_DIR
 > Task :react-native-safe-area-context:preBuild
 > Task :react-native-safe-area-context:preReleaseBuild
 > Task :react-native-safe-area-context:mergeReleaseJniLibFolders
-> Task :react-native-safe-area-context:mergeReleaseNativeLibs NO-SOURCE
 > Task :react-native-gesture-handler:mergeReleaseNativeLibs
-> Task :react-native-safe-area-context:copyReleaseJniLibsProjectOnly
+> Task :react-native-safe-area-context:mergeReleaseNativeLibs NO-SOURCE
 > Task :react-native-screens:preBuild
 > Task :react-native-screens:preReleaseBuild
+> Task :react-native-safe-area-context:copyReleaseJniLibsProjectOnly
 > Task :react-native-gesture-handler:copyReleaseJniLibsProjectOnly
 > Task :react-native-reanimated:mergeReleaseNativeLibs
 > Task :react-native-screens:configureCMakeRelWithDebInfo[arm64-v8a]
@@ -699,9 +699,9 @@ C/C++:     APP_BUILD_DIR
 > Task :react-native-svg:mergeReleaseJniLibFolders
 > Task :react-native-svg:mergeReleaseNativeLibs NO-SOURCE
 > Task :react-native-screens:copyReleaseJniLibsProjectOnly
-> Task :react-native-svg:copyReleaseJniLibsProjectOnly
 > Task :terminal:preBuild UP-TO-DATE
 > Task :terminal:preReleaseBuild UP-TO-DATE
+> Task :react-native-svg:copyReleaseJniLibsProjectOnly
 > Task :terminal:mergeReleaseJniLibFolders
 > Task :expo:checkKotlinGradlePluginConfigurationErrors
 > Task :terminal:mergeReleaseNativeLibs
@@ -716,8 +716,8 @@ C/C++:     APP_BUILD_DIR
 > Task :expo-asset:generateReleaseResources
 > Task :expo-asset:packageReleaseResources
 > Task :expo-asset:parseReleaseLocalResources
-> Task :expo:processReleaseManifest
 > Task :expo-asset:processReleaseManifest
+> Task :expo:processReleaseManifest
 > Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-modules-core:generateReleaseBuildConfig
 > Task :expo-modules-core:generateReleaseResValues
@@ -727,56 +727,56 @@ C/C++:     APP_BUILD_DIR
 > Task :expo:parseReleaseLocalResources
 > Task :expo-modules-core:packageReleaseResources
 > Task :expo:generateReleaseRFile
+> Task :expo-modules-core:parseReleaseLocalResources
 
 > Task :expo-modules-core:processReleaseManifest
 /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/AndroidManifest.xml:8:9-11:45 Warning:
 	meta-data#com.facebook.soloader.enabled@android:value was tagged at AndroidManifest.xml:8 to replace other declarations but no other declaration present
 
-> Task :expo-modules-core:parseReleaseLocalResources
 > Task :expo-modules-core:javaPreCompileRelease
 > Task :expo-asset:javaPreCompileRelease
 > Task :expo-battery:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-battery:generateReleaseBuildConfig
-> Task :expo-battery:generateReleaseResValues
-> Task :expo-battery:generateReleaseResources
 > Task :expo-modules-core:generateReleaseRFile
+> Task :expo-battery:generateReleaseResValues
 > Task :app:stripReleaseDebugSymbols
+> Task :expo-battery:generateReleaseResources
 > Task :expo-battery:packageReleaseResources
-> Task :app:extractReleaseNativeSymbolTables
-> Task :expo-battery:processReleaseManifest
 > Task :expo-battery:parseReleaseLocalResources
+> Task :expo-battery:processReleaseManifest
 > Task :expo-battery:javaPreCompileRelease
 > Task :expo-blur:checkKotlinGradlePluginConfigurationErrors
+> Task :expo-battery:generateReleaseRFile
 > Task :expo-blur:generateReleaseBuildConfig
 > Task :expo-blur:generateReleaseResValues
 > Task :expo-blur:generateReleaseResources
-> Task :expo-battery:generateReleaseRFile
 > Task :expo-blur:packageReleaseResources
 > Task :expo-blur:parseReleaseLocalResources
-> Task :expo-blur:javaPreCompileRelease
 > Task :expo-blur:processReleaseManifest
+> Task :expo-blur:javaPreCompileRelease
 > Task :expo-clipboard:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-clipboard:generateReleaseBuildConfig
-> Task :expo-clipboard:generateReleaseResValues
 > Task :expo-blur:generateReleaseRFile
+> Task :expo-clipboard:generateReleaseResValues
 > Task :expo-clipboard:generateReleaseResources
 > Task :expo-clipboard:packageReleaseResources
 > Task :expo-clipboard:processReleaseManifest
 > Task :expo-clipboard:javaPreCompileRelease
 > Task :expo-constants:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-constants:generateReleaseBuildConfig
+> Task :app:extractReleaseNativeSymbolTables
 > Task :expo-constants:generateReleaseResValues
 > Task :expo-constants:generateReleaseResources
-> Task :expo-constants:packageReleaseResources
 > Task :expo-clipboard:parseReleaseLocalResources
-> Task :expo-constants:parseReleaseLocalResources
 > Task :expo-clipboard:generateReleaseRFile
+> Task :expo-constants:packageReleaseResources
+> Task :expo-constants:parseReleaseLocalResources
+> Task :expo-constants:processReleaseManifest
 > Task :expo-constants:javaPreCompileRelease
 > Task :expo-document-picker:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-constants:processReleaseManifest
+> Task :expo-constants:generateReleaseRFile
 > Task :expo-document-picker:generateReleaseBuildConfig
 > Task :expo-document-picker:generateReleaseResValues
-> Task :expo-constants:generateReleaseRFile
 > Task :expo-document-picker:generateReleaseResources
 > Task :expo-document-picker:packageReleaseResources
 > Task :expo-document-picker:parseReleaseLocalResources
@@ -791,42 +791,42 @@ C/C++:     APP_BUILD_DIR
 > Task :expo-file-system:parseReleaseLocalResources
 > Task :expo-file-system:javaPreCompileRelease
 > Task :expo-font:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-font:generateReleaseBuildConfig
-> Task :expo-font:generateReleaseResValues
-> Task :expo-font:generateReleaseResources
 
 > Task :expo-file-system:processReleaseManifest
 /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-file-system/android/src/main/AndroidManifest.xml:6:9-8:20 Warning:
 	provider#expo.modules.filesystem.FileSystemFileProvider@android:authorities was tagged at AndroidManifest.xml:6 to replace other declarations but no other declaration present
 
-> Task :expo-font:packageReleaseResources
+> Task :expo-font:generateReleaseBuildConfig
+> Task :expo-font:generateReleaseResValues
+> Task :expo-font:generateReleaseResources
 > Task :expo-file-system:generateReleaseRFile
+> Task :expo-font:packageReleaseResources
 > Task :expo-font:parseReleaseLocalResources
+> Task :expo-font:processReleaseManifest
 > Task :expo-font:javaPreCompileRelease
 > Task :expo-keep-awake:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-font:processReleaseManifest
+> Task :expo-font:generateReleaseRFile
 > Task :expo-keep-awake:generateReleaseBuildConfig
 > Task :expo-keep-awake:generateReleaseResValues
 > Task :expo-keep-awake:generateReleaseResources
-> Task :expo-font:generateReleaseRFile
 > Task :expo-keep-awake:packageReleaseResources
 > Task :expo-keep-awake:parseReleaseLocalResources
-> Task :expo-keep-awake:processReleaseManifest
 > Task :expo-keep-awake:javaPreCompileRelease
 > Task :expo-linear-gradient:checkKotlinGradlePluginConfigurationErrors
+> Task :expo-keep-awake:processReleaseManifest
 > Task :expo-linear-gradient:generateReleaseBuildConfig
-> Task :expo-keep-awake:generateReleaseRFile
 > Task :expo-linear-gradient:generateReleaseResValues
 > Task :expo-linear-gradient:generateReleaseResources
+> Task :expo-keep-awake:generateReleaseRFile
 > Task :expo-linear-gradient:packageReleaseResources
 > Task :expo-linear-gradient:parseReleaseLocalResources
-> Task :expo-linear-gradient:processReleaseManifest
 > Task :expo-linear-gradient:javaPreCompileRelease
+> Task :expo-linear-gradient:processReleaseManifest
 > Task :expo-video-processor:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-video-processor:generateReleaseBuildConfig
-> Task :expo-linear-gradient:generateReleaseRFile
 > Task :expo-video-processor:generateReleaseResValues
 > Task :expo-video-processor:generateReleaseResources
+> Task :expo-linear-gradient:generateReleaseRFile
 > Task :expo-video-processor:packageReleaseResources
 > Task :expo-video-processor:parseReleaseLocalResources
 > Task :expo-video-processor:javaPreCompileRelease
@@ -839,14 +839,14 @@ C/C++:     APP_BUILD_DIR
 > Task :terminal:packageReleaseResources
 > Task :terminal:parseReleaseLocalResources
 > Task :terminal:javaPreCompileRelease
-> Task :terminal:processReleaseManifest
 > Task :expo:javaPreCompileRelease
 > Task :react-native-gesture-handler:checkKotlinGradlePluginConfigurationErrors
 > Task :react-native-gesture-handler:generateReleaseBuildConfig
 > Task :react-native-gesture-handler:generateReleaseResValues
-> Task :terminal:generateReleaseRFile
 > Task :react-native-gesture-handler:generateReleaseResources
+> Task :terminal:processReleaseManifest
 > Task :react-native-gesture-handler:packageReleaseResources
+> Task :terminal:generateReleaseRFile
 > Task :react-native-gesture-handler:parseReleaseLocalResources
 
 > Task :react-native-gesture-handler:processReleaseManifest
@@ -870,8 +870,10 @@ Recommendation: remove package="com.swmansion.reanimated" from the source Androi
 > Task :react-native-gesture-handler:javaPreCompileRelease
 > Task :react-native-safe-area-context:checkKotlinGradlePluginConfigurationErrors
 > Task :react-native-safe-area-context:generateReleaseBuildConfig
-> Task :react-native-reanimated:generateReleaseRFile
 > Task :react-native-safe-area-context:generateReleaseResValues
+> Task :react-native-safe-area-context:generateReleaseResources
+> Task :react-native-reanimated:generateReleaseRFile
+> Task :react-native-safe-area-context:packageReleaseResources
 > Task :app:mergeReleaseNativeDebugMetadata
 
 > Task :react-native-reanimated:compileReleaseJavaWithJavac
@@ -880,18 +882,16 @@ Note: Recompile with -Xlint:deprecation for details.
 Note: Some input files use unchecked or unsafe operations.
 Note: Recompile with -Xlint:unchecked for details.
 
-> Task :react-native-safe-area-context:generateReleaseResources
-> Task :react-native-safe-area-context:packageReleaseResources
 > Task :react-native-safe-area-context:parseReleaseLocalResources
-> Task :react-native-reanimated:bundleLibRuntimeToDirRelease
 
 > Task :react-native-safe-area-context:processReleaseManifest
 package="com.th3rdwave.safeareacontext" found in source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
 Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
 Recommendation: remove package="com.th3rdwave.safeareacontext" from the source AndroidManifest.xml: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
 
-> Task :react-native-reanimated:bundleLibCompileToJarRelease
+> Task :react-native-reanimated:bundleLibRuntimeToDirRelease
 > Task :react-native-safe-area-context:generateReleaseRFile
+> Task :react-native-reanimated:bundleLibCompileToJarRelease
 > Task :react-native-safe-area-context:javaPreCompileRelease
 > Task :react-native-screens:checkKotlinGradlePluginConfigurationErrors
 > Task :react-native-screens:generateReleaseBuildConfig
@@ -974,6 +974,7 @@ Recommendation: remove package="com.rnllama" from the source AndroidManifest.xml
 
 > Task :llama.rn:generateReleaseRFile
 > Task :llama.rn:javaPreCompileRelease
+> Task :expo-modules-core:compileReleaseKotlin
 
 > Task :llama.rn:compileReleaseJavaWithJavac
 Note: /home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/llama.rn/android/src/main/java/com/rnllama/RNLlamaPackage.java uses or overrides a deprecated API.
@@ -1051,7 +1052,7 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-
 w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/types/JSTypeConverterHelper.kt:44:17 'get(String!): Any?' is deprecated. Deprecated in Java
 
 > Task :app:createBundleReleaseJsAndAssets
-Android Bundled 12943ms node_modules/expo/AppEntry.js (717 modules)
+Android Bundled 16358ms node_modules/expo/AppEntry.js (717 modules)
 Writing bundle output to: /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle
 Writing sourcemap output to: /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/intermediates/sourcemaps/react/release/index.android.bundle.packager.map
 Copying 19 asset files
@@ -1129,22 +1130,22 @@ Done writing sourcemap output
 /home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:43913:34: warning: the variable "requestAnimationFrame" was not declared in function "start 9#"
 ...    this._animationFrame = requestAnimationFrame(this.onUpdate.bind(this));
                               ^~~~~~~~~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104205:12: warning: the variable "postMessage" was not declared in function "pbf"
+/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104210:12: warning: the variable "postMessage" was not declared in function "pbf"
     return postMessage(msg, [msg.buffer]);
            ^~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104435:9: warning: the variable "onmessage" was not declared in anonymous function " 2401#"
+/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104440:9: warning: the variable "onmessage" was not declared in anonymous function " 2402#"
         onmessage = astrm(strm);
         ^~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104926:19: warning: the variable "TextEncoder" was not declared in anonymous function " 2369#"
+/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104931:19: warning: the variable "TextEncoder" was not declared in anonymous function " 2370#"
   var te = typeof TextEncoder != 'undefined' && /*#__PURE__*/new TextEncoder();
                   ^~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104928:19: warning: the variable "TextDecoder" was not declared in anonymous function " 2369#"
+/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:104933:19: warning: the variable "TextDecoder" was not declared in anonymous function " 2370#"
   var td = typeof TextDecoder != 'undefined' && /*#__PURE__*/new TextDecoder();
                   ^~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:105782:19: warning: the variable "queueMicrotask" was not declared in anonymous function " 2369#"
+/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:105787:19: warning: the variable "queueMicrotask" was not declared in anonymous function " 2370#"
   var mt = typeof queueMicrotask == 'function' ? queueMicrotask : typeof setT...
                   ^~~~~~~~~~~~~~
-/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:105927:17: warning: the variable "Worker" was not declared in anonymous function " 2480#"
+/home/runner/work/omega-ai/omega-ai/GVRChat/android/app/build/generated/assets/createBundleReleaseJsAndAssets/index.android.bundle:105932:17: warning: the variable "Worker" was not declared in anonymous function " 2481#"
     var w = new Worker(ch2[id] || (ch2[id] = URL.createObjectURL(new Blob([c ...
                 ^~~~~~
 
@@ -1168,22 +1169,19 @@ Note: Recompile with -Xlint:unchecked for details.
 > Task :expo-constants:compileReleaseKotlin
 > Task :expo-constants:compileReleaseJavaWithJavac
 > Task :expo-constants:bundleLibCompileToJarRelease
-> Task :expo-clipboard:compileReleaseKotlin
-> Task :expo-clipboard:compileReleaseJavaWithJavac
-> Task :expo-clipboard:bundleLibCompileToJarRelease
 > Task :expo-document-picker:compileReleaseKotlin
 > Task :expo-document-picker:compileReleaseJavaWithJavac
 > Task :expo-document-picker:bundleLibCompileToJarRelease
+> Task :expo-clipboard:compileReleaseKotlin
 > Task :expo-font:compileReleaseKotlin
+> Task :expo-clipboard:compileReleaseJavaWithJavac
+> Task :expo-clipboard:bundleLibCompileToJarRelease
 > Task :expo-font:compileReleaseJavaWithJavac
 > Task :expo-font:bundleLibCompileToJarRelease
 > Task :expo-keep-awake:compileReleaseKotlin
 > Task :expo-keep-awake:compileReleaseJavaWithJavac
 > Task :expo-keep-awake:bundleLibCompileToJarRelease
 > Task :expo-linear-gradient:compileReleaseKotlin
-> Task :expo-linear-gradient:compileReleaseJavaWithJavac
-> Task :expo-linear-gradient:bundleLibCompileToJarRelease
-> Task :react-native-gesture-handler:bundleLibRuntimeToDirRelease
 
 > Task :expo-video-processor:compileReleaseKotlin
 w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/modules/video-processor/android/src/main/java/expo/modules/videoprocessor/VideoProcessorModule.kt:94:37 Parameter 'videoPath' is never used, could be renamed to _
@@ -1192,8 +1190,11 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/modules/video-processor/an
 w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/modules/video-processor/android/src/main/java/expo/modules/videoprocessor/VideoProcessorModule.kt:104:57 Parameter 'outPath' is never used, could be renamed to _
 w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/modules/video-processor/android/src/main/java/expo/modules/videoprocessor/VideoProcessorModule.kt:104:74 Parameter 'maxWidth' is never used, could be renamed to _
 
+> Task :expo-linear-gradient:compileReleaseJavaWithJavac
+> Task :expo-linear-gradient:bundleLibCompileToJarRelease
 > Task :expo-video-processor:compileReleaseJavaWithJavac
 > Task :expo-video-processor:bundleLibCompileToJarRelease
+> Task :react-native-gesture-handler:bundleLibRuntimeToDirRelease
 > Task :react-native-screens:compileReleaseJavaWithJavac
 > Task :react-native-screens:bundleLibRuntimeToDirRelease
 > Task :expo-asset:bundleLibRuntimeToDirRelease
@@ -1206,35 +1207,27 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/modules/video-processor/an
 > Task :expo-keep-awake:bundleLibRuntimeToDirRelease
 > Task :expo-linear-gradient:bundleLibRuntimeToDirRelease
 > Task :expo-video-processor:bundleLibRuntimeToDirRelease
-> Task :expo-file-system:compileReleaseKotlin
-> Task :expo-file-system:compileReleaseJavaWithJavac
-> Task :expo-file-system:bundleLibCompileToJarRelease
-> Task :app:generateReleaseResValues
-> Task :expo-file-system:bundleLibRuntimeToDirRelease
 
 > Task :terminal:compileReleaseKotlin
 w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/modules/terminal/android/src/main/java/expo/modules/terminal/TerminalModule.kt:325:48 Unnecessary non-null assertion (!!) on a non-null receiver of type String
 w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/modules/terminal/android/src/main/java/expo/modules/terminal/TerminalModule.kt:325:97 Unnecessary non-null assertion (!!) on a non-null receiver of type String
 
-> Task :expo-modules-core:bundleLibRuntimeToDirRelease
-> Task :app:mapReleaseSourceSetPaths
 > Task :terminal:compileReleaseJavaWithJavac
 > Task :terminal:bundleLibCompileToJarRelease
+> Task :app:generateReleaseResValues
 > Task :terminal:bundleLibRuntimeToDirRelease
+> Task :app:mapReleaseSourceSetPaths
 > Task :app:generateReleaseResources
-
-> Task :expo:compileReleaseKotlin
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:20:34 'ReactFeatureFlags' is deprecated. Deprecated in Java
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:153:11 'ReactFeatureFlags' is deprecated. Deprecated in Java
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:161:34 'constructor ReactDelegate(Activity!, ReactNativeHost!, String?, Bundle?)' is deprecated. Deprecated in Java
-w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:231:10 'ReactFeatureFlags' is deprecated. Deprecated in Java
-
+> Task :expo-file-system:compileReleaseKotlin
+> Task :expo-modules-core:bundleLibRuntimeToDirRelease
+> Task :expo-file-system:compileReleaseJavaWithJavac
+> Task :expo-file-system:bundleLibCompileToJarRelease
+> Task :expo-file-system:bundleLibRuntimeToDirRelease
+> Task :app:mergeReleaseResources
 > Task :app:packageReleaseResources
 > Task :app:parseReleaseLocalResources
-> Task :expo:compileReleaseJavaWithJavac
 > Task :app:createReleaseCompatibleScreenManifests
 > Task :app:extractDeepLinksRelease
-> Task :expo:bundleLibRuntimeToDirRelease
 > Task :expo:extractDeepLinksRelease
 > Task :expo-asset:extractDeepLinksRelease
 > Task :expo-battery:extractDeepLinksRelease
@@ -1255,7 +1248,6 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :react-native-safe-area-context:extractDeepLinksRelease
 > Task :react-native-screens:extractDeepLinksRelease
 > Task :react-native-svg:extractDeepLinksRelease
-> Task :app:mergeReleaseResources
 > Task :terminal:extractDeepLinksRelease
 
 > Task :app:processReleaseMainManifest
@@ -1263,16 +1255,16 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 	provider#expo.modules.filesystem.FileSystemFileProvider@android:authorities was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
 
 > Task :app:processReleaseManifest
+> Task :app:processReleaseManifestForPackage
 > Task :expo:compileReleaseLibraryResources
 > Task :expo-asset:compileReleaseLibraryResources
 > Task :expo-battery:compileReleaseLibraryResources
 > Task :expo-blur:compileReleaseLibraryResources
-> Task :app:processReleaseManifestForPackage
 > Task :expo-clipboard:compileReleaseLibraryResources
 > Task :expo-constants:compileReleaseLibraryResources
 > Task :expo-document-picker:compileReleaseLibraryResources
-> Task :expo-font:compileReleaseLibraryResources
 > Task :expo-file-system:compileReleaseLibraryResources
+> Task :expo-font:compileReleaseLibraryResources
 > Task :expo-keep-awake:compileReleaseLibraryResources
 > Task :expo-linear-gradient:compileReleaseLibraryResources
 > Task :expo-modules-core:compileReleaseLibraryResources
@@ -1282,18 +1274,27 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :react-native-gesture-handler:compileReleaseLibraryResources
 > Task :react-native-reanimated:compileReleaseLibraryResources
 > Task :react-native-safe-area-context:compileReleaseLibraryResources
+> Task :react-native-screens:compileReleaseLibraryResources
 > Task :react-native-svg:compileReleaseLibraryResources
 > Task :terminal:compileReleaseLibraryResources
-> Task :expo:bundleLibCompileToJarRelease
 > Task :llama.rn:bundleLibCompileToJarRelease
-> Task :react-native-screens:compileReleaseLibraryResources
 > Task :react-native-async-storage_async-storage:bundleLibCompileToJarRelease
 > Task :react-native-gesture-handler:bundleLibCompileToJarRelease
 > Task :react-native-safe-area-context:bundleLibCompileToJarRelease
 > Task :react-native-screens:bundleLibCompileToJarRelease
+> Task :react-native-svg:bundleLibCompileToJarRelease
 > Task :app:javaPreCompileRelease
 > Task :app:desugarReleaseFileDependencies
-> Task :react-native-svg:bundleLibCompileToJarRelease
+
+> Task :expo:compileReleaseKotlin
+w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:20:34 'ReactFeatureFlags' is deprecated. Deprecated in Java
+w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:153:11 'ReactFeatureFlags' is deprecated. Deprecated in Java
+w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:161:34 'constructor ReactDelegate(Activity!, ReactNativeHost!, String?, Bundle?)' is deprecated. Deprecated in Java
+w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:231:10 'ReactFeatureFlags' is deprecated. Deprecated in Java
+
+> Task :expo:compileReleaseJavaWithJavac
+> Task :expo:bundleLibRuntimeToDirRelease
+> Task :expo:bundleLibCompileToJarRelease
 > Task :expo:prepareReleaseArtProfile
 > Task :expo-asset:prepareReleaseArtProfile
 > Task :expo-battery:prepareReleaseArtProfile
@@ -1318,21 +1319,21 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :app:mergeReleaseArtProfile
 > Task :expo:bundleLibRuntimeToJarRelease
 > Task :react-native-gesture-handler:bundleLibRuntimeToJarRelease
+> Task :app:processReleaseResources
 > Task :react-native-reanimated:bundleLibRuntimeToJarRelease
 > Task :react-native-safe-area-context:bundleLibRuntimeToJarRelease
-> Task :app:processReleaseResources
+> Task :app:compileReleaseKotlin
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:dexBuilderRelease
 > Task :react-native-screens:bundleLibRuntimeToJarRelease
 > Task :react-native-svg:bundleLibRuntimeToJarRelease
 > Task :react-native-async-storage_async-storage:bundleLibRuntimeToJarRelease
 > Task :llama.rn:bundleLibRuntimeToJarRelease
-> Task :app:compileReleaseKotlin
-> Task :app:compileReleaseJavaWithJavac
-> Task :app:dexBuilderRelease
-> Task :expo-blur:bundleLibRuntimeToJarRelease
 > Task :expo-asset:bundleLibRuntimeToJarRelease
 > Task :expo-battery:bundleLibRuntimeToJarRelease
-> Task :expo-constants:bundleLibRuntimeToJarRelease
+> Task :expo-blur:bundleLibRuntimeToJarRelease
 > Task :expo-clipboard:bundleLibRuntimeToJarRelease
+> Task :expo-constants:bundleLibRuntimeToJarRelease
 > Task :expo-document-picker:bundleLibRuntimeToJarRelease
 > Task :expo-file-system:bundleLibRuntimeToJarRelease
 > Task :expo-font:bundleLibRuntimeToJarRelease
@@ -1429,6 +1430,8 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :terminal:generateReleaseAssets UP-TO-DATE
 > Task :terminal:packageReleaseAssets
 > Task :app:mergeReleaseAssets
+> Task :app:mergeExtDexRelease
+> Task :app:compressReleaseAssets
 > Task :app:processReleaseJavaRes
 > Task :expo:processReleaseJavaRes
 > Task :expo-asset:processReleaseJavaRes
@@ -1442,7 +1445,6 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :expo-keep-awake:processReleaseJavaRes
 > Task :expo-linear-gradient:processReleaseJavaRes
 > Task :expo-modules-core:processReleaseJavaRes
-> Task :app:compressReleaseAssets
 > Task :expo-video-processor:processReleaseJavaRes
 > Task :llama.rn:processReleaseJavaRes NO-SOURCE
 > Task :react-native-async-storage_async-storage:processReleaseJavaRes NO-SOURCE
@@ -1452,12 +1454,10 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :react-native-screens:processReleaseJavaRes
 > Task :react-native-svg:processReleaseJavaRes NO-SOURCE
 > Task :terminal:processReleaseJavaRes
-> Task :app:mergeExtDexRelease
 > Task :app:mergeReleaseJavaResource
-> Task :app:mergeReleaseGlobalSynthetics
-> Task :app:optimizeReleaseResources
 > Task :app:collectReleaseDependencies
 > Task :app:sdkReleaseDependencyData
+> Task :app:optimizeReleaseResources
 > Task :app:validateSigningRelease
 > Task :app:writeReleaseAppMetadata
 > Task :app:writeReleaseSigningConfigVersions
@@ -1467,6 +1467,7 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :expo:extractReleaseAnnotations
 > Task :expo:mergeReleaseGeneratedProguardFiles
 > Task :expo:mergeReleaseConsumerProguardFiles
+> Task :app:mergeReleaseGlobalSynthetics
 > Task :expo:prepareLintJarForPublish
 > Task :expo:mergeReleaseJavaResource
 > Task :expo:mapReleaseSourceSetPaths
@@ -1489,131 +1490,131 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :expo-battery:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-battery:extractDeepLinksForAarRelease
 > Task :expo-battery:extractReleaseAnnotations
-> Task :app:mergeDexRelease
 > Task :expo-battery:mergeReleaseGeneratedProguardFiles
 > Task :expo-battery:mergeReleaseConsumerProguardFiles
-> Task :expo-battery:prepareLintJarForPublish
 > Task :expo:verifyReleaseResources
 > Task :expo:assembleRelease
 > Task :expo-battery:mergeReleaseJavaResource
-> Task :expo-battery:mapReleaseSourceSetPaths
 > Task :expo-battery:syncReleaseLibJars
+> Task :expo-battery:prepareLintJarForPublish
+> Task :app:mergeDexRelease
+> Task :expo-battery:mapReleaseSourceSetPaths
 > Task :expo-battery:bundleReleaseAar
-> Task :app:compileReleaseArtProfile
 > Task :expo-asset:verifyReleaseResources
+> Task :app:compileReleaseArtProfile
 > Task :expo-battery:mergeReleaseResources
 > Task :expo-asset:assembleRelease
 > Task :expo-blur:stripReleaseDebugSymbols NO-SOURCE
-> Task :expo-blur:extractDeepLinksForAarRelease
 > Task :expo-blur:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-blur:extractDeepLinksForAarRelease
 > Task :expo-blur:extractReleaseAnnotations
 > Task :expo-blur:mergeReleaseGeneratedProguardFiles
 > Task :expo-blur:mergeReleaseConsumerProguardFiles
+> Task :expo-blur:mergeReleaseJavaResource
+> Task :expo-blur:syncReleaseLibJars
 > Task :expo-blur:prepareLintJarForPublish
 > Task :expo-blur:mapReleaseSourceSetPaths
-> Task :expo-blur:mergeReleaseJavaResource
-> Task :expo-blur:mergeReleaseResources
-> Task :expo-blur:syncReleaseLibJars
 > Task :expo-blur:bundleReleaseAar
+> Task :expo-battery:verifyReleaseResources
+> Task :expo-blur:mergeReleaseResources
+> Task :expo-battery:assembleRelease
 > Task :expo-clipboard:stripReleaseDebugSymbols NO-SOURCE
-> Task :expo-clipboard:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-clipboard:extractDeepLinksForAarRelease
+> Task :expo-clipboard:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-clipboard:extractReleaseAnnotations
 > Task :expo-clipboard:mergeReleaseGeneratedProguardFiles
 > Task :expo-clipboard:mergeReleaseConsumerProguardFiles
-> Task :expo-battery:verifyReleaseResources
-> Task :expo-battery:assembleRelease
-> Task :expo-clipboard:mergeReleaseJavaResource
 > Task :expo-clipboard:prepareLintJarForPublish
+> Task :expo-clipboard:mapReleaseSourceSetPaths
+> Task :expo-clipboard:mergeReleaseJavaResource
+> Task :expo-clipboard:mergeReleaseResources
 > Task :expo-clipboard:syncReleaseLibJars
 > Task :expo-clipboard:bundleReleaseAar
-> Task :expo-clipboard:mapReleaseSourceSetPaths
-> Task :expo-blur:verifyReleaseResources
-> Task :expo-clipboard:mergeReleaseResources
-> Task :expo-blur:assembleRelease
 > Task :expo-constants:stripReleaseDebugSymbols NO-SOURCE
 > Task :expo-constants:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-constants:extractDeepLinksForAarRelease
 > Task :expo-constants:extractReleaseAnnotations
 > Task :expo-constants:mergeReleaseGeneratedProguardFiles
 > Task :expo-constants:mergeReleaseConsumerProguardFiles
+> Task :expo-constants:prepareLintJarForPublish
 > Task :expo-constants:mergeReleaseJavaResource
 > Task :expo-constants:syncReleaseLibJars
+> Task :expo-constants:bundleReleaseAar
 > Task :expo-constants:mapReleaseSourceSetPaths
-> Task :expo-constants:prepareLintJarForPublish
+> Task :expo-blur:verifyReleaseResources
 > Task :expo-clipboard:verifyReleaseResources
 > Task :expo-constants:mergeReleaseResources
+> Task :expo-blur:assembleRelease
 > Task :expo-clipboard:assembleRelease
-> Task :expo-constants:bundleReleaseAar
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
 > Task :expo-document-picker:stripReleaseDebugSymbols NO-SOURCE
-> Task :expo-document-picker:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-document-picker:extractDeepLinksForAarRelease
 > Task :expo-document-picker:extractReleaseAnnotations
 > Task :expo-document-picker:mergeReleaseGeneratedProguardFiles
 > Task :expo-document-picker:mergeReleaseConsumerProguardFiles
 > Task :expo-document-picker:prepareLintJarForPublish
-> Task :expo-document-picker:mergeReleaseJavaResource
 > Task :expo-document-picker:mapReleaseSourceSetPaths
+> Task :expo-document-picker:mergeReleaseJavaResource
+> Task :expo-document-picker:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-document-picker:mergeReleaseResources
 > Task :expo-document-picker:syncReleaseLibJars
 > Task :expo-document-picker:bundleReleaseAar
-> Task :expo-constants:verifyReleaseResources
-> Task :expo-document-picker:mergeReleaseResources
-> Task :expo-constants:assembleRelease
 > Task :expo-file-system:stripReleaseDebugSymbols NO-SOURCE
 > Task :expo-file-system:extractDeepLinksForAarRelease
 > Task :expo-file-system:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-file-system:extractReleaseAnnotations
 > Task :expo-file-system:mergeReleaseGeneratedProguardFiles
 > Task :expo-file-system:mergeReleaseConsumerProguardFiles
-> Task :app:packageRelease
+> Task :expo-constants:verifyReleaseResources
+> Task :expo-constants:assembleRelease
+> Task :expo-file-system:mapReleaseSourceSetPaths
 > Task :expo-file-system:prepareLintJarForPublish
 > Task :expo-file-system:mergeReleaseJavaResource
-> Task :app:createReleaseApkListingFileRedirect
-> Task :app:assembleRelease
-> Task :expo-file-system:syncReleaseLibJars
-> Task :expo-file-system:bundleReleaseAar
-> Task :expo-file-system:mapReleaseSourceSetPaths
-> Task :expo-document-picker:verifyReleaseResources
 > Task :expo-file-system:mergeReleaseResources
+> Task :expo-document-picker:verifyReleaseResources
+> Task :expo-file-system:syncReleaseLibJars
 > Task :expo-document-picker:assembleRelease
+> Task :expo-file-system:bundleReleaseAar
 > Task :expo-font:stripReleaseDebugSymbols NO-SOURCE
-> Task :expo-font:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-font:extractDeepLinksForAarRelease
+> Task :expo-font:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-font:extractReleaseAnnotations
 > Task :expo-font:mergeReleaseGeneratedProguardFiles
 > Task :expo-font:mergeReleaseConsumerProguardFiles
-> Task :expo-font:mergeReleaseJavaResource
+> Task :expo-font:mapReleaseSourceSetPaths
 > Task :expo-font:prepareLintJarForPublish
+> Task :expo-font:mergeReleaseJavaResource
+> Task :expo-font:mergeReleaseResources
 > Task :expo-font:syncReleaseLibJars
 > Task :expo-font:bundleReleaseAar
-> Task :expo-font:mapReleaseSourceSetPaths
-> Task :expo-font:mergeReleaseResources
 > Task :expo-keep-awake:stripReleaseDebugSymbols NO-SOURCE
-> Task :expo-file-system:verifyReleaseResources
-> Task :expo-file-system:assembleRelease
 > Task :expo-keep-awake:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-keep-awake:extractDeepLinksForAarRelease
 > Task :expo-keep-awake:extractReleaseAnnotations
 > Task :expo-keep-awake:mergeReleaseGeneratedProguardFiles
 > Task :expo-keep-awake:mergeReleaseConsumerProguardFiles
-> Task :expo-keep-awake:mapReleaseSourceSetPaths
-> Task :expo-keep-awake:prepareLintJarForPublish
 > Task :expo-keep-awake:mergeReleaseJavaResource
-> Task :expo-keep-awake:mergeReleaseResources
+> Task :expo-keep-awake:prepareLintJarForPublish
 > Task :expo-keep-awake:syncReleaseLibJars
 > Task :expo-keep-awake:bundleReleaseAar
+> Task :expo-keep-awake:mapReleaseSourceSetPaths
+> Task :expo-file-system:verifyReleaseResources
+> Task :expo-font:verifyReleaseResources
+> Task :expo-keep-awake:mergeReleaseResources
+> Task :expo-file-system:assembleRelease
+> Task :expo-font:assembleRelease
 > Task :expo-linear-gradient:stripReleaseDebugSymbols NO-SOURCE
-> Task :expo-linear-gradient:extractDeepLinksForAarRelease
 > Task :expo-linear-gradient:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-linear-gradient:extractDeepLinksForAarRelease
 > Task :expo-linear-gradient:extractReleaseAnnotations
 > Task :expo-linear-gradient:mergeReleaseGeneratedProguardFiles
 > Task :expo-linear-gradient:mergeReleaseConsumerProguardFiles
 > Task :expo-linear-gradient:prepareLintJarForPublish
 > Task :expo-linear-gradient:mapReleaseSourceSetPaths
 > Task :expo-linear-gradient:mergeReleaseJavaResource
-> Task :expo-font:verifyReleaseResources
 > Task :expo-linear-gradient:mergeReleaseResources
-> Task :expo-font:assembleRelease
 > Task :expo-linear-gradient:syncReleaseLibJars
 > Task :expo-linear-gradient:bundleReleaseAar
 > Task :expo-modules-core:extractDeepLinksForAarRelease
@@ -1621,33 +1622,33 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :expo-modules-core:mergeReleaseGeneratedProguardFiles
 > Task :expo-modules-core:mergeReleaseConsumerProguardFiles
 > Task :expo-modules-core:prepareLintJarForPublish
-> Task :expo-modules-core:mergeReleaseJavaResource
 > Task :expo-modules-core:stripReleaseDebugSymbols
+> Task :expo-modules-core:mergeReleaseJavaResource
+> Task :expo-modules-core:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-keep-awake:verifyReleaseResources
 > Task :expo-modules-core:syncReleaseLibJars
 > Task :expo-keep-awake:assembleRelease
-> Task :expo-modules-core:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-modules-core:bundleReleaseAar
 > Task :expo-modules-core:mapReleaseSourceSetPaths
 > Task :expo-linear-gradient:verifyReleaseResources
-> Task :expo-modules-core:bundleReleaseAar
-> Task :expo-linear-gradient:assembleRelease
 > Task :expo-modules-core:mergeReleaseResources
+> Task :expo-linear-gradient:assembleRelease
 > Task :expo-video-processor:stripReleaseDebugSymbols NO-SOURCE
-> Task :expo-video-processor:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-video-processor:extractDeepLinksForAarRelease
+> Task :expo-video-processor:copyReleaseJniLibsProjectAndLocalJars
 > Task :expo-video-processor:extractReleaseAnnotations
 > Task :expo-video-processor:mergeReleaseGeneratedProguardFiles
 > Task :expo-video-processor:mergeReleaseConsumerProguardFiles
+> Task :expo-video-processor:mapReleaseSourceSetPaths
 > Task :expo-video-processor:mergeReleaseJavaResource
 > Task :expo-video-processor:prepareLintJarForPublish
-> Task :expo-video-processor:mapReleaseSourceSetPaths
+> Task :expo-video-processor:mergeReleaseResources
 > Task :expo-video-processor:syncReleaseLibJars
 > Task :expo-video-processor:bundleReleaseAar
-> Task :expo-modules-core:verifyReleaseResources
-> Task :expo-video-processor:mergeReleaseResources
-> Task :expo-modules-core:assembleRelease
 > Task :llama.rn:extractDeepLinksForAarRelease
+> Task :expo-modules-core:verifyReleaseResources
 > Task :llama.rn:extractReleaseAnnotations
+> Task :expo-modules-core:assembleRelease
 > Task :llama.rn:mergeReleaseGeneratedProguardFiles
 > Task :llama.rn:mergeReleaseConsumerProguardFiles
 > Task :llama.rn:prepareLintJarForPublish
@@ -1656,31 +1657,31 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :llama.rn:syncReleaseLibJars
 > Task :llama.rn:stripReleaseDebugSymbols
 > Task :llama.rn:mergeReleaseResources
+> Task :expo-video-processor:verifyReleaseResources
+> Task :expo-video-processor:assembleRelease
 > Task :react-native-async-storage_async-storage:stripReleaseDebugSymbols NO-SOURCE
 > Task :react-native-async-storage_async-storage:copyReleaseJniLibsProjectAndLocalJars
+> Task :llama.rn:copyReleaseJniLibsProjectAndLocalJars
 > Task :react-native-async-storage_async-storage:extractDeepLinksForAarRelease
+> Task :llama.rn:verifyReleaseResources
+> Task :llama.rn:bundleReleaseAar
+> Task :llama.rn:assembleRelease
 > Task :react-native-async-storage_async-storage:extractReleaseAnnotations
 > Task :react-native-async-storage_async-storage:mergeReleaseGeneratedProguardFiles
 > Task :react-native-async-storage_async-storage:mergeReleaseConsumerProguardFiles
 > Task :react-native-async-storage_async-storage:prepareLintJarForPublish
 > Task :react-native-async-storage_async-storage:mergeReleaseJavaResource
-> Task :react-native-async-storage_async-storage:syncReleaseLibJars
-> Task :llama.rn:copyReleaseJniLibsProjectAndLocalJars
-> Task :expo-video-processor:verifyReleaseResources
-> Task :react-native-async-storage_async-storage:bundleReleaseAar
-> Task :expo-video-processor:assembleRelease
-> Task :llama.rn:verifyReleaseResources
-> Task :llama.rn:bundleReleaseAar
-> Task :llama.rn:assembleRelease
 > Task :react-native-async-storage_async-storage:mapReleaseSourceSetPaths
+> Task :react-native-async-storage_async-storage:syncReleaseLibJars
+> Task :react-native-async-storage_async-storage:bundleReleaseAar
 > Task :react-native-async-storage_async-storage:mergeReleaseResources
 > Task :react-native-gesture-handler:extractDeepLinksForAarRelease
 > Task :react-native-gesture-handler:extractReleaseAnnotations
 > Task :react-native-gesture-handler:mergeReleaseGeneratedProguardFiles
 > Task :react-native-gesture-handler:mergeReleaseConsumerProguardFiles
 > Task :react-native-gesture-handler:prepareLintJarForPublish
-> Task :react-native-gesture-handler:stripReleaseDebugSymbols
 > Task :react-native-gesture-handler:mergeReleaseJavaResource
+> Task :react-native-gesture-handler:stripReleaseDebugSymbols
 > Task :react-native-gesture-handler:mapReleaseSourceSetPaths
 > Task :react-native-gesture-handler:copyReleaseJniLibsProjectAndLocalJars
 > Task :react-native-gesture-handler:syncReleaseLibJars
@@ -1708,22 +1709,22 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :react-native-safe-area-context:extractReleaseAnnotations
 > Task :react-native-safe-area-context:mergeReleaseGeneratedProguardFiles
 > Task :react-native-safe-area-context:mergeReleaseConsumerProguardFiles
+> Task :react-native-safe-area-context:mapReleaseSourceSetPaths
 > Task :react-native-safe-area-context:prepareLintJarForPublish
 > Task :react-native-safe-area-context:mergeReleaseJavaResource
-> Task :react-native-safe-area-context:mapReleaseSourceSetPaths
+> Task :react-native-safe-area-context:mergeReleaseResources
 > Task :react-native-safe-area-context:syncReleaseLibJars
 > Task :react-native-safe-area-context:bundleReleaseAar
-> Task :react-native-safe-area-context:mergeReleaseResources
 > Task :react-native-screens:extractDeepLinksForAarRelease
 > Task :react-native-screens:extractReleaseAnnotations
 > Task :react-native-screens:mergeReleaseGeneratedProguardFiles
 > Task :react-native-screens:mergeReleaseConsumerProguardFiles
-> Task :react-native-screens:prepareLintJarForPublish
 > Task :react-native-screens:stripReleaseDebugSymbols
+> Task :react-native-screens:prepareLintJarForPublish
 > Task :react-native-screens:copyReleaseJniLibsProjectAndLocalJars
 > Task :react-native-screens:mapReleaseSourceSetPaths
-> Task :react-native-screens:mergeReleaseJavaResource
 > Task :react-native-reanimated:verifyReleaseResources
+> Task :react-native-screens:mergeReleaseJavaResource
 > Task :react-native-safe-area-context:verifyReleaseResources
 > Task :react-native-screens:mergeReleaseResources
 > Task :react-native-reanimated:assembleRelease
@@ -1736,33 +1737,33 @@ w: file:///home/runner/work/omega-ai/omega-ai/GVRChat/node_modules/expo/android/
 > Task :react-native-svg:extractReleaseAnnotations
 > Task :react-native-svg:mergeReleaseGeneratedProguardFiles
 > Task :react-native-svg:mergeReleaseConsumerProguardFiles
-> Task :react-native-svg:mapReleaseSourceSetPaths
-> Task :react-native-svg:mergeReleaseJavaResource
 > Task :react-native-svg:prepareLintJarForPublish
-> Task :react-native-svg:mergeReleaseResources
+> Task :react-native-svg:mergeReleaseJavaResource
+> Task :react-native-svg:mapReleaseSourceSetPaths
 > Task :react-native-svg:syncReleaseLibJars
 > Task :react-native-svg:bundleReleaseAar
+> Task :react-native-svg:mergeReleaseResources
 > Task :terminal:extractDeepLinksForAarRelease
-> Task :terminal:extractReleaseAnnotations
-> Task :terminal:mergeReleaseGeneratedProguardFiles
-> Task :terminal:mergeReleaseConsumerProguardFiles
-> Task :terminal:prepareLintJarForPublish
 
 > Task :terminal:stripReleaseDebugSymbols
 Unable to strip the following libraries, packaging them as they are: libandroid-shmem.so, libproot-loader.so, libproot.so, libproroot-bridge.so, libproroot-linker.so, libproroot-runtime.so, libproroot.so, libtalloc.so, libtermuxexecpreload.so.
 
-> Task :terminal:mergeReleaseJavaResource
+> Task :terminal:extractReleaseAnnotations
+> Task :terminal:mergeReleaseGeneratedProguardFiles
+> Task :terminal:mergeReleaseConsumerProguardFiles
+> Task :terminal:prepareLintJarForPublish
 > Task :terminal:copyReleaseJniLibsProjectAndLocalJars
+> Task :terminal:mergeReleaseJavaResource
+> Task :terminal:mapReleaseSourceSetPaths
 > Task :terminal:syncReleaseLibJars
 > Task :react-native-screens:verifyReleaseResources
 > Task :terminal:bundleReleaseAar
 > Task :react-native-screens:assembleRelease
-> Task :terminal:mapReleaseSourceSetPaths
 > Task :react-native-svg:verifyReleaseResources
 > Task :terminal:mergeReleaseResources
 > Task :react-native-svg:assembleRelease
 > Task :terminal:verifyReleaseResources
 > Task :terminal:assembleRelease
 
-BUILD SUCCESSFUL in 5m 21s
+BUILD SUCCESSFUL in 6m 55s
 804 actionable tasks: 804 executed
