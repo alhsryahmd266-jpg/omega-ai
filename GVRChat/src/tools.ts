@@ -86,6 +86,39 @@ const shQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
  * calls (cd works like in a real terminal). A first line "#timeout=120" raises
  * the time limit (default 30 s, max 300 s).
  */
+/* ── AUTOMATIC INSTALL OF MISSING PROGRAMS (inside the terminal) ─────────── */
+// When a command inside Alpine says "X: not found", the app installs X from the
+// Alpine repo itself and runs the command again. The user already approved the
+// terminal command, so there is no second prompt. Only plain apk packages are
+// used here (no pip, no URLs), and each name is tried at most once per session.
+const AUTO_NAME_RE = /^[a-z0-9][a-z0-9._+-]{0,63}$/;
+const autoTried = new Set<string>();
+
+/** Names of commands reported as not found in a shell output. */
+export function missingCommands(out: string): string[] {
+  const re = /(?:^|[\s:])([A-Za-z0-9][A-Za-z0-9._+-]{0,63}): (?:command )?not found/gm;
+  const found = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(out))) found.add(m[1]);
+  return [...found].filter(n => AUTO_NAME_RE.test(n)).slice(0, 3);
+}
+
+/** Installs `bin` with apk if it is missing. Returns true when it now runs. */
+async function autoInstallApk(bin: string): Promise<boolean> {
+  if (!AUTO_NAME_RE.test(bin) || autoTried.has(bin)) return false;
+  autoTried.add(bin);
+  const script =
+    `if command -v ${bin} >/dev/null 2>&1 || ` +
+    `(apk add --no-cache ${bin} >/tmp/gvr_auto.log 2>&1 && command -v ${bin} >/dev/null 2>&1); ` +
+    `then echo AUTO_OK; else echo AUTO_FAIL; fi`;
+  try {
+    const out = await Terminal.runAlpine(script, 240);
+    return out.includes('AUTO_OK');
+  } catch {
+    return false;
+  }
+}
+
 export async function toolTerminal(arg: string): Promise<string> {
   let command = arg;
   let timeout = 30;
@@ -100,18 +133,35 @@ export async function toolTerminal(arg: string): Promise<string> {
     (termCwd ? `cd ${shQuote(termCwd)} 2>/dev/null\n` : '') +
     `{\n${command}\n}\n__gvr_rc=$?\nprintf '\\n${CWD_MARK}%s\\n' "$(pwd)"\nexit $__gvr_rc`;
 
-  const out = await Terminal.run(wrapped, timeout);
+  let out = await Terminal.run(wrapped, timeout);
+  let notes = '';
+  if (linuxReady) {
+    const missing = missingCommands(out);
+    if (missing.length) {
+      const got: string[] = [];
+      const failed: string[] = [];
+      for (const name of missing) (await autoInstallApk(name) ? got : failed).push(name);
+      if (got.length) {
+        notes += `[auto] installed in Alpine: ${got.join(', ')}\n`;
+        out = await Terminal.run(wrapped, timeout); // run the command once more with the new programs
+      }
+      if (failed.length) {
+        notes += `[auto] not available as an apk package: ${failed.join(', ')}\n`;
+      }
+    }
+  }
   const m = new RegExp(`\\n?${CWD_MARK}(.*)\\n?`).exec(out);
   let clean = out;
   if (m) {
     termCwd = m[1].trim();
     clean = out.replace(m[0], '\n');
   }
-  return clip(clean.trim() || '(no output)', 8000);
+  return clip((notes + clean).trim() || '(no output)', 8000);
 }
 
 export function resetTerminalState(): void {
   termCwd = '';
+  autoTried.clear();
 }
 
 /* ── FILES ─────────────────────────────────────────────────────────────── */
