@@ -18,6 +18,11 @@ export interface RouteHit {
 
 export interface RouteOptions {
   hasAttachment?: boolean;
+  /**
+   * Weak (tiny/base) models can't decide to search by themselves, so for them EVERY knowledge
+   * question ("كم عدد…", "من هو…", "what is…") goes to the web automatically.
+   */
+  broad?: boolean;
 }
 
 /** Arabic-insensitive text for matching (diacritics, alef/ya/ta-marbuta variants). */
@@ -85,7 +90,21 @@ export function cleanQuery(s: string): string {
     .replace(BARE_ENGINE, '');   // "search online" -> the topic is in the other half of the sentence
 }
 
-const TIME_QUESTION = /(الساعه كام|كام الساعه|كم الساعه|الساعه كم|الوقت (?:الان|دلوقتي|حاليا)|التاريخ|النهارده|اليوم كام|what time|current time|today'?s date|what'?s the date)/;
+// "Is this a factual question?" — used for the broad auto-search and for the "I don't know → search" fallback.
+const Q_START = /^(?:(?:طيب|بص|هو|هي|لو سمحت|من فضلك|يا باشا|وبعدين|و)\s+)*(?:كم|كام|ما|ماذا|من|مين|منو|ايه|اي|متي|امتي|اين|فين|لماذا|ليه|كيف|ازاي|هل|what|who|whom|when|where|which|why|how|is|are|was|were|do|does|did|can|could|will|would)(?:\s|$)/;
+const SELF_REF = /(?:^|\s)(?:انت|انتا|انتي|اسمك|نفسك|بتعمل|بتقدر|تقدر|you|your|yourself)(?:\s|$)/;
+const COMMAND_WORD = /(?:^|\s)(?:افتح|شغل|اعمل|اكتب|ترجم|لخص|احسب|ثبت|نزل|حمل|امسح|اقرا|اشرح|فسر|قولي|حكيلي|هات|ارسم|صمم|عدل|غير)(?:\s|$)/;
+
+export function isInfoQuestion(text: string): boolean {
+  const raw = text.trim();
+  const n = normalizeAr(raw);
+  const words = n.split(/\s+/).filter(Boolean);
+  if (words.length < 3 || raw.length > 200) return false;
+  if (SELF_REF.test(n) || COMMAND_WORD.test(n)) return false;
+  return Q_START.test(n) || (/[?؟]\s*$/.test(raw) && words.length >= 4);
+}
+
+const TIME_QUESTION = /(الساعه كام|كام الساعه|كم الساعه|الساعه كم|الوقت (?:الان|دلوقتي|حاليا)|(?:ايه|ما|كم|كام)\s+(?:هو\s+)?(?:ال)?تاريخ|التاريخ (?:اليوم|النهارده|الان|دلوقتي)|النهارده\s+(?:كام|ايه|اي)|اليوم كام|what time|current time|today'?s date|what'?s the date|what day)/;
 const FRESH_WORDS = /(اخبار|الاخبار|سعر|اسعار|الطقس|درجه الحراره|نتيجه مباراه|نتايج|اخر اصدار|احدث|latest|news|price of|weather|score of)/;
 // "how many people are on earth NOW" — facts that change, asked without an explicit "search".
 const NOW_QUESTION = /(?:^|\s)(?:كم|ما هو|ما هي|من هو|مين|ايه|what is|who is|how many|how much)(?:\s|$).*(?:حاليا|الان|دلوقتي|current|currently|right now|these days|as of now)/;
@@ -125,7 +144,14 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   if (inst) {
     const pkgs = new Set<string>();
     for (const [re, pkg] of PACKAGES) if (re.test(inst[2])) pkg.split(' ').forEach(p => pkgs.add(p));
-    if (pkgs.size) add('pkg_install', Array.from(pkgs).join(' '), 'install');
+    // A single named tool ("نزل ffmpeg") → install it AND learn how to run it (install_tool returns a usage card).
+    // Multi-package aliases (python → python3 + pip) and Arabic names keep the plain apk install.
+    const tok = /^([a-z0-9][a-z0-9._+-]{1,40})(?:\s|$)/i.exec(inst[2].trim());
+    if (pkgs.size > 1 || (pkgs.size === 1 && !tok)) {
+      add('pkg_install', Array.from(pkgs).join(' '), 'install');
+    } else if (tok && !/^(?:the|a|an|app|apk|package|tool|program)$/i.test(tok[1])) {
+      add('install_tool', pkgs.size === 1 ? Array.from(pkgs)[0] : tok[1].toLowerCase(), 'install_tool');
+    }
   }
 
   // 5) web search — verb first ("ابحث عن X") or last ("X ... ابحثلي على النت")
@@ -173,6 +199,11 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   // 10) list a folder
   const lm = /(?:اعرض|اظهر|وريني|list|ls|show)\s+(?:ال)?(?:ملفات|files|محتويات|مجلد|folder|dir(?:ectory)?)\s*(?:في|فى|داخل|in|of)?\s*(["'`]?\/[^\s"'`]*)?/i.exec(raw);
   if (lm && !pm) add('list_dir', lm[1] ? cleanPath(lm[1]) : '', 'list_dir');
+
+  // 11) weak models: any factual question goes to the web (they can't decide that themselves)
+  if (opts.broad && hits.length === 0 && !fence && !urls.length && !opts.hasAttachment && isInfoQuestion(raw)) {
+    add('search', raw.replace(/[?؟!]+$/, '').trim(), 'knowledge');
+  }
 
   return hits.slice(0, 3);
 }
