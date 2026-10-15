@@ -17,6 +17,7 @@ import { Linking, Platform, Share } from 'react-native';
 import Terminal from '../modules/terminal/src';
 import { inspectFile } from './fileInspect';
 import * as Clipboard from 'expo-clipboard';
+import { installScript, parseInstallOutput, sanitizePkgName } from './toolCard';
 import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, normalizePermKey, requestPermission,
 } from './permissions';
@@ -684,6 +685,20 @@ export async function toolJavascript(code: string): Promise<string> {
 /* ── MEMORY ────────────────────────────────────────────────────────────── */
 type MemStore = Record<string, { value: string; ts: string }>;
 
+/* ── INSTALL + LEARN A TOOL ────────────────────────────────────────────── */
+// Installs a package into Alpine and returns a "card" (executables, version, --help) so the model knows HOW
+// to run what it just installed. The how-to is also remembered as "tool:NAME" (recall: mem_get tool:NAME).
+export async function toolInstallTool(arg: string): Promise<string> {
+  const name = sanitizePkgName(arg);
+  if (!name) return 'Give the package/tool name, e.g. ffmpeg, git, tesseract-ocr.';
+  const out = await Terminal.run(installScript(name), 240);
+  const r = parseInstallOutput(name, out);
+  if (r.ok && r.memory) {
+    try { await toolMemorySave(`tool:${name}`, r.memory); } catch { /* memory is best-effort */ }
+  }
+  return r.card;
+}
+
 async function loadMemory(): Promise<MemStore> {
   try {
     const raw = await AsyncStorage.getItem(MEMORY_KEY);
@@ -725,13 +740,19 @@ export async function toolMemoryDelete(key: string): Promise<string> {
 /** Short memory digest injected into the system prompt (empty if none). */
 export async function memoryDigest(maxChars = 600): Promise<string> {
   const mem = await loadMemory();
-  const parts = Object.keys(mem).map(k => `${k}: ${mem[k].value.slice(0, 100)}`);
-  return clip(parts.join('; '), maxChars);
+  const keys = Object.keys(mem);
+  const notes = keys.filter(k => !k.startsWith('tool:')).map(k => `${k}: ${mem[k].value.slice(0, 100)}`);
+  const tools = keys.filter(k => k.startsWith('tool:')).map(k => k.slice(5));
+  if (tools.length) notes.push(`installed tools (how to run: mem_get tool:NAME): ${tools.join(', ')}`);
+  return notes.join('; ').slice(0, maxChars);
 }
 
 /* ── LINUX (Alpine) STATE ──────────────────────────────────────────────── */
 let linuxReady = false;
 export const isLinuxReady = (): boolean => linuxReady;
+/** Lets the engine tell the user "waiting for your approval" instead of looking frozen. */
+export const toolNeedsConfirm = (name: string): boolean =>
+  !!TOOLS.find(t => t.name === normalizeToolName(name))?.confirm;
 
 /** Re-checks whether Alpine Linux is installed and usable; call at startup and after installing. */
 export async function refreshLinuxState(): Promise<boolean> {
@@ -773,7 +794,7 @@ export type ToolName =
   | 'device_info' | 'open_url' | 'share_text' | 'permission'
   | 'mem_save' | 'mem_get' | 'mem_list' | 'mem_delete'
   | 'copy_clipboard' | 'read_clipboard'
-  | 'python' | 'pkg_install';
+  | 'python' | 'pkg_install' | 'install_tool';
 
 interface ToolSpec {
   name: ToolName;
@@ -871,6 +892,9 @@ const TOOLS: ToolSpec[] = [
   { name: 'pkg_install', confirm: true, advertise: () => linuxReady,
     usage: 'install Alpine packages with apk. Argument: package names separated by spaces (e.g. python3 py3-pip git nodejs).',
     run: async a => Terminal.installPackages(a) },
+  { name: 'install_tool', confirm: true, advertise: () => linuxReady,
+    usage: 'install any command-line tool into Alpine Linux and learn how to run it. Argument: the package name (e.g. ffmpeg, git, tesseract-ocr). Returns its executables, version and --help, and remembers them.',
+    run: a => toolInstallTool(a) },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
@@ -909,6 +933,7 @@ const ALIASES: Record<string, ToolName> = {
   permissions: 'permission', perm: 'permission',
   memory_save: 'mem_save', remember: 'mem_save', memory_get: 'mem_get', memory_list: 'mem_list',
   memory_delete: 'mem_delete', forget: 'mem_delete',
+  get_tool: 'install_tool', install_package: 'install_tool', learn_tool: 'install_tool',
 };
 
 export function normalizeToolName(raw: string): string {
@@ -967,14 +992,17 @@ const NATIVE: Partial<Record<ToolName, NativeSpec>> = {
   mem_list: NO_ARGS,
   mem_delete: { props: { key: P('memory name') }, required: ['key'], toArg: o => asStr(o.key) },
   python: { props: { code: P('Python 3 code to run') }, required: ['code'], toArg: o => asStr(o.code) },
+  install_tool: { props: { name: P('tool/package name, e.g. ffmpeg, git, tesseract-ocr') }, required: ['name'], toArg: o => asStr(o.name) },
   pkg_install: { props: { packages: P('space-separated Alpine package names, e.g. "ffmpeg tesseract-ocr"') }, required: ['packages'], toArg: o => asStr(o.packages) },
 };
 
 /** Tools offered to capable models through the native `tools` parameter (kept short: every tool costs prompt tokens). */
 export const NATIVE_TOOLS_DEFAULT: ToolName[] = [
   'search', 'fetch_url', 'terminal', 'calc', 'datetime', 'read_file', 'write_file', 'list_dir',
-  'inspect_file', 'open_terminal', 'mem_save', 'mem_get', 'python', 'pkg_install', 'download_file',
+  'install_tool', 'mem_save', 'mem_get', 'python',
 ];
+/** Big/slow models pay for every prompt token — give them only the essentials (the router covers time/files). */
+export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc'];
 
 /** OpenAI-style function schemas for llama.rn's `tools` option. */
 export function nativeToolSpecs(only: ToolName[] = NATIVE_TOOLS_DEFAULT): object[] {
@@ -982,7 +1010,10 @@ export function nativeToolSpecs(only: ToolName[] = NATIVE_TOOLS_DEFAULT): object
     .filter(t => isAdvertised(t) && only.includes(t.name) && NATIVE[t.name])
     .map(t => {
       const n = NATIVE[t.name] as NativeSpec;
-      const description = usageOf(t).replace(/\s*Arguments?:[^.]*\.?/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+      let description = usageOf(t).replace(/\s*Arguments?:[^.]*\.?/gi, ' ').replace(/\s+/g, ' ').trim();
+      const cut = description.indexOf('. ');
+      if (cut > 20) description = description.slice(0, cut + 1);   // first sentence only: every token counts on a phone
+      description = description.slice(0, 130);
       return {
         type: 'function',
         function: { name: t.name, description, parameters: { type: 'object', properties: n.props, required: n.required } },

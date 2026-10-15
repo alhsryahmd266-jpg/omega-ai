@@ -96,6 +96,12 @@ function analyzeModel(c: LlamaContext, fileName: string): ModelProfile {
       'للأدوات والكود استخدم 3B أو أكبر.',
     );
   }
+  if (paramsB >= 8) {
+    warnings.push(
+      `النموذج ده كبير (~${paramsB.toFixed(0)}B): على معالج الموبايل التوليد بيبقى بطيء (تقدير: 2–3 توكن/ث) وأول رد ممكن ياخد دقايق. ` +
+      'التطبيق هيعرض التقدم، وبيقصّر الردود وقائمة الأدوات تلقائياً. للـ agent السريع جرّب نموذج 4–8B.',
+    );
+  }
   return { name: String(meta['general.name'] || fileName), paramsB, hasChatTemplate, supportsTools, looksBase, tier, warnings };
 }
 

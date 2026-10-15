@@ -19,10 +19,11 @@ import {
   isVisionReady, samplingFor, STOP_WORDS, stripThinking, withGenerationLock,
 } from './localLLM';
 import {
-  CORE_TOOLS, dispatchTool, isLinuxReady, memoryDigest, nativeArgToString, nativeToolSpecs,
-  normalizeToolName, toolPromptLines,
+  CORE_TOOLS, dispatchTool, isLinuxReady, memoryDigest, NATIVE_TOOLS_LEAN, nativeArgToString, nativeToolSpecs,
+  normalizeToolName, toolNeedsConfirm, toolPromptLines,
 } from './tools';
-import { autoRoute, type RouteHit } from './router';
+import { autoRoute, cleanQuery, isInfoQuestion, type RouteHit } from './router';
+import { formatNowArabic, looksUncertain } from './instant';
 import type { PreparedAttachment } from './attachments';
 
 /* ── TYPES (App.tsx depends on these exact shapes) ─────────────────────── */
@@ -56,6 +57,12 @@ const TOOL_RESULT_CHARS = 3000;
 const ROUTED_RESULT_CHARS = 3500;
 const HISTORY_MAX_MESSAGES = 12;
 const CHARS_PER_TOKEN = 2.8;
+// A ≥8B model on a phone CPU produces only a few tokens/s: keep prompts and answers short or every reply takes minutes.
+const BIG_MODEL_B = 8;
+const N_PREDICT_BIG = 480;
+const ROUTED_RESULT_CHARS_BIG = 1800;
+const MAX_COMPLETION_MS = 300_000;
+const MAX_COMPLETION_MS_BIG = 600_000;
 
 const TOOL_TAG_RE = /<tool\s+name\s*=\s*["']?([a-zA-Z_]+)["']?\s*>([\s\S]*?)(?:<\/tool>|$)/;
 const STRAY_TOOL_RE = /<tool\s+name\s*=\s*["']?[a-zA-Z_]+["']?\s*>[\s\S]*?(?:<\/tool>|$)/g;
@@ -82,27 +89,42 @@ function promptMode(): PromptMode {
   return 'full';
 }
 
+/**
+ * Date only. The system prompt (+ tool list) must stay byte-identical between messages so llama.cpp can
+ * reuse its KV cache: a clock with seconds inside it forced the whole prompt to be re-read on EVERY message,
+ * which on a big model on a phone meant minutes of "thinking" before the first word.
+ */
+function today(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 async function buildSystemPrompt(mode: PromptMode, native = false): Promise<string> {
-  const now = new Date().toString();
   if (mode === 'minimal') {
     return 'You are a helpful assistant. Answer briefly and clearly in the same language as the user. Do not repeat yourself.';
   }
   const mem = await memoryDigest();
+  const linux = isLinuxReady()
+    ? '- A real Linux (Alpine) is available through the terminal: python3, apk, git, node, curl, ffmpeg…'
+    : '';
+  const date = `Today: ${today()} (for the exact time use the datetime tool or the \`date\` command)`;
   if (native) {
     // Tool definitions are injected by the chat template (native `tools`), so no tag instructions here.
     return [
-      'You are GVR, an AI assistant running entirely on the user\'s Android phone, with tools.',
+      'You are GVR, an AI assistant running on the user\'s Android phone, with tools.',
       '',
       'RULES:',
-      '- Use a tool only when it is really needed: current facts → search; Linux commands, files, scripts → terminal or python; math → calc. Simple questions: just answer, briefly.',
-      '- Call one tool at a time, wait for its result, then continue or answer.',
-      '- Never invent tool output or facts you did not get. If a tool fails, say so and try another way.',
-      '- If the message already contains results the app obtained, use them; do not call those tools again.',
-      '- Before destructive actions (deleting, overwriting), make sure the user asked for it.',
-      '- Reply in the same language the user writes in (Arabic dialects are fine). Be concise. Never repeat sentences.',
-      isLinuxReady() ? '- A real Linux (Alpine) is available: python3, apk, git, node, ffmpeg can be used through the terminal.' : '',
+      '- You do NOT reliably know current or real-world facts (news, prices, who holds an office, numbers, versions, sports, weather, "how many", "who is", "latest"). For any such question, or whenever you are not sure, call `search` FIRST and answer from the results, naming the source. Never answer those from memory and never say you cannot look things up.',
+      '- Linux commands, files, scripts → `terminal` / `python`. Math → `calc`. Chit-chat, opinions, creative writing and code you can write yourself need no tool.',
+      '- Missing a program? Call `install_tool` with its name: it installs it and returns how to run it (executables + --help). Then run it with `terminal`. Never give up just because something is not installed.',
+      '- One tool call at a time; wait for the result. Never invent tool output. If a tool fails, try another way.',
+      '- If the message already contains results the app obtained, use them; do not repeat those tools.',
+      '- Ask before destructive actions (deleting, overwriting).',
+      '- Reply in the user\'s language (Arabic dialects are fine). Be concise: short answers unless detail is requested. Never repeat sentences.',
+      linux,
       '',
-      `Current time: ${now}`,
+      date,
       mem ? `Saved memory: ${mem}` : '',
     ].filter(Boolean).join('\n');
   }
@@ -122,15 +144,16 @@ async function buildSystemPrompt(mode: PromptMode, native = false): Promise<stri
     tools,
     '',
     'RULES:',
-    '- Use a tool only when it is really needed. Simple questions: just answer, briefly.',
+    '- If you are not sure about a fact (news, prices, people, numbers, versions), use search first instead of guessing. Chit-chat: just answer, briefly.',
     '- Never invent tool output. If a tool fails, say so and try another way or explain.',
     '- One tool call per message. Nothing after the closing tag.',
     '- If the message already contains tool results, use them to answer; do not call the same tool again.',
     '- Before destructive actions (deleting, overwriting), make sure the user asked for it.',
     '- Reply in the same language the user writes in (Arabic dialects are fine). Be concise. Never repeat sentences.',
-    isLinuxReady() ? '- A real Linux (Alpine) is available: python3, apk, git, node can be used through the terminal.' : '',
+    mode === 'full' && isLinuxReady() ? '- Missing a program? <tool name="install_tool">ffmpeg</tool> installs it and shows how to run it.' : '',
+    linux,
     '',
-    `Current time: ${now}`,
+    date,
     mem ? `Saved memory: ${mem}` : '',
   ].filter(Boolean).join('\n');
 }
@@ -221,7 +244,10 @@ async function runLocked(
   const profile = getModelProfile();
   const weak = !!profile && (profile.tier === 'tiny' || profile.looksBase);
   const mode = promptMode();
-  const nPredict = weak ? N_PREDICT_WEAK : N_PREDICT_FULL;
+  const big = !weak && (profile?.paramsB ?? 0) >= BIG_MODEL_B;
+  const nPredict = weak ? N_PREDICT_WEAK : big ? N_PREDICT_BIG : N_PREDICT_FULL;
+  const routedCap = big ? ROUTED_RESULT_CHARS_BIG : ROUTED_RESULT_CHARS;
+  const completionLimitMs = big ? MAX_COMPLETION_MS_BIG : MAX_COMPLETION_MS;
   const warnings: string[] = attachment ? [...attachment.warnings] : [];
   const steps: AgentStep[] = [];
   let stepSeq = 0;
@@ -233,22 +259,47 @@ async function runLocked(
   // tool-call JSON). Tiny/base models keep the tag protocol + the app-side router.
   let useNative = false;
   try { useNative = !weak && mode === 'full' && (profile?.supportsTools ?? true) && ctx.isJinjaSupported(); } catch { useNative = false; }
-  const nativeTools = useNative ? nativeToolSpecs() : [];
+  const nativeTools = useNative ? nativeToolSpecs(big ? NATIVE_TOOLS_LEAN : undefined) : [];
   if (!nativeTools.length) useNative = false;
   let system = await buildSystemPrompt(mode, useNative);
   const toolsChars = useNative ? JSON.stringify(nativeTools).length : 0;
   const budget = Math.max(1500, charBudget(nPredict) - toolsChars);
 
   /* ── 1) tools the app runs on its own ────────────────────────────────── */
-  const routed: RouteHit[] = autoRoute(question, { hasAttachment: !!attachment });
+  const routed: RouteHit[] = autoRoute(question, { hasAttachment: !!attachment, broad: weak });
   const routedBlocks: string[] = [];
   for (const hit of routed) {
     const id = nextId();
     onEvent({ type: 'tool_call', id, tool: hit.tool, arg: hit.arg });
+    if (toolNeedsConfirm(hit.tool)) onEvent({ type: 'thought', text: `⏳ بانتظار موافقتك على ${hit.tool}...` });
     const result = await dispatchTool(hit.tool, hit.arg);
     onEvent({ type: 'tool_result', id, tool: hit.tool, result });
     steps.push({ id, tool: hit.tool, arg: hit.arg, result, auto: true });
-    routedBlocks.push(`[${hit.tool}${hit.arg ? `: ${clip(hit.arg, 120)}` : ''}]\n${clip(result, ROUTED_RESULT_CHARS)}`);
+    routedBlocks.push(`[${hit.tool}${hit.arg ? `: ${clip(hit.arg, 120)}` : ''}]\n${clip(result, routedCap)}`);
+  }
+
+  /* ── 1b) answers the app can give by itself ──────────────────────────── */
+  // A request a tool fully answers (the time, a sum) must never depend on a model — least of all a small or slow one.
+  let finalText = '';
+  let skipModel = false;
+  let showRaw = weak;
+  if (!attachment && routed.length === 1 && question.length <= 80) {
+    const only = routed[0];
+    const got = steps[steps.length - 1];
+    if (only.tool === 'datetime') {
+      finalText = formatNowArabic();
+      skipModel = true;
+      showRaw = false;
+    } else if (only.tool === 'calc' && got && !/error|invalid|خطأ/i.test(got.result)) {
+      finalText = `🧮 ${got.result.includes('=') ? got.result : `${only.arg} = ${got.result}`}`;
+      skipModel = true;
+      showRaw = false;
+    }
+  }
+  if (!skipModel && weak && !attachment && routed.length > 0) {
+    // A tiny/base model only garbles tool output: show the results directly.
+    finalText = 'النموذج المحمّل صغير، فبعرض لك نتيجة الأدوات مباشرة بدل ما يلخّصها غلط. حمّل نموذج Instruct أكبر (4B+) عشان يلخّص ويفكّر.';
+    skipModel = true;
   }
 
   /* ── 2) build the user message ───────────────────────────────────────── */
@@ -298,13 +349,13 @@ async function runLocked(
   const activeTurn = () => (useNative ? turnNative : turnLegacy);
   const sampling = samplingFor(profile);
   const stopBase = [...STOP_WORDS];
-  let finalText = '';
   let slowestTps: number | null = null;
+  let autoSearched = false;
   // Auto-routed results already count as tool use for the model.
   const maxRounds = routed.length ? Math.max(1, maxToolRounds - 2) : maxToolRounds;
 
   /* ── 3) model loop (the model may request more tools) ────────────────── */
-  for (let round = 0; round <= maxRounds; round++) {
+  for (let round = 0; !skipModel && round <= maxRounds; round++) {
     const lastRound = round === maxRounds;
     const nativeRound = useNative && !lastRound;
     onEvent({ type: 'thought', text: round === 0 ? 'يفكر...' : 'بيراجع النتيجة...' });
@@ -321,6 +372,18 @@ async function runLocked(
     let acc = '';
     let tokens = 0;
     let looped = false;
+    let timedOut = false;
+    let firstTokenAt = 0;
+    const roundStart = Date.now();
+    // Without feedback a slow model looks frozen: show prefill progress, then a live tail with tokens/s.
+    const ticker = setInterval(() => {
+      if (!firstTokenAt) {
+        const secs = Math.round((Date.now() - roundStart) / 1000);
+        onEvent({ type: 'thought', text: `بيقرا السؤال والأدوات... ${secs}ث${big ? ' — النموذج كبير، أول رد ممكن ياخد دقايق' : ''}` });
+      }
+    }, 3000);
+    // Never hang forever: if the model is this slow, cut it and say why.
+    const watchdog = setTimeout(() => { timedOut = true; ctx.stopCompletion().catch(() => {}); }, completionLimitMs);
     let result: Awaited<ReturnType<typeof ctx.completion>>;
     try {
       result = await ctx.completion(
@@ -334,18 +397,23 @@ async function runLocked(
           stop: nativeRound || lastRound || mode === 'minimal' ? stopBase : [...stopBase, '</tool>', '</tool_call>'],
         },
         (data) => {
+          if (!firstTokenAt) firstTokenAt = Date.now();
           acc += data.token;
           tokens++;
-          if (tokens % 10 === 0) {
-            if (!looped && detectLoop(acc)) {
-              looped = true;
-              ctx.stopCompletion().catch(() => {});
-            }
-            if (tokens % 30 === 0) onEvent({ type: 'thought', text: `يكتب الرد... (${tokens})` });
+          if (tokens % 10 === 0 && !looped && detectLoop(acc)) {
+            looped = true;
+            ctx.stopCompletion().catch(() => {});
+          }
+          if (tokens % 6 === 0) {
+            const rate = tokens / Math.max(1, (Date.now() - firstTokenAt) / 1000);
+            const tail = acc.replace(/\s+/g, ' ').slice(-60);
+            onEvent({ type: 'thought', text: `✍️ …${tail}  (${tokens} توكن · ${rate.toFixed(1)}/ث)` });
           }
         },
       );
     } catch (e: any) {
+      clearInterval(ticker);
+      clearTimeout(watchdog);
       if (nativeRound) {
         // This model/template can't do native tools: fall back to the tag protocol and redo this round.
         useNative = false;
@@ -357,6 +425,9 @@ async function runLocked(
       throw new Error(`فشل التوليد: ${e?.message || e}`);
     }
 
+    clearInterval(ticker);
+    clearTimeout(watchdog);
+    if (timedOut) warnings.push('الرد اتقطع لأن النموذج بطيء جداً على الجهاز — جرّب نموذج أصغر (4–9B).');
     const tps = result.timings?.predicted_per_second;
     if (typeof tps === 'number' && tps > 0 && (result.tokens_predicted ?? 0) >= 24) {
       slowestTps = slowestTps === null ? tps : Math.min(slowestTps, tps);
@@ -385,6 +456,12 @@ async function runLocked(
     } else if (!(lastRound || mode === 'minimal')) {
       call = parseToolCall(raw); // tag / Hermes text form (also catches models that ignore native tools)
     }
+    if (!call && !weak && !lastRound && !autoSearched && !attachment && steps.length === 0
+        && isInfoQuestion(question) && looksUncertain(raw)) {
+      // "Sorry, I don't know…" is not an answer: go and look it up on the web instead.
+      autoSearched = true;
+      call = { before: '', tool: 'search', arg: cleanQuery(question) || question };
+    }
     if (!call) {
       finalText = stripToolMarkup(raw);
       if (result.context_full) warnings.push('الـ context امتلى — الرد ممكن يكون ناقص.');
@@ -394,6 +471,7 @@ async function runLocked(
     if (call.before) answerParts.push(call.before);
     const id = nextId();
     onEvent({ type: 'tool_call', id, tool: call.tool, arg: call.arg });
+    if (toolNeedsConfirm(call.tool)) onEvent({ type: 'thought', text: `⏳ بانتظار موافقتك على تشغيل ${call.tool}...` });
     const toolResult = await dispatchTool(call.tool, call.arg);
     onEvent({ type: 'tool_result', id, tool: call.tool, result: toolResult });
     steps.push({ id, tool: call.tool, arg: call.arg, result: toolResult });
@@ -429,7 +507,7 @@ async function runLocked(
   let answer = answerParts.join('\n\n').trim();
 
   // Weak / base models often can't summarise tool output: always show the raw results too.
-  if (weak && steps.length) {
+  if (showRaw && steps.length) {
     const raws = steps.map(s => `▸ ${s.tool}${s.arg ? ` (${clip(s.arg, 60)})` : ''}:\n${clip(s.result, 900)}`).join('\n\n');
     answer = `${answer}${answer ? '\n\n' : ''}— نتائج الأدوات —\n${raws}`.trim();
   }
