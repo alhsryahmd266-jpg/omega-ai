@@ -22,6 +22,8 @@ import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, normalizePermKey, requestPermission,
 } from './permissions';
 
+import { browseOnPage, getLastLinks, type PageResult } from './browserBridge';
+
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
 
@@ -787,6 +789,47 @@ export async function toolInspectFile(arg: string): Promise<string> {
   return inspectFile({ uri, name, size: info.size }, 14000);
 }
 
+/* ── BROWSER (hidden WebView that runs JavaScript) ─────────────────────── */
+function formatPage(r: PageResult): string {
+  if (!r.ok) return `Browser error: ${r.error || 'unknown'}`;
+  const links = (r.links || []).slice(0, 40);
+  const linkLines = links.map(l => `[${l.n}] ${l.text} — ${l.href}`).join('\n');
+  return [
+    `Title: ${r.title || '(none)'}`,
+    `URL: ${r.url || ''}`,
+    '',
+    clip((r.text || '').trim() || '(no visible text)', 6000),
+    '',
+    links.length ? `Links (use click_link with the number):\n${linkLines}` : 'Links: none found',
+  ].join('\n');
+}
+
+export async function toolBrowser(arg: string): Promise<string> {
+  const url = arg.trim().split('\n')[0].trim();
+  if (!/^https?:\/\//i.test(url)) return 'URL must start with http:// or https://';
+  return formatPage(await browseOnPage(url));
+}
+
+export async function toolClickLink(arg: string): Promise<string> {
+  const raw = arg.trim();
+  const n = parseInt(raw, 10);
+  const link = getLastLinks().find(l => l.n === n);
+  if (!link) return `No link number ${raw} on the last page. Use browser first, then pick a number from its links.`;
+  return formatPage(await browseOnPage(link.href));
+}
+
+/* ── TOOL EVALUATOR (reads a tool's README so the agent learns how to use it) */
+export async function toolToolEvaluator(arg: string): Promise<string> {
+  const a = arg.trim();
+  const m = /github\.com\/([\w.-]+)\/([\w.-]+)/i.exec(a) || /^([\w.-]+)\/([\w.-]+)$/.exec(a);
+  if (!m) return 'Give a GitHub URL or owner/repo, e.g. https://github.com/owner/repo or owner/repo.';
+  const owner = m[1];
+  const repo = m[2].replace(/\.git$/i, '');
+  const readme = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/README.md`;
+  const out = await toolFetchUrl(JSON.stringify({ url: readme, max: 12000 }));
+  return `README of ${owner}/${repo} (read it to decide how to install and call the tool):\n${out}`;
+}
+
 /* ── TOOL REGISTRY ─────────────────────────────────────────────────────── */
 export type ToolName =
   | 'search' | 'fetch_url' | 'download_file' | 'terminal' | 'javascript' | 'calc' | 'datetime'
@@ -794,7 +837,8 @@ export type ToolName =
   | 'device_info' | 'open_url' | 'share_text' | 'permission'
   | 'mem_save' | 'mem_get' | 'mem_list' | 'mem_delete'
   | 'copy_clipboard' | 'read_clipboard'
-  | 'python' | 'pkg_install' | 'install_tool';
+  | 'python' | 'pkg_install' | 'install_tool'
+  | 'browser' | 'click_link' | 'tool_evaluator';
 
 interface ToolSpec {
   name: ToolName;
@@ -895,6 +939,15 @@ const TOOLS: ToolSpec[] = [
   { name: 'install_tool', confirm: true, advertise: () => linuxReady,
     usage: 'install any command-line tool into Alpine Linux and learn how to run it. Argument: the package name (e.g. ffmpeg, git, tesseract-ocr). Returns its executables, version and --help, and remembers them.',
     run: a => toolInstallTool(a) },
+  { name: 'browser', confirm: false, advertise: true,
+    usage: 'open a web page in a hidden browser that runs JavaScript, and get its visible text plus a numbered list of links. Use it when fetch_url misses content or when you need to follow links. Argument: a URL.',
+    run: toolBrowser },
+  { name: 'click_link', confirm: false, advertise: true,
+    usage: 'open link number N from the last browser page. Argument: the number.',
+    run: toolClickLink },
+  { name: 'tool_evaluator', confirm: false, advertise: true,
+    usage: 'read a tool or library README (GitHub URL or owner/repo) to learn how to install and use it. Argument: the GitHub URL or owner/repo.',
+    run: toolToolEvaluator },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
