@@ -971,6 +971,7 @@ const ALIASES: Record<string, ToolName> = {
   web_search: 'search', websearch: 'search', google: 'search',
   fetch: 'fetch_url', http: 'fetch_url', get: 'fetch_url',
   download: 'download_file', wget: 'download_file', save_url: 'download_file', curl: 'fetch_url', browse: 'fetch_url', url: 'fetch_url',
+  package_installer: 'install_tool', code_executor: 'python', open_page: 'browser', click: 'click_link',
   shell: 'terminal', bash: 'terminal', sh: 'terminal', cmd: 'terminal', command: 'terminal',
   js: 'javascript', node: 'javascript', code: 'javascript',
   calculator: 'calc', math: 'calc',
@@ -1055,7 +1056,7 @@ export const NATIVE_TOOLS_DEFAULT: ToolName[] = [
   'install_tool', 'mem_save', 'mem_get', 'python',
 ];
 /** Big/slow models pay for every prompt token — give them only the essentials (the router covers time/files). */
-export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc'];
+export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc', 'browser', 'click_link'];
 
 /** OpenAI-style function schemas for llama.rn's `tools` option. */
 export function nativeToolSpecs(only: ToolName[] = NATIVE_TOOLS_DEFAULT): object[] {
