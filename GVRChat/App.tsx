@@ -19,6 +19,7 @@ import {
   type ModelInfo,
 } from './src/localLLM';
 import { runWithAttachment, resetConversation, type StepEvent, type AgentStep } from './src/gvrEngine';
+import { HiddenBrowser } from './src/browserBridge';
 import { prepareAttachment, pickAnyFile, type PreparedAttachment } from './src/attachments';
 import {
   setToolConfirmHandler, resetToolApprovals, resetTerminalState, toolTerminal,
@@ -748,6 +749,7 @@ export default function App() {
       <NeuralBG />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        <HiddenBrowser />
 
         <BlurView intensity={40} tint="dark" style={styles.header}>
           <LinearGradient colors={['rgba(109,40,217,0.15)','rgba(6,182,212,0.05)']}
