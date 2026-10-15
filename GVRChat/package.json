@@ -9,6 +9,7 @@
   "dependencies": {
     "expo": "~51.0.0",
     "react-native-webview": "13.8.6",
+    "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
     "expo-linear-gradient": "~13.0.2",
     "expo-blur": "~13.0.2",
