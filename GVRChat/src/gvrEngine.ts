@@ -24,6 +24,7 @@ import {
 } from './tools';
 import { autoRoute, cleanQuery, isInfoQuestion, type RouteHit } from './router';
 import { formatNowArabic, looksUncertain } from './instant';
+import { PLAYBOOK } from './skills';
 import type { PreparedAttachment } from './attachments';
 
 /* ── TYPES (App.tsx depends on these exact shapes) ─────────────────────── */
@@ -121,6 +122,7 @@ async function buildSystemPrompt(mode: PromptMode, native = false): Promise<stri
       '- One tool call at a time; wait for the result. Never invent tool output. If a tool fails, try another way.',
       '- If the message already contains results the app obtained, use them; do not repeat those tools.',
       '- Ask before destructive actions (deleting, overwriting).',
+      ...PLAYBOOK.map(r => '- ' + r),
       '- Reply in the user\'s language (Arabic dialects are fine). Be concise: short answers unless detail is requested. Never repeat sentences.',
       linux,
       '',
