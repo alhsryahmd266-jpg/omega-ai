@@ -23,6 +23,7 @@ import {
 } from './permissions';
 
 import { browseOnPage, getLastLinks, type PageResult } from './browserBridge';
+import { SKILLS, skillsCatalog, loadSkill } from './skills';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
@@ -830,6 +831,20 @@ export async function toolToolEvaluator(arg: string): Promise<string> {
   return `README of ${owner}/${repo} (read it to decide how to install and call the tool):\n${out}`;
 }
 
+/* ── SKILLS + TOOL SEARCH (load procedures, find tools by keyword) ────── */
+async function toolSearch(arg: string): Promise<string> {
+  const words = arg.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+  if (!words.length) return 'Give keywords, e.g. "download file" or "github".';
+  const scored = TOOLS.map(t => {
+    const u = typeof t.usage === 'function' ? t.usage() : t.usage;
+    const hay = (t.name + ' ' + u).toLowerCase();
+    const score = words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0);
+    return { t, u, score };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 6);
+  if (!scored.length) return 'No matching tool. Try other keywords.';
+  return scored.map(x => `${x.t.name}: ${x.u.slice(0, 220)}`).join('\n');
+}
+
 /* ── TOOL REGISTRY ─────────────────────────────────────────────────────── */
 export type ToolName =
   | 'search' | 'fetch_url' | 'download_file' | 'terminal' | 'javascript' | 'calc' | 'datetime'
@@ -838,7 +853,8 @@ export type ToolName =
   | 'mem_save' | 'mem_get' | 'mem_list' | 'mem_delete'
   | 'copy_clipboard' | 'read_clipboard'
   | 'python' | 'pkg_install' | 'install_tool'
-  | 'browser' | 'click_link' | 'tool_evaluator';
+  | 'browser' | 'click_link' | 'tool_evaluator'
+  | 'skill' | 'tool_search';
 
 interface ToolSpec {
   name: ToolName;
@@ -948,6 +964,12 @@ const TOOLS: ToolSpec[] = [
   { name: 'tool_evaluator', confirm: false, advertise: true,
     usage: 'read a tool or library README (GitHub URL or owner/repo) to learn how to install and use it. Argument: the GitHub URL or owner/repo.',
     run: toolToolEvaluator },
+  { name: 'skill', confirm: false, advertise: true,
+    usage: () => 'load the step-by-step procedure for a task before starting it. Use it for installing or running programs, and for Python projects. Available skills:\n' + skillsCatalog() + '\nArgument: the skill name.',
+    run: async (arg: string) => loadSkill(arg) ?? `Unknown skill "${arg.trim()}". Available: ${SKILLS.map(s => s.name).join(', ')}` },
+  { name: 'tool_search', confirm: false, advertise: true,
+    usage: 'find the right tool when unsure which one to use. Argument: keywords, e.g. "download file" or "run python". Returns matching tool names and how to use them.',
+    run: toolSearch },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
@@ -1056,7 +1078,7 @@ export const NATIVE_TOOLS_DEFAULT: ToolName[] = [
   'install_tool', 'mem_save', 'mem_get', 'python',
 ];
 /** Big/slow models pay for every prompt token — give them only the essentials (the router covers time/files). */
-export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc', 'browser', 'click_link'];
+export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc', 'browser', 'click_link', 'skill', 'tool_search'];
 
 /** OpenAI-style function schemas for llama.rn's `tools` option. */
 export function nativeToolSpecs(only: ToolName[] = NATIVE_TOOLS_DEFAULT): object[] {
