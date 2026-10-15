@@ -24,6 +24,7 @@ import {
 
 import { browseOnPage, getLastLinks, type PageResult } from './browserBridge';
 import { SKILLS, skillsCatalog, loadSkill } from './skills';
+import { getSecret, ensureSecret } from './secrets';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
@@ -845,6 +846,47 @@ async function toolSearch(arg: string): Promise<string> {
   return scored.map(x => `${x.t.name}: ${x.u.slice(0, 220)}`).join('\n');
 }
 
+/* ── SECRETS + GITHUB API (the agent uses tokens by name, never sees them) ─ */
+async function toolRequestSecret(arg: string): Promise<string> {
+  const [namePart, ...rest] = arg.split('|');
+  const name = namePart.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  const reason = rest.join('|').trim();
+  if (!name) return 'Give a name, e.g. GITHUB_TOKEN | to read private repos.';
+  const ok = await ensureSecret(name, reason);
+  return ok
+    ? `Secret ${name} is stored. Use it by name (for example github_api with "secret": "${name}"). Never ask the user to paste it in chat.`
+    : `Secret ${name} was not provided.`;
+}
+
+async function toolGithubApi(arg: string): Promise<string> {
+  let j: any;
+  try { j = JSON.parse(arg); } catch { j = { path: arg.trim() }; }
+  const path = String(j.path || '').trim();
+  if (!/^\/[\w./?=&%-]+$/.test(path)) return 'Give a path such as /repos/OWNER/REPO/releases/latest.';
+  const method = String(j.method || 'GET').toUpperCase();
+  if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return 'Unsupported method.';
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': UA };
+  let token: string | null = null;
+  const secretName = String(j.secret || '').trim().toUpperCase();
+  if (secretName) {
+    token = await getSecret(secretName);
+    if (!token) return `Secret ${secretName} is not stored yet. Call request_secret first.`;
+    headers.Authorization = `Bearer ${token}`;
+  }
+  try {
+    const r = await fetch(`https://api.github.com${path}`, {
+      method,
+      headers,
+      body: j.body ? JSON.stringify(j.body) : undefined,
+    });
+    let text = await r.text();
+    if (token) text = text.split(token).join('[secret hidden]');
+    return `HTTP ${r.status}\n${clip(text, 8000)}`;
+  } catch (e: any) {
+    return `GitHub request failed: ${e?.message || e}`;
+  }
+}
+
 /* ── TOOL REGISTRY ─────────────────────────────────────────────────────── */
 export type ToolName =
   | 'search' | 'fetch_url' | 'download_file' | 'terminal' | 'javascript' | 'calc' | 'datetime'
@@ -854,7 +896,8 @@ export type ToolName =
   | 'copy_clipboard' | 'read_clipboard'
   | 'python' | 'pkg_install' | 'install_tool'
   | 'browser' | 'click_link' | 'tool_evaluator'
-  | 'skill' | 'tool_search';
+  | 'skill' | 'tool_search'
+  | 'request_secret' | 'github_api';
 
 interface ToolSpec {
   name: ToolName;
@@ -970,6 +1013,12 @@ const TOOLS: ToolSpec[] = [
   { name: 'tool_search', confirm: false, advertise: true,
     usage: 'find the right tool when unsure which one to use. Argument: keywords, e.g. "download file" or "run python". Returns matching tool names and how to use them.',
     run: toolSearch },
+  { name: 'request_secret', confirm: false, advertise: true,
+    usage: 'ask the user to enter a secret (API token, password) in a secure box. The value is stored encrypted and never returned to you. Argument: NAME | reason. Example: GITHUB_TOKEN | to read private repos.',
+    run: toolRequestSecret },
+  { name: 'github_api', confirm: true, advertise: true,
+    usage: 'call the GitHub REST API. Argument: JSON {"path": "/repos/OWNER/REPO/releases/latest", "method": "GET", "body": {...}, "secret": "GITHUB_TOKEN"}. Set "secret" only when you need private access or a write; the token is added for you and never shown to you.',
+    run: toolGithubApi },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
