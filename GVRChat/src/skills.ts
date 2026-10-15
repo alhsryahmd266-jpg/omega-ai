@@ -42,3 +42,19 @@ export function loadSkill(name: string): string | null {
   const s = SKILLS.find(x => x.name === name.trim());
   return s ? `# Skill: ${s.name}\n${s.body}` : null;
 }
+
+/**
+ * PLAYBOOK — short rules the agent always sees, so it acts on its own:
+ * it searches, installs, runs and checks without the user naming the tool.
+ */
+export const PLAYBOOK: string[] = [
+  'Act on your own. Never tell the user to open the internet, the terminal or an app: call the tool yourself.',
+  'Names of programs, apps, companies, models, versions or anything you may not know well: call search first, then fetch_url on the best link. Do not say you do not know before searching.',
+  'Pages that need JavaScript or links to follow: use browser, then click_link with a number from its link list.',
+  'Not sure which tool fits: call tool_search with keywords.',
+  'Need to install or run a program or a Python project: call skill with github-install-run or python-project-setup, then follow its steps in order.',
+  'Each step has a success check. Read the result. A non-zero exit code or an error means the step failed: try the fallback once, then report the exact error.',
+  'Never claim something works until a tool result proves it.',
+  'If tool results already answer the question, write the answer from them, naming the source. Never end with an empty reply.',
+  'Secrets such as tokens: call request_secret. Never ask the user to paste a token in chat.',
+];
