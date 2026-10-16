@@ -28,6 +28,7 @@ import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
 import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp } from './screen';
 import { toolBubbleShow, toolBubbleHide } from './bubble';
+import { toolSessionStart, toolSessionStop, toolSessionStatus } from './screen';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
@@ -903,7 +904,7 @@ export type ToolName =
   | 'request_secret' | 'github_api'
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
-  | 'bubble_show' | 'bubble_hide';
+  | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status';
 
 interface ToolSpec {
   name: ToolName;
@@ -1043,7 +1044,7 @@ const TOOLS: ToolSpec[] = [
   { name: 'screen_tap', confirm: false, advertise: true,
     usage: 'tap a button from the last screen_read by its number. Argument: the number, e.g. 4.',
     run: toolScreenTap },
-  { name: 'screen_type', confirm: true, advertise: true,
+  { name: 'screen_type', confirm: false, advertise: true,
     usage: 'type text into an input field from the last screen_read. Argument: number | text, e.g. 3 | hello.',
     run: toolScreenType },
   { name: 'screen_back', confirm: false, advertise: true,
@@ -1064,6 +1065,15 @@ const TOOLS: ToolSpec[] = [
   { name: 'bubble_hide', confirm: false, advertise: true,
     usage: 'hide the floating stop button. No argument.',
     run: async () => toolBubbleHide() },
+  { name: 'session_start', confirm: true, advertise: true,
+    usage: 'start a chat session with a person in an open app: the goal, the message limit and the time limit. The user must confirm. Argument: contact | goal | max messages | minutes. Example: Ahmed | catch up | 20 | 30.',
+    run: toolSessionStart },
+  { name: 'session_stop', confirm: false, advertise: true,
+    usage: 'stop the chat session now. No argument.',
+    run: async () => toolSessionStop() },
+  { name: 'session_status', confirm: false, advertise: true,
+    usage: 'show the active chat session: contact, messages sent, time left. No argument.',
+    run: async () => toolSessionStatus() },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
