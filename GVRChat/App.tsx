@@ -21,6 +21,7 @@ import {
 import { runWithAttachment, resetConversation, type StepEvent, type AgentStep } from './src/gvrEngine';
 import { HiddenBrowser } from './src/browserBridge';
 import { SecretPrompt } from './src/SecretPrompt';
+import { OverlayChatBridge } from './src/OverlayChatBridge';
 import { prepareAttachment, pickAnyFile, type PreparedAttachment } from './src/attachments';
 import {
   setToolConfirmHandler, resetToolApprovals, resetTerminalState, toolTerminal,
@@ -752,6 +753,7 @@ export default function App() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <HiddenBrowser />
         <SecretPrompt />
+        <OverlayChatBridge />
 
         <BlurView intensity={40} tint="dark" style={styles.header}>
           <LinearGradient colors={['rgba(109,40,217,0.15)','rgba(6,182,212,0.05)']}
