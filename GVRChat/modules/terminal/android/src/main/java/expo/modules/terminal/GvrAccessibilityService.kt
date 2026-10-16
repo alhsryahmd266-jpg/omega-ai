@@ -15,6 +15,7 @@ class GvrAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile var instance: GvrAccessibilityService? = null
         @Volatile var allowed: Set<String> = emptySet()
+        @Volatile var paused: Boolean = false
         private val BANNED_HINTS = listOf("bank", "pay", "wallet", "fawry", "instapay", "cash", "finance", "binance", "paypal", "nbe", "cib", "ahly")
         private const val MAX_NODES = 300
     }
@@ -35,6 +36,7 @@ class GvrAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
     private fun gate(pkg: String?): String? {
+        if (paused) return "PAUSED: the user stopped the agent with the bubble."
         if (pkg.isNullOrEmpty()) return "NO_APP"
         val p = pkg.lowercase()
         if (BANNED_HINTS.any { p.contains(it) }) {
