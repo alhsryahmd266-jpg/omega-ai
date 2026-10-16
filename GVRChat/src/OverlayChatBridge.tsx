@@ -84,6 +84,7 @@ async function runTurn(text: string) {
 
 export function OverlayChatBridge() {
   useEffect(() => {
+    Native.bubbleShow().catch(() => {});
     const emitter = new EventEmitter(Native);
     const sub = emitter.addListener('onOverlayMessage', async (e: { text: string }) => {
       const text = (e?.text || '').trim();
