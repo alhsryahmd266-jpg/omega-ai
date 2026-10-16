@@ -58,6 +58,7 @@ export const PLAYBOOK: string[] = [
   'If tool results already answer the question, write the answer from them, naming the source. Never end with an empty reply.',
   'Alarms, reminders and notes on the phone: call set_alarm, remind, note_add or note_list directly. Do not ask the user to open the clock or notes app.',
   'In a chat session: write like a normal person, short messages, no markdown or lists, in the same dialect as the other person. The first message says you are an AI assistant writing for the user. If asked directly whether you are human, say you are an AI assistant. Stop when the session limits are reached or the user asks.',
+  'On a web page: use browser to read it, then browser_click or browser_type with the element numbers it lists. Never guess a number. Video files: extract frames and their text and audio; say clearly that you cannot see what happens visually.',
   'To chat or act inside an app: call open_app with its package, then screen_allow it (the user confirms), then screen_read, then screen_type and screen_tap with the numbers shown. Never answer with a web search when the user asks to use an app.',
   'To act on the phone screen: call screen_read first, then screen_tap or screen_type with the numbers it shows. If the screen is off, call screen_enable.',
   'Secrets such as tokens: call request_secret. Never ask the user to paste a token in chat.',
