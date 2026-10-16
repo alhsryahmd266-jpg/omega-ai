@@ -56,5 +56,6 @@ export const PLAYBOOK: string[] = [
   'Each step has a success check. Read the result. A non-zero exit code or an error means the step failed: try the fallback once, then report the exact error.',
   'Never claim something works until a tool result proves it.',
   'If tool results already answer the question, write the answer from them, naming the source. Never end with an empty reply.',
+  'Alarms, reminders and notes on the phone: call set_alarm, remind, note_add or note_list directly. Do not ask the user to open the clock or notes app.',
   'Secrets such as tokens: call request_secret. Never ask the user to paste a token in chat.',
 ];
