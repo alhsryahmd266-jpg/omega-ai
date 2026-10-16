@@ -5,7 +5,7 @@
  */
 export interface Skill { name: string; description: string; body: string }
 
-export const SKILLS: Skill[] = [
+const BASE_SKILLS: Skill[] = [
   {
     name: 'github-install-run',
     description: 'Install or run a program from GitHub on the phone. Use for any request like "install X from GitHub", "run this repo", "get this tool".',
@@ -33,6 +33,139 @@ export const SKILLS: Skill[] = [
 7. Report to the user: what was installed, the exact run command, and the last output.`,
   },
 ];
+
+const NEW_SKILLS: Skill[] = [
+  {
+    name: 'phone-screen-task',
+    description: 'Do any task inside an app on the phone (open it, read it, tap, type). Use for "افتح X واعملي Y" requests in any app.',
+    body: `Goal: finish the task inside the app and prove it.
+1. Check control first: call diagnose. If accessibility is not connected, stop and tell the user the exact fix from the result. Do not guess.
+2. Open the app: find_app with the name (it also returns the screen). If it says not installed, tell the user.
+3. Allow the app if it is not allowed yet: screen_allow with its package. The user confirms. Never allow banking or payment apps.
+4. Read: screen_read. Find the element numbers for the target (button, input, text). Never guess a number.
+5. Act one step at a time: screen_type for text fields, screen_tap for buttons. Use screen_back to leave a wrong screen.
+6. Verify after every action: screen_read again and check the expected change happened. If not, try one alternative, then report the exact screen state.
+7. Finish: say what was done and what is still missing. Never claim success without a screen check.
+Limits: games and some apps hide their content from accessibility. If screen_read returns no elements, say so instead of pretending.`,
+  },
+  {
+    name: 'chat-session',
+    description: 'Hold a bounded chat with a person in an app (WhatsApp or similar) inside an approved session. Use for "كلمني فلان" or "رد على فلان".',
+    body: `Goal: a short, natural conversation the user approved, with clear limits.
+1. Confirm the contact name is visible on screen (screen_read). If not, stop and ask the user to open the right chat.
+2. Start a session only after the user agrees: session_start with contact, goal, message limit and minutes. The user confirms.
+3. First message: say you are an AI assistant writing for the user, then the goal. Short sentences, no lists, no markdown, in the other person's dialect.
+4. For each reply: read the last message on screen (screen_read), write one reply that answers it, type it (screen_type), then tap send (screen_tap on the send button). Check the message appears (screen_read).
+5. Never discuss money, bank data, passwords, codes, appointments or commitments. Ask the user first.
+6. If the other person asks whether you are human, say you are an AI assistant. Never deny it.
+7. Stop when the session limit is reached, when the user says stop, or when the bubble is pressed. Then summarize the session with session_status.`,
+  },
+  {
+    name: 'web-research',
+    description: 'Answer questions that need current or checkable facts: news, prices, people, versions, software, documentation.',
+    body: `Goal: an answer backed by sources, not memory.
+1. Search: search with 2 to 4 precise keywords. Use the exact name of any product or person the user gave.
+2. Read the best result: fetch_url on the most official or most recent link (docs, company site, reputable news).
+3. If the page needs JavaScript or the content is missing: browser on the URL, then browser_click to open sub-pages by element number.
+4. Cross-check important facts with a second source. If sources disagree, say so.
+5. Answer in the user's language: direct answer first, then 2 to 4 key points, then the sources as links.
+6. Never answer a person question from a search snippet alone. If you cannot verify, say you could not confirm it.
+7. Dates matter: state the date of the source when it affects the answer.`,
+  },
+  {
+    name: 'video-and-media',
+    description: 'Work with a video or audio file: extract frames, text, speech, and say what can and cannot be known from it.',
+    body: `Goal: be honest about what the media can tell you, and extract what is possible.
+1. Check the file exists and its type (terminal: ls -la and ffprobe if available). If ffmpeg is missing, install it with install_tool or apk add ffmpeg.
+2. Extract frames: ffmpeg -i FILE -vf fps=1/5 frame_%03d.jpg (one frame every 5 seconds).
+3. Extract audio: ffmpeg -i FILE -vn -ac 1 -ar 16000 audio.wav.
+4. Text on screen: report it only if you have an OCR tool. If not, say the on-screen text could not be read.
+5. Speech: report it only if you have a speech-to-text tool. If not, say the audio could not be transcribed.
+6. Visual events (who does what, what happens): say clearly that you cannot see the images. Never invent what happens in the video.
+7. Summarize only what the tools actually produced, with timestamps when you have them.`,
+  },
+  {
+    name: 'app-install-update',
+    description: 'Install or update this app to the newest build, or install another APK the user gives.',
+    body: `Goal: the newest build is installed and the user confirms it.
+1. Call app_update. It opens the newest APK from the releases page.
+2. Tell the user: Android asks for confirmation; the user must approve the install.
+3. If the install says it is blocked, the user must allow installs from this source once in settings.
+4. Keep the old app data in mind: if the signature differs, Android needs the old app uninstalled first, which removes local data. Warn the user before that step.
+5. After the install, call diagnose to confirm the new version's control state.`,
+  },
+  {
+    name: 'phone-troubleshoot',
+    description: 'Find and fix why a phone feature does not work: screen control, bubble, alarms, reminders, speech, or model loading.',
+    body: `Goal: find the real cause from evidence, then fix it.
+1. Run diagnose first. Its output is the evidence.
+2. If accessibility is OFF in settings: open the page with screen_enable and ask the user to turn GVR Agent on. Wait for confirmation, then diagnose again.
+3. If accessibility is ON but NOT connected: ask the user to turn it off and on, then reopen the app once, then diagnose again.
+4. If the overlay permission is NO: ask the user to allow "display over other apps" for GVR Agent, then call bubble_show.
+5. If an app is not allowed: screen_allow it.
+6. If a tool returns an error text: quote the exact error to the user. Never invent a cause.
+7. Change one thing at a time, and test after each change.`,
+  },
+  {
+    name: 'github-repo-work',
+    description: 'Read, understand, and build or run a GitHub repository, including reading a README and following its install steps.',
+    body: `Goal: the repository is understood, built or run, and verified.
+1. Get the repo name (owner/repo) or the link. If only a name is given, ask for the link.
+2. Read the repo overview: github_api with path /repos/OWNER/REPO for the default branch and description.
+3. Read the README with tool_evaluator. Note the requirements, install commands, and run commands.
+4. Check the file tree: github_api with /repos/OWNER/REPO/git/trees/HEAD?recursive=1. Find the entry point, requirements file, and build file.
+5. Install dependencies in the right environment: Python in a venv (python-project-setup), Node with npm install in the project folder.
+6. Run the smallest check first (tests, --help, --version). Only then run the full program.
+7. Report: what was installed, the exact command that works, and the last output. If a step fails, quote the error and stop after one fix attempt.`,
+  },
+  {
+    name: 'reminders-alarms-notes',
+    description: 'Set alarms, reminders, and notes on the phone.',
+    body: `Goal: the time-based or saved item is set, and the user knows it.
+1. Alarm: set_alarm with HH:MM and a label. The clock app opens pre-filled; tell the user to confirm it there.
+2. Reminder: remind with minutes and the text. Notifications permission may be asked the first time.
+3. Note: note_add with the text. To review, note_list shows the latest 20.
+4. Convert relative times (tomorrow, after an hour) to minutes or a clock time before calling the tool, and say the result back to the user.
+5. Never promise an alarm or reminder will fire unless the tool confirmed it was scheduled.`,
+  },
+  {
+    name: 'model-and-speed',
+    description: 'Choose the right model and speed settings for this phone, or explain why a model is slow.',
+    body: `Goal: the best model that fits the phone, with honest speed expectations.
+1. Ask for the phone RAM if it is not known. Call model_pick with it.
+2. Explain the result: the model name, the memory it needs, and the speed settings it uses.
+3. Speed notes: smaller quantization is faster but slightly less accurate. Smaller context uses less memory. Speculative decoding needs a model that supports it; do not promise it for models that do not.
+4. If the answer is slow, first check the context size and batch size, then suggest a smaller model. Do not claim a speed number you did not measure.
+5. Vision models are separate files. Do not claim vision works unless a vision model is loaded.`,
+  },
+  {
+    name: 'safety-and-boundaries',
+    description: 'Rules that apply to every task: permissions, privacy, money, banking, other people, and what the agent must never do.',
+    body: `Rules that always apply:
+1. Never act in an app the user has not allowed (screen_allow). Never act in banking, payment, or wallet apps.
+2. Never type or send money details, passwords, codes, card numbers, or account numbers.
+3. Typing and sending to other people happens only inside an approved chat session, with the AI disclosure in the first message.
+4. Ask before anything destructive: deleting, overwriting, uninstalling, sending money, or changing account settings.
+5. Never try to bypass Android permissions, and never ask the user to paste a token in chat. Use request_secret.
+6. Never invent a result. If a tool failed, say so with the exact message.
+7. If the user asks for something unsafe or against the rules above, say no briefly and offer the closest safe alternative.`,
+  },
+  {
+    name: 'answer-style',
+    description: 'How to write answers: language, length, structure, honesty, and when to ask a question.',
+    body: `Rules for every answer:
+1. Reply in the user's language and dialect. Arabic dialect is fine; keep English words for names and commands.
+2. Start with the direct answer or the result. Then the key details. No long preambles.
+3. Use short paragraphs. Use a list only when the content is a list of steps or options.
+4. State uncertainty plainly. Say what was checked and what was not.
+5. If a question is ambiguous and the answer would change, ask one short question instead of guessing.
+6. Never repeat the same answer twice in a row. If the user asks again, add what is new.
+7. Never end with an empty reply. If the model has no text, answer from the latest tool result in one short paragraph.`,
+  },
+];
+
+export const SKILLS: Skill[] = [...BASE_SKILLS, ...NEW_SKILLS];
+
 
 export function skillsCatalog(): string {
   return SKILLS.map(s => `- ${s.name}: ${s.description}`).join('\n');
