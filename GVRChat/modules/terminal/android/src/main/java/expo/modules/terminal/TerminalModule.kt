@@ -863,6 +863,21 @@ class TerminalModule : Module() {
         promise.resolve("The bubble is hidden.")
     }
 
+    AsyncFunction("listApps") { promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        if (act == null) {
+            promise.resolve(emptyList<String>())
+        } else {
+            val pm = act.packageManager
+            val intent = android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+            val apps = pm.queryIntentActivities(intent, 0).map {
+                it.loadLabel(pm).toString() + "|" + it.activityInfo.packageName
+            }
+            promise.resolve(apps)
+        }
+    }
+
     AsyncFunction("writeFile") { path: String, content: String, promise: expo.modules.kotlin.Promise ->
       try {
         val rootfs = rootfsDir()
