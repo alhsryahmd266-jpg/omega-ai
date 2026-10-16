@@ -67,7 +67,14 @@ export async function toolScreenAllow(arg: string): Promise<string> {
 export async function toolOpenApp(arg: string): Promise<string> {
   const pkg = arg.trim();
   if (!/^[a-z0-9_]+(\.[a-z0-9_]+)+$/i.test(pkg)) return 'Give the package name, e.g. com.whatsapp';
-  return String(await Native.openApp(pkg));
+  const opened = String(await Native.openApp(pkg));
+  if (!opened.startsWith('Opened')) return opened;
+  await new Promise(r => setTimeout(r, 2500));
+  if (!(await getAllowed()).includes(pkg)) {
+    return `${opened} To read its screen, allow it first with screen_allow and ${pkg}; the user confirms.`;
+  }
+  if (!(await sync())) return `${opened} The screen service is off, so the screen cannot be read yet.`;
+  return `${opened}\nCurrent screen:\n${String(await Native.screenDump())}`;
 }
 
 export async function toolScreenEnable(): Promise<string> {
