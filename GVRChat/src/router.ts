@@ -135,6 +135,16 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
     add('screen_enable', '', 'screen_enable');
   }
 
+  // 1e) open the accessibility settings page (spelling varies a lot)
+  if (/(افتح|اعرض|وديني|اوديني|open|show)[^\n]{0,30}(امكان|إمكان|امكنه|امكنيه|الوصول|accessib)/i.test(n) || /(فعل|فعّل|شغل)[^\n]{0,20}(خدم[هة]\s+)?(الوصول|امكان|إمكان)/i.test(n)) {
+    add('screen_enable', '', 'screen_enable');
+  }
+
+  // 1f) install or update the app → app_update (never a web search)
+  if (/(ثبت|حدث|حدّث|نزل|install|update)[^\n]{0,25}(نسخ|apk|تحديث|احدث|أحدث|اخر|آخر)/i.test(n)) {
+    add('app_update', '', 'app_update');
+  }
+
   // 1d) "open <app>" → open_app with the package name (never a web search)
   const APP_PACKAGES: [RegExp, string][] = [
     [/واتس|whatsapp/i, 'com.whatsapp'],
