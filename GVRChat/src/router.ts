@@ -122,6 +122,14 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   const urls = raw.match(/https?:\/\/[^\s<>"'`)\]]+/gi) || [];
   for (const u of urls.slice(0, 2)) add('fetch_url', u.replace(/[.,،;:!?؟]+$/, ''), 'url');
 
+  // 1b) "open the secure box / enter a token" → request_secret (the value never enters the chat)
+  const wantsBox = /خان[هة]\s+مشفر|صندوق\s+مشفر|secure\s+(box|field)|encrypted\s+(box|field)/i.test(n);
+  const wantsToken = /(افتح|اعرض|ظهر|اظهر|حط|احط|ادخل|اكتب|open|show|enter)/i.test(n) && /توكن|token|api\s*key|كلمه\s+السر|password/i.test(n);
+  if (wantsBox || wantsToken) {
+    const name = /github|جيت\s*هب|جيثهب|gh\s/i.test(n) ? 'GITHUB_TOKEN' : 'API_TOKEN';
+    add('request_secret', `${name} | enter it once, stored encrypted`, 'secure_box');
+  }
+
   // 2) "open the terminal" → run a real probe command inline, right now
   if (/(افتح|شغل|اعرض|وريني|اظهر|open|show|launch|start|run)\s+(?:the\s+)?(ال)?(ترمنال|تيرمنال|تريمنال|ترمينال|تيرمينال|terminal|shell|console|طرفيه)/.test(n)) {
     add('terminal', TERMINAL_PROBE, 'open_terminal');
