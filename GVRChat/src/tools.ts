@@ -30,6 +30,7 @@ import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScre
 import { toolBubbleShow, toolBubbleHide } from './bubble';
 import { describePick } from './modelSelector';
 import { toolAppUpdate } from './appUpdate';
+import { toolSpeak, toolStopSpeaking } from './speech';
 import { toolSessionStart, toolSessionStop, toolSessionStatus } from './screen';
 
 const MEMORY_KEY = 'gvr_agent_memory';
@@ -909,7 +910,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app';
+  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop';
 
 interface ToolSpec {
   name: ToolName;
@@ -1108,6 +1109,12 @@ const TOOLS: ToolSpec[] = [
   { name: 'find_app', confirm: false, advertise: true,
     usage: 'find an installed app by its name (Arabic or English) and open it. Use it when the user asks to open an app you do not know the package of. Argument: the app name.',
     run: toolFindApp },
+  { name: 'speak', confirm: false, advertise: true,
+    usage: 'say a short text out loud with the phone voice. Argument: the text.',
+    run: toolSpeak },
+  { name: 'speak_stop', confirm: false, advertise: true,
+    usage: 'stop speaking now. No argument.',
+    run: async () => toolStopSpeaking() },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
