@@ -210,7 +210,7 @@ export async function toolFindApp(arg: string): Promise<string> {
       return 'Several apps match: ' + matches.slice(0, 8).map(m => `${m.label} (${m.pkg})`).join(', ') + '. Ask the user which one.';
     }
   }
-  return `No installed app matches "${tokens.join(' ')}". Tell the user it is not installed, or ask for the exact app name. Do not install packages to imitate the app.`;
+  return `No installed app matches "${tokens.join(' ')}" (apps scanned: ${all.length}). If apps scanned is 0, the phone did not list apps: say so and ask the user to run diagnose. Do not install packages to imitate the app.`;
 }
 
 export async function toolDiagnose(): Promise<string> {
