@@ -26,7 +26,7 @@ import { browseOnPage, getLastLinks, type PageResult } from './browserBridge';
 import { SKILLS, skillsCatalog, loadSkill } from './skills';
 import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
-import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable } from './screen';
+import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp } from './screen';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
@@ -901,7 +901,7 @@ export type ToolName =
   | 'skill' | 'tool_search'
   | 'request_secret' | 'github_api'
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
-  | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable';
+  | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app';
 
 interface ToolSpec {
   name: ToolName;
@@ -1053,6 +1053,9 @@ const TOOLS: ToolSpec[] = [
   { name: 'screen_enable', confirm: false, advertise: true,
     usage: 'open the Accessibility settings page so the user can turn on GVR Agent. No argument.',
     run: async () => toolScreenEnable() },
+  { name: 'open_app', confirm: false, advertise: true,
+    usage: 'open an installed app by its package name, e.g. com.whatsapp. Use it when the user asks to open an app. Then screen_allow it if you need to read its screen.',
+    run: toolOpenApp },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
