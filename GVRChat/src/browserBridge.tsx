@@ -1,19 +1,22 @@
 /**
- * browserBridge.tsx — a hidden WebView the agent can drive.
- * HiddenBrowser is mounted once in App.tsx. browseOnPage(url) loads a page there,
- * lets its JavaScript run, and returns the visible text plus numbered links.
+ * browserBridge.tsx — a hidden WebView the agent can read and drive.
+ * HiddenBrowser is mounted once in App.tsx. It opens a page, lists its links and
+ * interactive elements with numbers, clicks an element, and types into a field.
+ * No vision model is needed: the page's own structure is used.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 export interface PageLink { n: number; text: string; href: string }
+export interface PageElement { n: number; kind: string; label: string }
 export interface PageResult {
   ok: boolean;
   url?: string;
   title?: string;
   text?: string;
   links?: PageLink[];
+  elements?: PageElement[];
   error?: string;
 }
 
@@ -25,24 +28,37 @@ const EXTRACT_JS = `
 (function () {
   function post(obj) { window.ReactNativeWebView.postMessage(JSON.stringify(obj)); }
   try {
+    var nodes = document.querySelectorAll('a[href], button, input, textarea, select, [role="button"], [onclick]');
+    var elements = [];
     var links = [];
-    var as = document.querySelectorAll('a[href]');
-    for (var i = 0; i < as.length && links.length < 60; i++) {
-      var t = (as[i].innerText || as[i].getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ');
-      var h = as[i].href || '';
-      if (t && /^https?:/i.test(h)) links.push({ text: t.slice(0, 80), href: h });
+    var n = 0;
+    for (var i = 0; i < nodes.length && n < 80; i++) {
+      var el = nodes[i];
+      if (el.offsetParent === null && el.tagName !== 'BODY') continue;
+      var isInput = /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+      var label = (el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || el.title || '').trim().replace(/\\s+/g, ' ');
+      if (!label && !isInput) continue;
+      n++;
+      el.setAttribute('data-gvr', String(n));
+      var kind = isInput ? 'input' : (el.tagName === 'A' ? 'link' : 'button');
+      elements.push({ n: n, kind: kind, label: label.slice(0, 80) });
+      if (el.tagName === 'A' && /^https?:/i.test(el.href || '') && label) {
+        links.push({ text: label.slice(0, 80), href: el.href });
+      }
     }
     var text = (document.body && document.body.innerText) || '';
-    post({ ok: true, url: location.href, title: document.title, text: text.slice(0, 15000), links: links });
+    post({ kind: 'page', ok: true, url: location.href, title: document.title, text: text.slice(0, 15000), links: links.slice(0, 60), elements: elements });
   } catch (e) {
-    post({ ok: false, error: String(e) });
+    post({ kind: 'page', ok: false, error: String(e) });
   }
 })();
 true;
 `;
 
 let registerLoad: ((url: string, resolve: Resolver) => void) | null = null;
+let runJsImpl: ((js: string, afterMs: number, resolve: Resolver) => void) | null = null;
 let lastLinks: PageLink[] = [];
+let lastElements: PageElement[] = [];
 
 export function browseOnPage(url: string): Promise<PageResult> {
   return new Promise<PageResult>(resolve => {
@@ -54,8 +70,29 @@ export function browseOnPage(url: string): Promise<PageResult> {
   });
 }
 
+function actionJs(kind: 'click' | 'type', n: number, text: string): string {
+  const body = kind === 'click'
+    ? "el.scrollIntoView({ block: 'center' }); el.click(); return 'clicked';"
+    : "el.focus(); var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; var setter = Object.getOwnPropertyDescriptor(proto, 'value'); if (setter && setter.set) { setter.set.call(el, " + JSON.stringify(text) + "); } else { el.value = " + JSON.stringify(text) + "; } el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return 'typed';";
+  return "(function(){ try { var el = document.querySelector('[data-gvr=\"" + n + "\"]'); if (!el) { window.ReactNativeWebView.postMessage(JSON.stringify({ kind: 'action', ok: false, error: 'element " + n + " not found, read the page again' })); return; } var r = (function(){ " + body + " })(); window.ReactNativeWebView.postMessage(JSON.stringify({ kind: 'action', ok: true, result: r })); } catch (e) { window.ReactNativeWebView.postMessage(JSON.stringify({ kind: 'action', ok: false, error: String(e) })); } })(); true;";
+}
+
+export function actOnPage(kind: 'click' | 'type', n: number, text: string): Promise<PageResult> {
+  return new Promise<PageResult>(resolve => {
+    if (!runJsImpl) {
+      resolve({ ok: false, error: 'The browser is not ready yet.' });
+      return;
+    }
+    runJsImpl(actionJs(kind, n, text), 2500, resolve);
+  });
+}
+
 export function getLastLinks(): PageLink[] {
   return lastLinks;
+}
+
+export function getLastElements(): PageElement[] {
+  return lastElements;
 }
 
 export function HiddenBrowser() {
@@ -64,6 +101,7 @@ export function HiddenBrowser() {
   const pending = useRef<Resolver | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const afterRef = useRef<number>(SETTLE_MS);
 
   const finish = (r: PageResult) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -73,14 +111,33 @@ export function HiddenBrowser() {
     if (cb) cb(r);
   };
 
+  const armTimeout = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => finish({ ok: false, error: 'Timed out after 30 seconds.' }), LOAD_TIMEOUT_MS);
+  };
+
   useEffect(() => {
     registerLoad = (url, resolve) => {
       if (pending.current) finish({ ok: false, error: 'Replaced by a newer page request.' });
       pending.current = resolve;
-      timeoutRef.current = setTimeout(() => finish({ ok: false, error: 'Timed out after 30 seconds.' }), LOAD_TIMEOUT_MS);
+      armTimeout();
       setReq({ url, id: Date.now() });
     };
-    return () => { registerLoad = null; };
+    runJsImpl = (js, afterMs, resolve) => {
+      if (!webRef.current) {
+        resolve({ ok: false, error: 'The browser is not ready yet.' });
+        return;
+      }
+      if (pending.current) finish({ ok: false, error: 'Replaced by a newer action.' });
+      pending.current = resolve;
+      afterRef.current = afterMs;
+      armTimeout();
+      webRef.current.injectJavaScript(js);
+    };
+    return () => {
+      registerLoad = null;
+      runJsImpl = null;
+    };
   }, []);
 
   const onLoadEnd = () => {
@@ -92,8 +149,21 @@ export function HiddenBrowser() {
 
   const onMessage = (e: WebViewMessageEvent) => {
     let data: any;
-    try { data = JSON.parse(e.nativeEvent.data); } catch {
+    try {
+      data = JSON.parse(e.nativeEvent.data);
+    } catch {
       finish({ ok: false, error: 'Could not read the page.' });
+      return;
+    }
+    if (data.kind === 'action') {
+      if (!data.ok) {
+        finish({ ok: false, error: data.error || 'The action failed.' });
+        return;
+      }
+      if (settleRef.current) clearTimeout(settleRef.current);
+      settleRef.current = setTimeout(() => {
+        webRef.current?.injectJavaScript(EXTRACT_JS);
+      }, afterRef.current);
       return;
     }
     if (!data.ok) {
@@ -101,8 +171,10 @@ export function HiddenBrowser() {
       return;
     }
     const links: PageLink[] = (data.links || []).map((l: any, i: number) => ({ n: i + 1, text: l.text, href: l.href }));
+    const elements: PageElement[] = (data.elements || []).map((x: any) => ({ n: x.n, kind: x.kind, label: x.label }));
     lastLinks = links;
-    finish({ ok: true, url: data.url, title: data.title, text: data.text, links });
+    lastElements = elements;
+    finish({ ok: true, url: data.url, title: data.title, text: data.text, links, elements });
   };
 
   if (!req) return null;
