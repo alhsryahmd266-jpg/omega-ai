@@ -26,7 +26,7 @@ import { browseOnPage, getLastLinks, actOnPage, type PageResult } from './browse
 import { SKILLS, skillsCatalog, loadSkill } from './skills';
 import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
-import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp } from './screen';
+import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp, toolFindApp } from './screen';
 import { toolBubbleShow, toolBubbleHide } from './bubble';
 import { describePick } from './modelSelector';
 import { toolAppUpdate } from './appUpdate';
@@ -909,7 +909,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update';
+  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app';
 
 interface ToolSpec {
   name: ToolName;
@@ -1105,6 +1105,9 @@ const TOOLS: ToolSpec[] = [
   { name: 'app_update', confirm: false, advertise: true,
     usage: 'install or update this app to the newest build. Opens the APK; the user confirms the install. No argument.',
     run: async () => toolAppUpdate() },
+  { name: 'find_app', confirm: false, advertise: true,
+    usage: 'find an installed app by its name (Arabic or English) and open it. Use it when the user asks to open an app you do not know the package of. Argument: the app name.',
+    run: toolFindApp },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
