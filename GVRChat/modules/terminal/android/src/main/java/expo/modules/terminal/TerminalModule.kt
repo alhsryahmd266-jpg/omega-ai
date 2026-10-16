@@ -804,6 +804,41 @@ class TerminalModule : Module() {
       }
     }
 
+    Events("onOverlayMessage")
+
+    OnCreate {
+        GvrChatOverlay.onSend = { t ->
+            this@TerminalModule.sendEvent("onOverlayMessage", mapOf("text" to t))
+        }
+    }
+
+    AsyncFunction("chatShow") { promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        if (act == null) {
+            promise.resolve("Open the GVR Agent app first, then try again.")
+        } else if (!GvrChatOverlay.canDraw(act)) {
+            val i = android.content.Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:" + act.packageName)
+            )
+            act.startActivity(i)
+            promise.resolve("Needs the 'Display over other apps' permission. Settings was opened: turn it on for GVR Agent.")
+        } else {
+            GvrChatOverlay.show(act)
+            promise.resolve("The chat window is shown over the screen.")
+        }
+    }
+
+    AsyncFunction("chatHide") { promise: expo.modules.kotlin.Promise ->
+        GvrChatOverlay.hide()
+        promise.resolve("The chat window is hidden.")
+    }
+
+    AsyncFunction("chatAppend") { text: String, promise: expo.modules.kotlin.Promise ->
+        GvrChatOverlay.appendLine(text)
+        promise.resolve(true)
+    }
+
     AsyncFunction("screenStatus") { promise: expo.modules.kotlin.Promise ->
         promise.resolve(GvrAccessibilityService.instance != null)
     }
