@@ -852,14 +852,14 @@ class TerminalModule : Module() {
             act.startActivity(i)
             promise.resolve("Needs the 'Display over other apps' permission. Settings was opened: turn it on for GVR Agent.")
         } else {
-            act.startService(android.content.Intent(act, GvrBubbleService::class.java))
+            GvrBubbleService.start(act)
             promise.resolve("The stop bubble is shown over the screen.")
         }
     }
 
     AsyncFunction("bubbleHide") { promise: expo.modules.kotlin.Promise ->
         val act = appContext.currentActivity
-        act?.stopService(android.content.Intent(act, GvrBubbleService::class.java))
+        act?.let { GvrBubbleService.stop(it) }
         promise.resolve("The bubble is hidden.")
     }
 
