@@ -878,6 +878,24 @@ class TerminalModule : Module() {
         }
     }
 
+    AsyncFunction("accessibilityEnabledInSettings") { promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        if (act == null) {
+            promise.resolve(false)
+        } else {
+            val enabled = android.provider.Settings.Secure.getString(
+                act.contentResolver,
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: ""
+            promise.resolve(enabled.contains(act.packageName))
+        }
+    }
+
+    AsyncFunction("overlayAllowed") { promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        promise.resolve(act != null && android.provider.Settings.canDrawOverlays(act))
+    }
+
     AsyncFunction("writeFile") { path: String, content: String, promise: expo.modules.kotlin.Promise ->
       try {
         val rootfs = rootfsDir()
