@@ -10,19 +10,31 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * A floating button over every app, kept alive as a foreground service.
- * Tap pauses or resumes the agent. Long-press closes it.
- * It stays on until the user closes it, and comes back after a reboot if it was on.
+ * Floating buttons over every app.
+ *  - GVR button: tap pauses or resumes the agent, long-press closes everything.
+ *  - Access button: shows whether screen control is connected, and opens the
+ *    Accessibility settings page in one tap. Android does not let an app switch
+ *    the accessibility service on or off by itself, so the user flips the switch there.
  */
 class GvrBubbleService : Service() {
 
     private var wm: WindowManager? = null
-    private var bubble: TextView? = null
+    private var column: LinearLayout? = null
+    private var accessBtn: TextView? = null
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val refresh = object : Runnable {
+        override fun run() {
+            updateAccessLabel()
+            handler.postDelayed(this, 2000)
+        }
+    }
 
     companion object {
         private const val PREFS = "gvr_bubble"
@@ -51,24 +63,50 @@ class GvrBubbleService : Service() {
         return START_STICKY
     }
 
+    private fun accessOn(): Boolean = GvrAccessibilityService.instance != null
+
+    private fun updateAccessLabel() {
+        accessBtn?.text = if (accessOn()) "♿ مفعّلة" else "♿ مقفولة"
+        accessBtn?.setBackgroundColor(if (accessOn()) 0xFF1B7A3EL.toInt() else 0xFF7A1B1BL.toInt())
+    }
+
     override fun onCreate() {
         super.onCreate()
         startAsForeground()
         val manager = getSystemService(WINDOW_SERVICE) as WindowManager
         wm = manager
-        val tv = TextView(this)
-        tv.text = if (GvrAccessibilityService.paused) "GVR ▶" else "GVR ⏹"
-        tv.setTextColor(0xFFFFFFFFL.toInt())
-        tv.setBackgroundColor(0xFF5B3FD6L.toInt())
-        tv.setPadding(28, 18, 28, 18)
-        tv.setOnClickListener {
+
+        val gvr = TextView(this)
+        gvr.text = if (GvrAccessibilityService.paused) "GVR ▶" else "GVR ⏹"
+        gvr.setTextColor(0xFFFFFFFFL.toInt())
+        gvr.setBackgroundColor(0xFF5B3FD6L.toInt())
+        gvr.setPadding(28, 18, 28, 18)
+        gvr.setOnClickListener {
             GvrAccessibilityService.paused = !GvrAccessibilityService.paused
-            tv.text = if (GvrAccessibilityService.paused) "GVR ▶" else "GVR ⏹"
+            gvr.text = if (GvrAccessibilityService.paused) "GVR ▶" else "GVR ⏹"
         }
-        tv.setOnLongClickListener {
+        gvr.setOnLongClickListener {
             stop(this)
             true
         }
+
+        val access = TextView(this)
+        access.setTextColor(0xFFFFFFFFL.toInt())
+        access.setPadding(28, 14, 28, 14)
+        access.setOnClickListener {
+            val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(i)
+        }
+        accessBtn = access
+        updateAccessLabel()
+
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.addView(gvr)
+        col.addView(access)
+        column = col
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -79,8 +117,8 @@ class GvrBubbleService : Service() {
         params.gravity = Gravity.TOP or Gravity.END
         params.x = 16
         params.y = 300
-        manager.addView(tv, params)
-        bubble = tv
+        manager.addView(col, params)
+        handler.post(refresh)
     }
 
     private fun startAsForeground() {
@@ -91,7 +129,7 @@ class GvrBubbleService : Service() {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL) else Notification.Builder(this)
         val notif: Notification = builder
             .setContentTitle("GVR Agent")
-            .setContentText("زرار الإيقاف شغال فوق الشاشة. اضغط مطولاً عليه لقفله.")
+            .setContentText("الأزرار شغالة فوق الشاشة. اضغط مطولاً على GVR لقفلها.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
@@ -103,8 +141,10 @@ class GvrBubbleService : Service() {
     }
 
     override fun onDestroy() {
-        bubble?.let { wm?.removeView(it) }
-        bubble = null
+        handler.removeCallbacks(refresh)
+        column?.let { wm?.removeView(it) }
+        column = null
+        accessBtn = null
         super.onDestroy()
     }
 }
