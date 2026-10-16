@@ -156,6 +156,7 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   if (/(افتح|اشغل|شغل|اطلق|open|launch)/i.test(n)) {
     const app = APP_PACKAGES.find(([re]) => re.test(n));
     if (app) add('open_app', app[1], 'open_app');
+    else add('find_app', n, 'find_app');
   }
 
   // 2) "open the terminal" → run a real probe command inline, right now
