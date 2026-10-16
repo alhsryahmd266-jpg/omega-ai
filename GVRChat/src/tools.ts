@@ -22,7 +22,7 @@ import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, normalizePermKey, requestPermission,
 } from './permissions';
 
-import { browseOnPage, getLastLinks, type PageResult } from './browserBridge';
+import { browseOnPage, getLastLinks, actOnPage, type PageResult } from './browserBridge';
 import { SKILLS, skillsCatalog, loadSkill } from './skills';
 import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
@@ -800,6 +800,7 @@ function formatPage(r: PageResult): string {
   if (!r.ok) return `Browser error: ${r.error || 'unknown'}`;
   const links = (r.links || []).slice(0, 40);
   const linkLines = links.map(l => `[${l.n}] ${l.text} — ${l.href}`).join('\n');
+  const elementLines = (r.elements || []).slice(0, 40).map(e => `[${e.n}] ${e.kind} "${e.label}"`).join('\n');
   return [
     `Title: ${r.title || '(none)'}`,
     `URL: ${r.url || ''}`,
@@ -807,6 +808,7 @@ function formatPage(r: PageResult): string {
     clip((r.text || '').trim() || '(no visible text)', 6000),
     '',
     links.length ? `Links (use click_link with the number):\n${linkLines}` : 'Links: none found',
+    elementLines ? `Elements (use browser_click or browser_type with the number):\n${elementLines}` : 'Elements: none found',
   ].join('\n');
 }
 
@@ -904,7 +906,8 @@ export type ToolName =
   | 'request_secret' | 'github_api'
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
-  | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status';
+  | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
+  | 'browser_click' | 'browser_type';
 
 interface ToolSpec {
   name: ToolName;
@@ -1074,6 +1077,22 @@ const TOOLS: ToolSpec[] = [
   { name: 'session_status', confirm: false, advertise: true,
     usage: 'show the active chat session: contact, messages sent, time left. No argument.',
     run: async () => toolSessionStatus() },
+  { name: 'browser_click', confirm: false, advertise: true,
+    usage: 'click an element of the last browser page by its number, such as a button or a link. The page is read again after the click. Argument: the number.',
+    run: async (arg: string) => {
+      const n = parseInt(arg.trim(), 10);
+      if (!n) return 'Give the element number from the last browser page.';
+      return formatPage(await actOnPage('click', n, ''));
+    } },
+  { name: 'browser_type', confirm: true, advertise: true,
+    usage: 'type text into an input field of the last browser page. The user must confirm. Argument: number | text, e.g. 3 | hello.',
+    run: async (arg: string) => {
+      const i = arg.indexOf('|');
+      if (i < 0) return 'Give: number | text';
+      const n = parseInt(arg.slice(0, i).trim(), 10);
+      if (!n) return 'Give the element number from the last browser page.';
+      return formatPage(await actOnPage('type', n, arg.slice(i + 1)));
+    } },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
