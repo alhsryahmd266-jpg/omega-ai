@@ -26,6 +26,7 @@ import { browseOnPage, getLastLinks, type PageResult } from './browserBridge';
 import { SKILLS, skillsCatalog, loadSkill } from './skills';
 import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
+import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable } from './screen';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
@@ -899,7 +900,8 @@ export type ToolName =
   | 'browser' | 'click_link' | 'tool_evaluator'
   | 'skill' | 'tool_search'
   | 'request_secret' | 'github_api'
-  | 'set_alarm' | 'remind' | 'note_add' | 'note_list';
+  | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
+  | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable';
 
 interface ToolSpec {
   name: ToolName;
@@ -1033,6 +1035,24 @@ const TOOLS: ToolSpec[] = [
   { name: 'note_list', confirm: false, advertise: true,
     usage: 'show the latest notes from the phone notebook. No argument needed.',
     run: async () => toolNoteList() },
+  { name: 'screen_read', confirm: false, advertise: true,
+    usage: 'read the visible screen of an allowed app: a numbered list of text, buttons and input fields. Call it before tapping or typing. No argument.',
+    run: async () => toolScreenRead() },
+  { name: 'screen_tap', confirm: false, advertise: true,
+    usage: 'tap a button from the last screen_read by its number. Argument: the number, e.g. 4.',
+    run: toolScreenTap },
+  { name: 'screen_type', confirm: true, advertise: true,
+    usage: 'type text into an input field from the last screen_read. Argument: number | text, e.g. 3 | hello.',
+    run: toolScreenType },
+  { name: 'screen_back', confirm: false, advertise: true,
+    usage: 'press the phone back button. No argument.',
+    run: async () => toolScreenBack() },
+  { name: 'screen_allow', confirm: true, advertise: true,
+    usage: 'ask the user to allow an app for screen control. Argument: package names, e.g. com.whatsapp. The user must confirm.',
+    run: toolScreenAllow },
+  { name: 'screen_enable', confirm: false, advertise: true,
+    usage: 'open the Accessibility settings page so the user can turn on GVR Agent. No argument.',
+    run: async () => toolScreenEnable() },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
