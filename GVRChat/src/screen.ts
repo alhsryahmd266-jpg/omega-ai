@@ -62,6 +62,12 @@ export async function toolScreenAllow(arg: string): Promise<string> {
   return `Allowed apps: ${next.join(', ')}`;
 }
 
+export async function toolOpenApp(arg: string): Promise<string> {
+  const pkg = arg.trim();
+  if (!/^[a-z0-9_]+(\.[a-z0-9_]+)+$/i.test(pkg)) return 'Give the package name, e.g. com.whatsapp';
+  return String(await Native.openApp(pkg));
+}
+
 export async function toolScreenEnable(): Promise<string> {
   await IntentLauncher.startActivityAsync('android.settings.ACCESSIBILITY_SETTINGS');
   return 'Opened Accessibility settings. Ask the user to turn on GVR Agent there.';
