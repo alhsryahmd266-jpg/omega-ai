@@ -26,7 +26,7 @@ import { browseOnPage, getLastLinks, actOnPage, type PageResult } from './browse
 import { SKILLS, skillsCatalog, loadSkill } from './skills';
 import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
-import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp, toolFindApp } from './screen';
+import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp, toolFindApp, toolDiagnose } from './screen';
 import { toolBubbleShow, toolBubbleHide } from './bubble';
 import { describePick } from './modelSelector';
 import { toolAppUpdate } from './appUpdate';
@@ -910,7 +910,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop';
+  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop' | 'diagnose';
 
 interface ToolSpec {
   name: ToolName;
@@ -1115,6 +1115,9 @@ const TOOLS: ToolSpec[] = [
   { name: 'speak_stop', confirm: false, advertise: true,
     usage: 'stop speaking now. No argument.',
     run: async () => toolStopSpeaking() },
+  { name: 'diagnose', confirm: false, advertise: true,
+    usage: 'check the phone control state: accessibility on or off, connected or not, overlay permission, allowed apps, chat session. Use it when screen control does not work. No argument.',
+    run: async () => toolDiagnose() },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
