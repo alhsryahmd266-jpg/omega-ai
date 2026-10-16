@@ -804,6 +804,31 @@ class TerminalModule : Module() {
       }
     }
 
+    AsyncFunction("screenStatus") { promise: expo.modules.kotlin.Promise ->
+        promise.resolve(GvrAccessibilityService.instance != null)
+    }
+
+    AsyncFunction("screenSetAllowed") { pkgs: List<String>, promise: expo.modules.kotlin.Promise ->
+        GvrAccessibilityService.allowed = pkgs.toSet()
+        promise.resolve(true)
+    }
+
+    AsyncFunction("screenDump") { promise: expo.modules.kotlin.Promise ->
+        promise.resolve(GvrAccessibilityService.instance?.dump() ?: "SERVICE_OFF")
+    }
+
+    AsyncFunction("screenTap") { index: Int, promise: expo.modules.kotlin.Promise ->
+        promise.resolve(GvrAccessibilityService.instance?.tap(index) ?: "SERVICE_OFF")
+    }
+
+    AsyncFunction("screenType") { index: Int, text: String, promise: expo.modules.kotlin.Promise ->
+        promise.resolve(GvrAccessibilityService.instance?.type(index, text) ?: "SERVICE_OFF")
+    }
+
+    AsyncFunction("screenBack") { promise: expo.modules.kotlin.Promise ->
+        promise.resolve(GvrAccessibilityService.instance?.back() ?: "SERVICE_OFF")
+    }
+
     AsyncFunction("writeFile") { path: String, content: String, promise: expo.modules.kotlin.Promise ->
       try {
         val rootfs = rootfsDir()
