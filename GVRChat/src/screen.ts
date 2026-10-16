@@ -153,38 +153,62 @@ export async function toolSessionStatus(): Promise<string> {
 }
 
 const APP_ALIASES: Record<string, string> = {
-  'واتس': 'whatsapp', 'واتساب': 'whatsapp', 'فيسبوك': 'facebook', 'فيس بوك': 'facebook',
-  'يوتيوب': 'youtube', 'انستا': 'instagram', 'انستجرام': 'instagram', 'انستغرام': 'instagram',
-  'جيت هب': 'github', 'جيثهب': 'github', 'كروم': 'chrome', 'تيليجرام': 'telegram',
-  'تلغرام': 'telegram', 'سبوتيفاي': 'spotify', 'خرايط': 'maps', 'جوجل ماب': 'maps',
-  'ماب': 'maps', 'جيميل': 'gmail', 'تويتر': 'twitter', 'اكس': 'x',
+  'واتس': 'whatsapp', 'واتساب': 'whatsapp', 'واتسب': 'whatsapp', 'وتس': 'whatsapp', 'وتساب': 'whatsapp',
+  'فيسبوك': 'facebook', 'فيس بوك': 'facebook', 'يوتيوب': 'youtube', 'انستا': 'instagram',
+  'انستجرام': 'instagram', 'انستغرام': 'instagram', 'جيت هب': 'github', 'جيثهب': 'github',
+  'كروم': 'chrome', 'تيليجرام': 'telegram', 'تلغرام': 'telegram', 'سبوتيفاي': 'spotify',
+  'خرايط': 'maps', 'جوجل ماب': 'maps', 'ماب': 'maps', 'جيميل': 'gmail', 'تويتر': 'twitter',
+  'كاميرا': 'camera', 'ساعه': 'clock', 'حاسبه': 'calculator', 'ملاحظات': 'notes', 'المذكرات': 'notes',
 };
-const STOP_WORDS = ['كدا', 'كده', 'وكلمني', 'وكلم', 'واكتب', 'وابعت', 'ثم', 'عشان', 'لو', 'و'];
+
+const STOP_WORDS = new Set([
+  'كدا', 'كده', 'وكلمني', 'وكلم', 'واكتب', 'وابعت', 'ثم', 'عشان', 'لو', 'و', 'واطمن', 'واتفاعل',
+  'ودردش', 'مع', 'عليه', 'معاه', 'معه', 'شويه', 'شوية', 'واتكلم', 'وكلمه', 'عليها', 'معاها',
+  'وشوف', 'واشوف', 'واعمل', 'واعرف', 'على', 'في', 'من', 'اللي', 'الي',
+]);
+
+/** Name variants: "الوتس" -> "وتس", "واتس" -> "اتس" etc. */
+function variantsOf(w: string): string[] {
+  const v = new Set([w]);
+  if (w.startsWith('ال') && w.length > 3) v.add(w.slice(2));
+  if (w.startsWith('و') && w.length > 2) v.add(w.slice(1));
+  return [...v];
+}
 
 export async function toolFindApp(arg: string): Promise<string> {
-  let q = arg.trim().replace(/^.*?(افتح|اشغل|شغل|اطلق|open|launch)\s*/i, '');
-  const words: string[] = [];
+  const q = arg.trim().replace(/^.*?(افتح|اشغل|شغل|اطلق|open|launch)\s*/i, '');
+  const tokens: string[] = [];
   for (const w of q.split(/\s+/)) {
-    if (!w || STOP_WORDS.includes(w)) break;
-    words.push(w.replace(/^ال/, ''));
+    if (!w || STOP_WORDS.has(w)) break;
+    tokens.push(w);
   }
-  if (!words.length) return 'Give the app name, e.g. فتح واتساب.';
-  const phrase = words.join(' ');
-  const alias = APP_ALIASES[phrase] || APP_ALIASES[words[0]];
-  const needles = [alias, phrase, words[0]].filter(Boolean).map(s => String(s).toLowerCase());
+  if (!tokens.length) return 'Give the app name, e.g. افتح واتساب.';
+
+  // candidate keys: longest phrase first, then the first word with its variants
+  const keys: string[] = [];
+  for (let n = Math.min(3, tokens.length); n >= 1; n--) {
+    const phrase = tokens.slice(0, n).join(' ');
+    keys.push(phrase);
+    for (const v of variantsOf(tokens[0])) keys.push([v, ...tokens.slice(1, n)].join(' '));
+  }
+
   const apps: string[] = await Native.listApps();
   const all = apps.map(s => {
     const i = s.lastIndexOf('|');
     return { label: s.slice(0, i), pkg: s.slice(i + 1) };
   });
-  const matches = all.filter(a => needles.some(nd => a.label.toLowerCase().includes(nd) || a.pkg.toLowerCase().includes(nd)));
-  if (!matches.length) return `No installed app matches "${phrase}". Tell the user it is not installed or ask for the exact name.`;
-  if (matches.length > 1) {
-    return 'Several apps match: ' + matches.slice(0, 8).map(m => `${m.label} (${m.pkg})`).join(', ') + '. Ask the user which one.';
-  }
-  return toolOpenApp(matches[0].pkg);
-}
 
+  for (const key of keys) {
+    const alias = APP_ALIASES[key];
+    const needles = [alias, key].filter(Boolean).map(s => String(s).toLowerCase());
+    const matches = all.filter(a => needles.some(nd => a.label.toLowerCase().includes(nd) || a.pkg.toLowerCase().includes(nd)));
+    if (matches.length === 1) return toolOpenApp(matches[0].pkg);
+    if (matches.length > 1) {
+      return 'Several apps match: ' + matches.slice(0, 8).map(m => `${m.label} (${m.pkg})`).join(', ') + '. Ask the user which one.';
+    }
+  }
+  return `No installed app matches "${tokens.join(' ')}". Tell the user it is not installed, or ask for the exact app name. Do not install packages to imitate the app.`;
+}
 
 export async function toolDiagnose(): Promise<string> {
   const inSettings = !!(await Native.accessibilityEnabledInSettings());
