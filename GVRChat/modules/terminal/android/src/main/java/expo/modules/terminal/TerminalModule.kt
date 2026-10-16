@@ -840,6 +840,29 @@ class TerminalModule : Module() {
         }
     }
 
+    AsyncFunction("bubbleShow") { promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        if (act == null) {
+            promise.resolve("Open the GVR Agent app first, then try again.")
+        } else if (!android.provider.Settings.canDrawOverlays(act)) {
+            val i = android.content.Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:" + act.packageName)
+            )
+            act.startActivity(i)
+            promise.resolve("Needs the 'Display over other apps' permission. Settings was opened: turn it on for GVR Agent.")
+        } else {
+            act.startService(android.content.Intent(act, GvrBubbleService::class.java))
+            promise.resolve("The stop bubble is shown over the screen.")
+        }
+    }
+
+    AsyncFunction("bubbleHide") { promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        act?.stopService(android.content.Intent(act, GvrBubbleService::class.java))
+        promise.resolve("The bubble is hidden.")
+    }
+
     AsyncFunction("writeFile") { path: String, content: String, promise: expo.modules.kotlin.Promise ->
       try {
         val rootfs = rootfsDir()
