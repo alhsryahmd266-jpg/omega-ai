@@ -459,7 +459,7 @@ async function runLocked(
       call = parseToolCall(raw); // tag / Hermes text form (also catches models that ignore native tools)
     }
     if (!call && !weak && !lastRound && !autoSearched && !attachment && steps.length === 0
-        && isInfoQuestion(question) && looksUncertain(raw)) {
+        && isInfoQuestion(question) && (looksUncertain(raw) || !raw.trim())) {
       // "Sorry, I don't know…" is not an answer: go and look it up on the web instead.
       autoSearched = true;
       call = { before: '', tool: 'search', arg: cleanQuery(question) || question };
