@@ -175,10 +175,13 @@ function variantsOf(w: string): string[] {
   return [...v];
 }
 
+const GENERIC_WORDS = new Set(['برنامج', 'تطبيق', 'تطبيقات', 'البرنامج', 'التطبيق', 'app', 'apps']);
+
 export async function toolFindApp(arg: string): Promise<string> {
   const q = arg.trim().replace(/^.*?(افتح|اشغل|شغل|اطلق|open|launch)\s*/i, '');
   const tokens: string[] = [];
   for (const w of q.split(/\s+/)) {
+    if (GENERIC_WORDS.has(w) && tokens.length === 0) continue;
     if (!w || STOP_WORDS.has(w)) break;
     tokens.push(w);
   }
