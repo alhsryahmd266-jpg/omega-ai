@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gvr_a11y_description">GVR Agent reads the screen of apps you allow and taps or types only there. Banking and payment apps are never touched.</string>
+</resources>
