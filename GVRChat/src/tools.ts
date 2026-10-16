@@ -29,6 +29,7 @@ import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceToo
 import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp } from './screen';
 import { toolBubbleShow, toolBubbleHide } from './bubble';
 import { describePick } from './modelSelector';
+import { toolAppUpdate } from './appUpdate';
 import { toolSessionStart, toolSessionStop, toolSessionStatus } from './screen';
 
 const MEMORY_KEY = 'gvr_agent_memory';
@@ -908,7 +909,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type' | 'model_pick';
+  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update';
 
 interface ToolSpec {
   name: ToolName;
@@ -1101,6 +1102,9 @@ const TOOLS: ToolSpec[] = [
       if (!(ram > 0)) return 'Give the phone RAM in GB, e.g. 16.';
       return describePick(ram);
     } },
+  { name: 'app_update', confirm: false, advertise: true,
+    usage: 'install or update this app to the newest build. Opens the APK; the user confirms the install. No argument.',
+    run: async () => toolAppUpdate() },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
