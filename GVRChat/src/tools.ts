@@ -28,6 +28,7 @@ import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
 import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp } from './screen';
 import { toolBubbleShow, toolBubbleHide } from './bubble';
+import { describePick } from './modelSelector';
 import { toolSessionStart, toolSessionStop, toolSessionStatus } from './screen';
 
 const MEMORY_KEY = 'gvr_agent_memory';
@@ -907,7 +908,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type';
+  | 'browser_click' | 'browser_type' | 'model_pick';
 
 interface ToolSpec {
   name: ToolName;
@@ -1092,6 +1093,13 @@ const TOOLS: ToolSpec[] = [
       const n = parseInt(arg.slice(0, i).trim(), 10);
       if (!n) return 'Give the element number from the last browser page.';
       return formatPage(await actOnPage('type', n, arg.slice(i + 1)));
+    } },
+  { name: 'model_pick', confirm: false, advertise: true,
+    usage: 'recommend the best model and speed settings for this phone. Argument: the phone RAM in GB, e.g. 16.',
+    run: async (arg: string) => {
+      const ram = parseFloat(arg.trim());
+      if (!(ram > 0)) return 'Give the phone RAM in GB, e.g. 16.';
+      return describePick(ram);
     } },
 ];
 
