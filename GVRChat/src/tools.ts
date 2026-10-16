@@ -25,6 +25,7 @@ import {
 import { browseOnPage, getLastLinks, type PageResult } from './browserBridge';
 import { SKILLS, skillsCatalog, loadSkill } from './skills';
 import { getSecret, ensureSecret } from './secrets';
+import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
@@ -897,7 +898,8 @@ export type ToolName =
   | 'python' | 'pkg_install' | 'install_tool'
   | 'browser' | 'click_link' | 'tool_evaluator'
   | 'skill' | 'tool_search'
-  | 'request_secret' | 'github_api';
+  | 'request_secret' | 'github_api'
+  | 'set_alarm' | 'remind' | 'note_add' | 'note_list';
 
 interface ToolSpec {
   name: ToolName;
@@ -1019,6 +1021,18 @@ const TOOLS: ToolSpec[] = [
   { name: 'github_api', confirm: true, advertise: true,
     usage: 'call the GitHub REST API. Argument: JSON {"path": "/repos/OWNER/REPO/releases/latest", "method": "GET", "body": {...}, "secret": "GITHUB_TOKEN"}. Set "secret" only when you need private access or a write; the token is added for you and never shown to you.',
     run: toolGithubApi },
+  { name: 'set_alarm', confirm: false, advertise: true,
+    usage: 'set an alarm. Opens the clock app with the time filled in; the user confirms there. Argument: HH:MM | label, e.g. 07:30 | Gym.',
+    run: toolSetAlarm },
+  { name: 'remind', confirm: false, advertise: true,
+    usage: 'schedule a phone notification reminder. Argument: minutes | text, e.g. 10 | call Ahmed.',
+    run: toolRemind },
+  { name: 'note_add', confirm: false, advertise: true,
+    usage: 'save a note in the phone notebook. Argument: the note text.',
+    run: toolNoteAdd },
+  { name: 'note_list', confirm: false, advertise: true,
+    usage: 'show the latest notes from the phone notebook. No argument needed.',
+    run: async () => toolNoteList() },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
