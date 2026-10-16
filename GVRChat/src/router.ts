@@ -130,6 +130,24 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
     add('request_secret', `${name} | enter it once, stored encrypted`, 'secure_box');
   }
 
+  // 1c) "turn on the screen service" → screen_enable
+  if (/(فعل|فعّل|شغل|اعمل|enable|turn\s*on)[^\n]{0,25}(خدم[هة]\s+)?(الشاش|رؤي|screen|accessib|امكان[يى]ه?\s+الوصول)/i.test(n)) {
+    add('screen_enable', '', 'screen_enable');
+  }
+
+  // 1d) "open <app>" → open_app with the package name (never a web search)
+  const APP_PACKAGES: [RegExp, string][] = [
+    [/واتس|whatsapp/i, 'com.whatsapp'],
+    [/جيت\s*هب|github/i, 'com.github.android'],
+    [/كروم|chrome/i, 'com.android.chrome'],
+    [/يوتيوب|youtube/i, 'com.google.android.youtube'],
+    [/خرايط|google\s*maps|جوجل\s*ماب/i, 'com.google.android.apps.maps'],
+  ];
+  if (/(افتح|اشغل|شغل|اطلق|open|launch)/i.test(n)) {
+    const app = APP_PACKAGES.find(([re]) => re.test(n));
+    if (app) add('open_app', app[1], 'open_app');
+  }
+
   // 2) "open the terminal" → run a real probe command inline, right now
   if (/(افتح|شغل|اعرض|وريني|اظهر|open|show|launch|start|run)\s+(?:the\s+)?(ال)?(ترمنال|تيرمنال|تريمنال|ترمينال|تيرمينال|terminal|shell|console|طرفيه)/.test(n)) {
     add('terminal', TERMINAL_PROBE, 'open_terminal');
