@@ -151,3 +151,36 @@ export async function toolSessionStatus(): Promise<string> {
   const left = Math.max(0, Math.round((s.until - Date.now()) / 60000));
   return `Session with ${s.contact}: ${s.sent}/${s.max} messages, about ${left} minutes left. Goal: ${s.goal}`;
 }
+
+const APP_ALIASES: Record<string, string> = {
+  'واتس': 'whatsapp', 'واتساب': 'whatsapp', 'فيسبوك': 'facebook', 'فيس بوك': 'facebook',
+  'يوتيوب': 'youtube', 'انستا': 'instagram', 'انستجرام': 'instagram', 'انستغرام': 'instagram',
+  'جيت هب': 'github', 'جيثهب': 'github', 'كروم': 'chrome', 'تيليجرام': 'telegram',
+  'تلغرام': 'telegram', 'سبوتيفاي': 'spotify', 'خرايط': 'maps', 'جوجل ماب': 'maps',
+  'ماب': 'maps', 'جيميل': 'gmail', 'تويتر': 'twitter', 'اكس': 'x',
+};
+const STOP_WORDS = ['كدا', 'كده', 'وكلمني', 'وكلم', 'واكتب', 'وابعت', 'ثم', 'عشان', 'لو', 'و'];
+
+export async function toolFindApp(arg: string): Promise<string> {
+  let q = arg.trim().replace(/^.*?(افتح|اشغل|شغل|اطلق|open|launch)\s*/i, '');
+  const words: string[] = [];
+  for (const w of q.split(/\s+/)) {
+    if (!w || STOP_WORDS.includes(w)) break;
+    words.push(w.replace(/^ال/, ''));
+  }
+  if (!words.length) return 'Give the app name, e.g. فتح واتساب.';
+  const phrase = words.join(' ');
+  const alias = APP_ALIASES[phrase] || APP_ALIASES[words[0]];
+  const needles = [alias, phrase, words[0]].filter(Boolean).map(s => String(s).toLowerCase());
+  const apps: string[] = await Native.listApps();
+  const all = apps.map(s => {
+    const i = s.lastIndexOf('|');
+    return { label: s.slice(0, i), pkg: s.slice(i + 1) };
+  });
+  const matches = all.filter(a => needles.some(nd => a.label.toLowerCase().includes(nd) || a.pkg.toLowerCase().includes(nd)));
+  if (!matches.length) return `No installed app matches "${phrase}". Tell the user it is not installed or ask for the exact name.`;
+  if (matches.length > 1) {
+    return 'Several apps match: ' + matches.slice(0, 8).map(m => `${m.label} (${m.pkg})`).join(', ') + '. Ask the user which one.';
+  }
+  return toolOpenApp(matches[0].pkg);
+}
