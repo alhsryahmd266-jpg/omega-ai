@@ -829,6 +829,17 @@ class TerminalModule : Module() {
         promise.resolve(GvrAccessibilityService.instance?.back() ?: "SERVICE_OFF")
     }
 
+    AsyncFunction("openApp") { pkg: String, promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        val intent = act?.packageManager?.getLaunchIntentForPackage(pkg)
+        if (act == null || intent == null) {
+            promise.resolve("App $pkg is not installed, or the app is not open yet.")
+        } else {
+            act.startActivity(intent)
+            promise.resolve("Opened $pkg.")
+        }
+    }
+
     AsyncFunction("writeFile") { path: String, content: String, promise: expo.modules.kotlin.Promise ->
       try {
         val rootfs = rootfsDir()
