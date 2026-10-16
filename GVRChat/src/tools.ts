@@ -28,6 +28,7 @@ import { getSecret, ensureSecret } from './secrets';
 import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceTools';
 import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp, toolFindApp, toolDiagnose } from './screen';
 import { toolBubbleShow, toolBubbleHide } from './bubble';
+import { toolChatShow, toolChatHide } from './overlayChat';
 import { describePick } from './modelSelector';
 import { toolAppUpdate } from './appUpdate';
 import { toolSpeak, toolStopSpeaking } from './speech';
@@ -910,7 +911,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop' | 'diagnose';
+  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop' | 'diagnose' | 'chat_show' | 'chat_hide';
 
 interface ToolSpec {
   name: ToolName;
@@ -1118,6 +1119,12 @@ const TOOLS: ToolSpec[] = [
   { name: 'diagnose', confirm: false, advertise: true,
     usage: 'check the phone control state: accessibility on or off, connected or not, overlay permission, allowed apps, chat session. Use it when screen control does not work. No argument.',
     run: async () => toolDiagnose() },
+  { name: 'chat_show', confirm: false, advertise: true,
+    usage: 'show a small chat window over every app, so the user can talk to you without leaving the current app. No argument.',
+    run: async () => toolChatShow() },
+  { name: 'chat_hide', confirm: false, advertise: true,
+    usage: 'hide the floating chat window. No argument.',
+    run: async () => toolChatHide() },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
