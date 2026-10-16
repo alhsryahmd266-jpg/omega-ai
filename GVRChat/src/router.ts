@@ -145,6 +145,11 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
     add('app_update', '', 'app_update');
   }
 
+  // 1g) diagnose the phone control state
+  if (/(تشخيص|اتاكد|اتأكد|حالة)[^\n]{0,25}(الخدم|الوصول|الفقاع|الصلاحي|الشاش|التحكم)|diagnose/i.test(n)) {
+    add('diagnose', '', 'diagnose');
+  }
+
   // 1d) "open <app>" → open_app with the package name (never a web search)
   const APP_PACKAGES: [RegExp, string][] = [
     [/واتس|whatsapp/i, 'com.whatsapp'],
