@@ -184,3 +184,24 @@ export async function toolFindApp(arg: string): Promise<string> {
   }
   return toolOpenApp(matches[0].pkg);
 }
+
+
+export async function toolDiagnose(): Promise<string> {
+  const inSettings = !!(await Native.accessibilityEnabledInSettings());
+  const connected = !!(await Native.screenStatus());
+  const overlay = !!(await Native.overlayAllowed());
+  const allowed = await getAllowed();
+  const s = await getSession();
+  const lines = [
+    `Accessibility ON in Android settings: ${inSettings ? 'yes' : 'NO'}`,
+    `Accessibility service connected to the app: ${connected ? 'yes' : 'NO'}`,
+    `Display over other apps: ${overlay ? 'yes' : 'NO'}`,
+    `Allowed apps: ${allowed.length ? allowed.join(', ') : 'none'}`,
+    `Chat session: ${s ? 'active with ' + s.contact : 'none'}`,
+  ];
+  let advice = 'Looks ready.';
+  if (!inSettings) advice = 'Turn GVR Agent on in Accessibility settings (screen_enable).';
+  else if (!connected) advice = 'It is ON in settings but not connected. Turn it off and on again, then open this app once.';
+  else if (!allowed.length) advice = 'Connected. Allow an app with screen_allow before reading its screen.';
+  return lines.join('\n') + '\n' + advice;
+}
