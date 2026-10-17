@@ -839,6 +839,45 @@ class TerminalModule : Module() {
         promise.resolve(true)
     }
 
+    AsyncFunction("listenOnce") { lang: String, offline: Boolean, promise: expo.modules.kotlin.Promise ->
+        val act = appContext.currentActivity
+        if (act == null) {
+            promise.resolve("ERROR: open the app first")
+        } else {
+            act.runOnUiThread {
+                if (!android.speech.SpeechRecognizer.isRecognitionAvailable(act)) {
+                    promise.resolve("ERROR: speech recognition is not available on this phone")
+                } else {
+                    val sr = android.speech.SpeechRecognizer.createSpeechRecognizer(act)
+                    sr.setRecognitionListener(object : android.speech.RecognitionListener {
+                        override fun onResults(results: android.os.Bundle?) {
+                            val list = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                            promise.resolve(list?.firstOrNull() ?: "")
+                            sr.destroy()
+                        }
+                        override fun onError(error: Int) {
+                            promise.resolve("ERROR: recognition failed, code $error")
+                            sr.destroy()
+                        }
+                        override fun onReadyForSpeech(params: android.os.Bundle?) {}
+                        override fun onBeginningOfSpeech() {}
+                        override fun onRmsChanged(rmsdB: Float) {}
+                        override fun onBufferReceived(buffer: ByteArray?) {}
+                        override fun onEndOfSpeech() {}
+                        override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                        override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+                    })
+                    val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, lang)
+                    intent.putExtra(android.speech.RecognizerIntent.EXTRA_PREFER_OFFLINE, offline)
+                    intent.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    sr.startListening(intent)
+                }
+            }
+        }
+    }
+
     AsyncFunction("screenStatus") { promise: expo.modules.kotlin.Promise ->
         promise.resolve(GvrAccessibilityService.instance != null)
     }
