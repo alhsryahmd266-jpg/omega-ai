@@ -1,0 +1,24 @@
+name: Verify model links
+on: workflow_dispatch
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Qwen2.5-7B-Instruct Q4_K_M must exist and be about 4.7 GB
+        run: |
+          URL="https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+          CODE=$(curl -sIL -o /dev/null -w "%{http_code}" "$URL")
+          SIZE=$(curl -sIL "$URL" | grep -i '^content-length' | tail -1 | tr -dc '0-9')
+          echo "status=$CODE size_bytes=$SIZE"
+          test "$CODE" = "200"
+          test "$SIZE" -gt 4000000000
+          test "$SIZE" -lt 5500000000
+      - name: Qwen2.5-3B-Instruct Q4_K_M must exist and be about 1.9 GB
+        run: |
+          URL="https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf"
+          CODE=$(curl -sIL -o /dev/null -w "%{http_code}" "$URL")
+          SIZE=$(curl -sIL "$URL" | grep -i '^content-length' | tail -1 | tr -dc '0-9')
+          echo "status=$CODE size_bytes=$SIZE"
+          test "$CODE" = "200"
+          test "$SIZE" -gt 1500000000
+          test "$SIZE" -lt 2500000000
