@@ -232,3 +232,73 @@ export async function toolDiagnose(): Promise<string> {
   else if (!allowed.length) advice = 'Connected. Allow an app with screen_allow before reading its screen.';
   return lines.join('\n') + '\n' + advice;
 }
+
+/* ── WHATSAPP SEND: search a contact, open the chat, type, press send, and verify on screen ─ */
+function parseElements(dump: string): { n: number; kind: string; label: string }[] {
+  const out: { n: number; kind: string; label: string }[] = [];
+  for (const line of dump.split('\n')) {
+    const m = /^\[(\d+)\]\s+(\w+)(?:\s+"(.*)")?$/.exec(line.trim());
+    if (m) out.push({ n: Number(m[1]), kind: m[2], label: m[3] || '' });
+  }
+  return out;
+}
+
+const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+export async function toolWhatsappSend(arg: string): Promise<string> {
+  const parts = arg.split('|');
+  const name = (parts[0] || '').trim();
+  const message = parts.slice(1).join('|').trim();
+  if (!name || !message) return 'Give: contact name | message text';
+  if (!(await sync())) return OFF;
+  if (!(await getSession())) {
+    return 'Start a chat session first (session_start) so the user approves sending messages.';
+  }
+  if (!(await getAllowed()).includes('com.whatsapp')) {
+    return 'WhatsApp is not allowed yet. Call screen_allow with com.whatsapp first.';
+  }
+  const dumpText = async () => String(await Native.screenDump());
+  const read = async () => parseElements(await dumpText());
+
+  // 1. open search, if the screen has a search button
+  let els = await read();
+  const search = els.find(e => /بحث|search/i.test(e.label));
+  if (search) {
+    await Native.screenTap(search.n);
+    await pause(1200);
+    els = await read();
+  }
+
+  // 2. type the contact name into the search box
+  const box = els.find(e => e.kind === 'input');
+  if (!box) return 'Could not find the search box. Screen shows: ' + (await dumpText()).slice(0, 300);
+  await Native.screenType(box.n, name);
+  await pause(1500);
+  els = await read();
+
+  // 3. open the chat with that exact name
+  const row = els.find(e => e.label.trim() === name) || els.find(e => e.label.includes(name));
+  if (!row) return `No chat named "${name}" appeared on screen.`;
+  await Native.screenTap(row.n);
+  await pause(1500);
+  els = await read();
+
+  // 4. type the message (session checks: disclosure, limits, forbidden topics)
+  const input = els.find(e => e.kind === 'input');
+  if (!input) return 'The chat opened but no message box was found.';
+  const blocked = await sessionCheck(message);
+  if (blocked) return blocked;
+  await Native.screenType(input.n, message);
+  await pause(800);
+  els = await read();
+
+  // 5. press send, then verify the message is on screen
+  const send = els.find(e => /إرسال|ارسال|send/i.test(e.label));
+  if (!send) return 'The message was typed but the send button was not found, so it was not sent.';
+  await Native.screenTap(send.n);
+  await pause(1500);
+  const after = await dumpText();
+  return after.includes(message.slice(0, 20))
+    ? `Sent to ${name}: "${message}"`
+    : 'Pressed send, but the message is not visible on screen yet. Check the chat before saying it was sent.';
+}
