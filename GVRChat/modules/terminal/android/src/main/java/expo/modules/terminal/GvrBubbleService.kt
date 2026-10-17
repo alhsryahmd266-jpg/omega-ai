@@ -141,10 +141,16 @@ class GvrBubbleService : Service() {
         accessBtn = access
         updateAccessLabel()
 
+        val closeBtn = TextView(this)
+        closeBtn.text = "✕ إغلاق"
+        closeBtn.setTextColor(0xFFFFFFFFL.toInt())
+        closeBtn.setBackgroundColor(0xFF333333L.toInt())
+        closeBtn.setPadding(28, 14, 28, 14)
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
         col.addView(gvr)
         col.addView(access)
+        col.addView(closeBtn)
         column = col
 
         val params = WindowManager.LayoutParams(
@@ -170,6 +176,7 @@ class GvrBubbleService : Service() {
             startActivity(i)
         }, onLong = null)
 
+        makeDraggable(closeBtn, onTap = { stop(this) }, onLong = null)
         manager.addView(col, params)
         handler.post(refresh)
     }
