@@ -1,5 +1,9 @@
 name: Verify model links
-on: workflow_dispatch
+on:
+  push:
+    branches: [feature/browser-tool]
+    paths: [".github/workflows/verify_models.yml"]
+  workflow_dispatch:
 jobs:
   verify:
     runs-on: ubuntu-latest
