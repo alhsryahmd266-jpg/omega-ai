@@ -12,22 +12,25 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import kotlin.math.abs
 
 /**
- * Floating buttons over every app.
- *  - GVR button: tap pauses or resumes the agent, long-press closes everything.
+ * Floating buttons over every app. Both can be dragged anywhere on the screen.
+ *  - GVR button: tap pauses or resumes the agent; long-press closes both buttons.
  *  - Access button: shows whether screen control is connected, and opens the
- *    Accessibility settings page in one tap. Android does not let an app switch
- *    the accessibility service on or off by itself, so the user flips the switch there.
+ *    Accessibility settings page in one tap.
  */
 class GvrBubbleService : Service() {
 
     private var wm: WindowManager? = null
     private var column: LinearLayout? = null
     private var accessBtn: TextView? = null
+    private var lp: WindowManager.LayoutParams? = null
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private val refresh = object : Runnable {
         override fun run() {
@@ -70,6 +73,56 @@ class GvrBubbleService : Service() {
         accessBtn?.setBackgroundColor(if (accessOn()) 0xFF1B7A3EL.toInt() else 0xFF7A1B1BL.toInt())
     }
 
+    /** Drag the whole column by any button. A short tap still runs onTap. */
+    private fun makeDraggable(v: View, onTap: () -> Unit, onLong: (() -> Unit)?) {
+        var downX = 0f
+        var downY = 0f
+        var startX = 0
+        var startY = 0
+        var moved = false
+        val longPress = Runnable {
+            if (!moved && onLong != null) onLong.invoke()
+        }
+        v.setOnTouchListener { _, e ->
+            val params = lp ?: return@setOnTouchListener false
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.rawX
+                    downY = e.rawY
+                    startX = params.x
+                    startY = params.y
+                    moved = false
+                    if (onLong != null) handler.postDelayed(longPress, 600)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (e.rawX - downX).toInt()
+                    val dy = (e.rawY - downY).toInt()
+                    if (!moved && (abs(dx) > 12 || abs(dy) > 12)) {
+                        moved = true
+                        handler.removeCallbacks(longPress)
+                    }
+                    if (moved) {
+                        params.x = startX + dx
+                        params.y = startY + dy
+                        column?.let { wm?.updateViewLayout(it, params) }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    handler.removeCallbacks(longPress)
+                    if (!moved) onTap()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(longPress)
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         startAsForeground()
@@ -81,23 +134,10 @@ class GvrBubbleService : Service() {
         gvr.setTextColor(0xFFFFFFFFL.toInt())
         gvr.setBackgroundColor(0xFF5B3FD6L.toInt())
         gvr.setPadding(28, 18, 28, 18)
-        gvr.setOnClickListener {
-            GvrAccessibilityService.paused = !GvrAccessibilityService.paused
-            gvr.text = if (GvrAccessibilityService.paused) "GVR ▶" else "GVR ⏹"
-        }
-        gvr.setOnLongClickListener {
-            stop(this)
-            true
-        }
 
         val access = TextView(this)
         access.setTextColor(0xFFFFFFFFL.toInt())
         access.setPadding(28, 14, 28, 14)
-        access.setOnClickListener {
-            val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(i)
-        }
         accessBtn = access
         updateAccessLabel()
 
@@ -114,9 +154,22 @@ class GvrBubbleService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         )
-        params.gravity = Gravity.TOP or Gravity.END
-        params.x = 16
+        params.gravity = Gravity.TOP or Gravity.START
+        params.x = resources.displayMetrics.widthPixels - 300
         params.y = 300
+        lp = params
+
+        makeDraggable(gvr, onTap = {
+            GvrAccessibilityService.paused = !GvrAccessibilityService.paused
+            gvr.text = if (GvrAccessibilityService.paused) "GVR ▶" else "GVR ⏹"
+        }, onLong = { stop(this) })
+
+        makeDraggable(access, onTap = {
+            val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(i)
+        }, onLong = null)
+
         manager.addView(col, params)
         handler.post(refresh)
     }
@@ -145,6 +198,7 @@ class GvrBubbleService : Service() {
         column?.let { wm?.removeView(it) }
         column = null
         accessBtn = null
+        lp = null
         super.onDestroy()
     }
 }
