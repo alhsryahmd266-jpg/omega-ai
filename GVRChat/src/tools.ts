@@ -33,6 +33,7 @@ import { listen } from './voice';
 import { describePick } from './modelSelector';
 import { toolAppUpdate } from './appUpdate';
 import { toolSpeak, toolStopSpeaking } from './speech';
+import { toolWhatsappSend } from './screen';
 import { toolSessionStart, toolSessionStop, toolSessionStatus } from './screen';
 
 const MEMORY_KEY = 'gvr_agent_memory';
@@ -912,7 +913,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop' | 'diagnose' | 'chat_show' | 'chat_hide' | 'voice_listen';
+  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop' | 'diagnose' | 'chat_show' | 'chat_hide' | 'voice_listen' | 'whatsapp_send';
 
 interface ToolSpec {
   name: ToolName;
@@ -1129,6 +1130,9 @@ const TOOLS: ToolSpec[] = [
   { name: 'voice_listen', confirm: false, advertise: true,
     usage: 'listen to one spoken Arabic sentence from the user and return the text. Argument: online (Google, default) or offline (on-device, needs the Arabic offline pack). Use it when the user wants to talk instead of type.',
     run: async (arg: string) => listen(arg.trim().toLowerCase() === 'offline' ? 'offline' : 'online') },
+  { name: 'whatsapp_send', confirm: false, advertise: true,
+    usage: 'send a WhatsApp message to a contact: searches the name, opens the chat, types, presses send, and checks the screen. Needs an active chat session. Argument: contact name | message text. Report only the result this tool returns; never say a message was sent unless it says so.',
+    run: toolWhatsappSend },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
