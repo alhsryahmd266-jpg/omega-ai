@@ -146,7 +146,7 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   }
 
   // 1g) diagnose the phone control state
-  if (/(تشخيص|اتاكد|اتأكد|حالة)[^\n]{0,25}(الخدم|الوصول|الفقاع|الصلاحي|الشاش|التحكم)|diagnose/i.test(n)) {
+  if (/^\s*(تشخيص|diagnose|فحص)\s*[.!؟?]*\s*$/i.test(n) || /(تشخيص|اتاكد|اتأكد|حالة)[^\n]{0,25}(الخدم|الوصول|الفقاع|الصلاحي|الشاش|التحكم)|diagnose/i.test(n)) {
     add('diagnose', '', 'diagnose');
   }
 
