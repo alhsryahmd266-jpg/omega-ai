@@ -16,6 +16,12 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
     <application>
         <service
             android:name="expo.modules.terminal.GvrJobService"
