@@ -29,6 +29,7 @@ import { toolSetAlarm, toolRemind, toolNoteAdd, toolNoteList } from './deviceToo
 import { toolScreenRead, toolScreenTap, toolScreenType, toolScreenBack, toolScreenAllow, toolScreenEnable, toolOpenApp, toolFindApp, toolDiagnose } from './screen';
 import { toolBubbleShow, toolBubbleHide } from './bubble';
 import { toolChatShow, toolChatHide } from './overlayChat';
+import { listen } from './voice';
 import { describePick } from './modelSelector';
 import { toolAppUpdate } from './appUpdate';
 import { toolSpeak, toolStopSpeaking } from './speech';
@@ -911,7 +912,7 @@ export type ToolName =
   | 'set_alarm' | 'remind' | 'note_add' | 'note_list'
   | 'screen_read' | 'screen_tap' | 'screen_type' | 'screen_back' | 'screen_allow' | 'screen_enable' | 'open_app'
   | 'bubble_show' | 'bubble_hide' | 'session_start' | 'session_stop' | 'session_status'
-  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop' | 'diagnose' | 'chat_show' | 'chat_hide';
+  | 'browser_click' | 'browser_type' | 'model_pick' | 'app_update' | 'find_app' | 'speak' | 'speak_stop' | 'diagnose' | 'chat_show' | 'chat_hide' | 'voice_listen';
 
 interface ToolSpec {
   name: ToolName;
@@ -1125,6 +1126,9 @@ const TOOLS: ToolSpec[] = [
   { name: 'chat_hide', confirm: false, advertise: true,
     usage: 'hide the floating chat window. No argument.',
     run: async () => toolChatHide() },
+  { name: 'voice_listen', confirm: false, advertise: true,
+    usage: 'listen to one spoken Arabic sentence from the user and return the text. Argument: online (Google, default) or offline (on-device, needs the Arabic offline pack). Use it when the user wants to talk instead of type.',
+    run: async (arg: string) => listen(arg.trim().toLowerCase() === 'offline' ? 'offline' : 'online') },
 ];
 
 const isAdvertised = (t: ToolSpec): boolean => (typeof t.advertise === 'function' ? t.advertise() : t.advertise);
