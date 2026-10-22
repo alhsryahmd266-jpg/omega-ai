@@ -9,6 +9,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const ROOT = process.env.GVR_TEST_ROOT || fs.mkdtempSync(path.join(os.tmpdir(), 'gvr-mission-'));
+// Every run gets its own folder; remove it at exit (a run can write GBs of APKs/video). GVR_KEEP=1 keeps it for debugging.
+if (!process.env.GVR_TEST_ROOT && process.env.GVR_KEEP !== '1') {
+  process.on('exit', () => { try { fs.rmSync(ROOT, { recursive: true, force: true }); } catch { /* best effort */ } });
+}
 for (const d of ['files/workspace', 'cache', 'sdcard/Download', 'bin', 'opt', 'root']) fs.mkdirSync(path.join(ROOT, d), { recursive: true });
 
 export const documentDirectory = 'file:///data/user/0/com.ahmedxg.gvrchat/files/';
