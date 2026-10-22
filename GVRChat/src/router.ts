@@ -10,14 +10,34 @@
  * It only fires on explicit patterns; anything ambiguous is left to the model.
  */
 
+import { wantsAction } from './agentLogic';
+
 export interface RouteHit {
   tool: string;
   arg: string;
   why: string;
 }
 
+/** Natural language that follows a command: "…وقولي الملفات", "…وبعدين شغل …", "… and then show me …". */
+const PROSE_TAIL = /\s+(?:و?(?:قولي|قول\s*لي|قوللي|اعرضلي|اعرض|وريني|ورّيني|شوفلي|بعدين|بعد\s*كده|بعد\s*ذلك|بعدها|ثم|لخصلي|اشرحلي|وبعد)(?=\s|$)|and\s+then|and\s+tell|and\s+show|then(?=\s)).*$/i;
+
+export interface RouteAttachment {
+  name: string;
+  kind: string;
+  /** real path of the staged copy (Android shell, file tools) */
+  path: string;
+  /** the same file as Alpine Linux sees it (/workspace/uploads/<name>) */
+  linuxPath: string;
+}
+
 export interface RouteOptions {
   hasAttachment?: boolean;
+  /** The attached file, when there is one (lets the router act on it without the model). */
+  attachment?: RouteAttachment;
+  /** Alpine Linux is installed (apk_tool, tar, … available). */
+  linuxReady?: boolean;
+  /** A vision model is loaded (images are handed to it directly). */
+  visionReady?: boolean;
   /**
    * Weak (tiny/base) models can't decide to search by themselves, so for them EVERY knowledge
    * question ("كم عدد…", "من هو…", "what is…") goes to the web automatically.
@@ -134,8 +154,10 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
     add('terminal', fence[2].trim(), 'code_block');
   } else {
     const m = /^(?:نفذ|شغل|run|execute|exec)(?:\s*[:：]\s*|\s+)(?:لي\s+)?(?:(?:الامر|الأمر|امر|أمر|command|cmd)\s*[:：]?\s*)?`?([^`\n]+?)`?\s*$/i.exec(raw);
-    if (m && m[1] && /[a-z]/i.test(m[1]) && !/^(?:the\s+|ال)?(?:terminal|shell|console|ترمنال|تيرمنال|تريمنال|ترمينال|تيرمينال)$/i.test(m[1].trim())) {
-      add('terminal', m[1].trim(), 'run_command');
+    // "شغل ls وقولي الملفات" → the command is `ls`; what follows is a request to the assistant, not shell input.
+    const cmd = m ? m[1].replace(PROSE_TAIL, '').trim() : '';
+    if (cmd && /[a-z]/i.test(cmd) && !/^(?:the\s+|ال)?(?:terminal|shell|console|ترمنال|تيرمنال|تريمنال|ترمينال|تيرمينال)$/i.test(cmd)) {
+      add('terminal', cmd, 'run_command');
     }
   }
 
@@ -203,6 +225,30 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   // 11) weak models: any factual question goes to the web (they can't decide that themselves)
   if (opts.broad && hits.length === 0 && !fence && !urls.length && !opts.hasAttachment && isInfoQuestion(raw)) {
     add('search', raw.replace(/[?؟!]+$/, '').trim(), 'knowledge');
+  }
+
+  // 12) an attached archive / APK + "unpack it": do it right now. The slow model never has to write the command
+  //     (it used to print it as text and ask "continue?"), and it cannot get the file's path wrong.
+  const att = opts.attachment;
+  if (att && hits.length === 0 && wantsAction(raw) && /(?:^|\s)(?:فك|فكك|فكي|فكوا|استخرج|unzip|unpack|extract|decompile|decode)(?=\s|$)/.test(n)) {
+    const isApk = /\.(?:apk|xapk|apks)$/i.test(att.name);
+    const stem = att.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'archive';
+    const root = opts.linuxReady ? '/workspace' : att.path.replace(/\/uploads\/[^/]*$/, '');
+    const src = opts.linuxReady ? att.linuxPath : att.path;
+    const out = `${root}/${isApk ? 'apk_work' : 'unpacked'}/${stem}`;
+    if (isApk && opts.linuxReady) {
+      add('apk_tool', `unpack ${src} ${out}`, 'unpack_apk');
+    } else if (/\.(?:apk|xapk|apks|zip|jar|aar)$/i.test(att.name)) {
+      add('terminal', `mkdir -p '${out}' && unzip -o -q '${src}' -d '${out}' && echo "Unpacked to ${out}" && ls -la '${out}' | head -40 && echo "files: $(find '${out}' -type f | wc -l)"`, 'unpack_zip');
+    } else if (/\.(?:tar|tgz|tar\.gz|gz)$/i.test(att.name)) {
+      add('terminal', `mkdir -p '${out}' && tar -xf '${src}' -C '${out}' && echo "Unpacked to ${out}" && ls -la '${out}' | head -40`, 'unpack_tar');
+    }
+  }
+
+  // 13) an attached picture and no vision model: read what is written in it (OCR) instead of ignoring it
+  const imageNoVision = !!att && att.kind === 'image' && !opts.visionReady && hits.length === 0;
+  if (imageNoVision && (wantsAction(raw) || /(?:ايه|اي|what|read|اقرا|وصف|describe|مكتوب|نص|text|شوف|look|see|حلل|analy)/.test(n))) {
+    add('view_image', opts.linuxReady ? att!.linuxPath : att!.path, 'image_ocr');
   }
 
   return hits.slice(0, 3);

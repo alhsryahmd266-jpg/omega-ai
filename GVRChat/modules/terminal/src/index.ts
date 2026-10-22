@@ -58,6 +58,10 @@ interface TerminalNative {
   installPackage(packageName: string): Promise<NativeExecResult>;
   writeFile(path: string, content: string): Promise<boolean>;
   readFile(path: string): Promise<string>;
+  /** Added later: absent in an older native build, so always feature-check before calling. */
+  cancelRunning?(): Promise<boolean>;
+  beginJob?(label: string): Promise<boolean>;
+  endJob?(): Promise<boolean>;
 }
 
 const Native = requireNativeModule<TerminalNative>('Terminal');
@@ -304,6 +308,19 @@ const Terminal = {
 
   async readFile(path: string): Promise<string> {
     return Native.readFile(path);
+  },
+
+  /** Stop button: kills whatever command is running right now. Safe to call when nothing runs. */
+  async cancelRunning(): Promise<boolean> {
+    try { return typeof Native.cancelRunning === 'function' ? await Native.cancelRunning() : false; } catch { return false; }
+  },
+
+  /** Keeps the app alive in the background (notification + wake lock) while the agent works for a long time. */
+  async beginJob(label: string): Promise<boolean> {
+    try { return typeof Native.beginJob === 'function' ? await Native.beginJob(label) : false; } catch { return false; }
+  },
+  async endJob(): Promise<boolean> {
+    try { return typeof Native.endJob === 'function' ? await Native.endJob() : false; } catch { return false; }
   },
 };
 

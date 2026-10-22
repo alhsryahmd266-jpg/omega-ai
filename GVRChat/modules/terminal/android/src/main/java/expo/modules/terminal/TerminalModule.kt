@@ -110,16 +110,27 @@ class TerminalModule : Module() {
    * (Reading only after waitFor() deadlocks as soon as output exceeds the pipe
    * buffer, ~64 KB.) Output is capped so a runaway command can't exhaust memory.
    */
-  /**
+    /** Processes started by runProcess that are still running: the Stop button kills them (cancelRunning). */
+  private val activeProcesses = java.util.concurrent.CopyOnWriteArraySet<Process>()
+
+  /** True while the agent itself is working (beginJob..endJob): single commands must not dismiss that notification. */
+  @Volatile private var agentJobActive = false
+  private var agentWakeLock: android.os.PowerManager.WakeLock? = null
+
+  /** The app's workspace folder (uploads and results). Same folder expo-file-system calls documentDirectory/workspace. */
+  private fun workspaceDir(): File = File(context.filesDir, "workspace").also { it.mkdirs() }
+
+  private fun jobLabelFor(cmd: String): String {
+    val oneLine = cmd.trim().replace(Regex("\\s+"), " ")
+    return if (oneLine.length > 60) oneLine.take(60) + "…" else oneLine.ifEmpty { "تنفيذ أمر" }
+  }
+
+/**
    * Runs `pb`, protected by a foreground-service notification — but only if it's
    * actually still running after 1.5s. Fast commands (ls, pwd, cat ...) never show
    * anything; a slow one (apk add, pip install, a big git clone) gets protected
    * from being killed while the screen is off or the app is in the background.
    */
-  private fun jobLabelFor(cmd: String): String {
-    val oneLine = cmd.trim().replace(Regex("\\s+"), " ")
-    return if (oneLine.length > 60) oneLine.take(60) + "…" else oneLine.ifEmpty { "تنفيذ أمر" }
-  }
 
   private fun runProcess(pb: ProcessBuilder, timeoutMs: Long, jobLabel: String? = null): ExecOutcome {
     val maxChars = 200000
@@ -127,8 +138,11 @@ class TerminalModule : Module() {
     val showJob = Runnable { GvrJobService.start(context, jobLabel ?: "تنفيذ أمر في الترمنال") }
     mainHandler.postDelayed(showJob, 1500)
 
+    var started: Process? = null
     try {
       val process = pb.start()
+      started = process
+      activeProcesses.add(process)
       try { process.outputStream.close() } catch (e: Exception) { }
 
       val outBuf = StringBuffer()
@@ -171,7 +185,8 @@ class TerminalModule : Module() {
       return ExecOutcome(outBuf.toString(), errBuf.toString(), process.exitValue())
     } finally {
       mainHandler.removeCallbacks(showJob)
-      GvrJobService.stop(context)
+      started?.let { activeProcesses.remove(it) }
+      if (!agentJobActive) GvrJobService.stop(context)
     }
   }
 
@@ -398,6 +413,11 @@ class TerminalModule : Module() {
     if (File("/storage/emulated/0").exists()) {
       cmd.add("-b"); cmd.add("/storage/emulated/0:/sdcard")
     }
+    // The app's workspace (uploaded files, results) is visible inside Alpine as /workspace.
+    try {
+      File(alpineRoot(), "workspace").mkdirs()
+      cmd.add("-b"); cmd.add("${workspaceDir().absolutePath}:/workspace")
+    } catch (e: Exception) { }
     cmd.addAll(listOf(
       "-w", "/root",
       "/usr/bin/env", "-i",
@@ -467,6 +487,11 @@ class TerminalModule : Module() {
     if (File("/storage/emulated/0").exists()) {
       cmd.add("-b"); cmd.add("/storage/emulated/0:/sdcard")
     }
+    // The app's workspace (uploaded files, results) is visible inside Alpine as /workspace.
+    try {
+      File(alpineRoot(), "workspace").mkdirs()
+      cmd.add("-b"); cmd.add("${workspaceDir().absolutePath}:/workspace")
+    } catch (e: Exception) { }
     cmd.addAll(listOf(
       "-w", "/root",
       "/usr/bin/env", "-i",
@@ -827,6 +852,43 @@ class TerminalModule : Module() {
         promise.resolve(target.readText())
       } catch (e: Exception) {
         promise.reject("READ_ERROR", "Failed to read file: ${e.message}", e)
+      }
+    }
+
+    // The Stop button: kill every command that is still running (proot's --kill-on-exit takes its children with it).
+    AsyncFunction("cancelRunning") { promise: expo.modules.kotlin.Promise ->
+      var killed = false
+      for (p in activeProcesses) {
+        try { p.destroyForcibly(); killed = true } catch (e: Exception) { }
+      }
+      promise.resolve(killed)
+    }
+
+    // Long agent jobs: foreground notification + a partial wake lock (max 4 h) so Android keeps the CPU running
+    // when the screen turns off. endJob releases both.
+    AsyncFunction("beginJob") { label: String, promise: expo.modules.kotlin.Promise ->
+      try {
+        agentJobActive = true
+        GvrJobService.start(context, label)
+        try {
+          val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+          agentWakeLock?.let { if (it.isHeld) it.release() }
+          agentWakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "gvr:agent").also { it.acquire(4 * 60 * 60 * 1000L) }
+        } catch (e: Exception) { }
+        promise.resolve(true)
+      } catch (e: Exception) {
+        promise.resolve(false)
+      }
+    }
+    AsyncFunction("endJob") { promise: expo.modules.kotlin.Promise ->
+      try {
+        agentJobActive = false
+        try { agentWakeLock?.let { if (it.isHeld) it.release() } } catch (e: Exception) { }
+        agentWakeLock = null
+        GvrJobService.stop(context)
+        promise.resolve(true)
+      } catch (e: Exception) {
+        promise.resolve(false)
       }
     }
   }

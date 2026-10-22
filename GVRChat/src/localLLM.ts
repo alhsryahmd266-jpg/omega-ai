@@ -9,10 +9,17 @@
  * A file whose name contains "mmproj" is a vision projector: it is not loaded
  * by itself, it is paired automatically with the text model on load.
  */
-import { initLlama, type LlamaContext } from 'llama.rn';
+import { getBackendDevicesInfo, initLlama, loadLlamaModelInfo, type LlamaContext } from 'llama.rn';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Terminal from '../modules/terminal/src';
+import {
+  hasMtp, parseFreqs, planAcceleration, planThreads, speedHint,
+  type AccelMode, type AccelPlan, type AccelUsed, type BackendDevice,
+} from './accel';
+
+export type { AccelMode } from './accel';
 
 const MODELS_DIR = `${FileSystem.documentDirectory}models/`;
 const LAST_MODEL_KEY = 'gvr_last_model_uri';
@@ -31,8 +38,12 @@ export interface ModelInfo {
 export interface LoadOptions {
   /** Context size in tokens. Default: tries 8192, then 4096, then 2048. */
   nCtx?: number;
+  /** Manual override. Default: one thread per big CPU core (see accel.ts planThreads). */
   nThreads?: number;
+  /** Manual override. Default: decided by the acceleration plan. */
   gpuLayers?: number;
+  /** Hardware choice for this load. Default: the saved setting ('auto'). */
+  accel?: AccelMode;
   /** Force a specific mmproj file instead of auto-pairing. */
   mmprojUri?: string;
 }
@@ -361,9 +372,103 @@ export async function unloadModel(): Promise<void> {
   visionOn = false;
   visionNote = '';
   profile = null;
+  accel = null;
 }
 
 const MEMORY_ERR = /context|memory|alloc|kv|out of|oom/i;
+
+/* ── ACCELERATION: GPU (OpenCL) / NPU (Hexagon) / CPU threads / MTP ─────────────────────────────────────
+ * The decisions are pure functions in accel.ts (unit-tested). This part only talks to the phone.
+ * Safety net: an accelerated load writes ACCEL_TRY_KEY first. If the app dies during that load (a native
+ * crash JavaScript cannot catch) the next launch finds the key, marks that mode as "bad" and loads on the CPU.
+ */
+const ACCEL_MODE_KEY = 'gvr_accel_mode';
+const ACCEL_BAD_KEY = 'gvr_accel_bad';
+const ACCEL_TRY_KEY = 'gvr_accel_try';
+const CPU_FREQ_KEY = 'gvr_cpu_freqs';
+
+let accel: { plan: AccelPlan; threads: string; mtp: boolean; hint: string } | null = null;
+
+export async function getAccelMode(): Promise<AccelMode> {
+  const v = await AsyncStorage.getItem(ACCEL_MODE_KEY);
+  return v === 'cpu' || v === 'gpu' || v === 'npu' ? v : 'auto';
+}
+
+/** Choosing 'gpu' or 'npu' by hand also forgives an earlier failure of that mode. */
+export async function setAccelMode(mode: AccelMode): Promise<void> {
+  await AsyncStorage.setItem(ACCEL_MODE_KEY, mode);
+  if (mode === 'gpu' || mode === 'npu') {
+    const bad = (await getBadAccel()).filter(b => b !== mode);
+    await AsyncStorage.setItem(ACCEL_BAD_KEY, JSON.stringify(bad));
+  }
+}
+
+async function getBadAccel(): Promise<AccelUsed[]> {
+  try {
+    const a = JSON.parse((await AsyncStorage.getItem(ACCEL_BAD_KEY)) || '[]');
+    return Array.isArray(a) ? a.filter((x): x is AccelUsed => x === 'gpu' || x === 'npu') : [];
+  } catch { return []; }
+}
+
+async function markAccelBad(mode: AccelUsed): Promise<void> {
+  if (mode === 'cpu') return;
+  const bad = new Set(await getBadAccel());
+  bad.add(mode);
+  await AsyncStorage.setItem(ACCEL_BAD_KEY, JSON.stringify([...bad]));
+}
+
+/** Short status for the UI, e.g. "CPU · threads 4 (4 big of 8 cores)" or "GPU OpenCL (GPUOpenCL)". */
+export function getAccelStatus(): string {
+  if (!accel) return '';
+  const parts = [accel.plan.label];
+  if (accel.plan.mode === 'cpu' && accel.threads) parts.push(accel.threads);
+  if (accel.mtp) parts.push('MTP');
+  return parts.join(' · ');
+}
+export const getSpeedHint = (): string => accel?.hint ?? '';
+export const isMtpActive = (): boolean => !!accel?.mtp;
+
+async function backendDevices(): Promise<BackendDevice[]> {
+  try { return ((await getBackendDevicesInfo()) as BackendDevice[]) ?? []; } catch { return []; }
+}
+
+/** Max frequency of every CPU core (read once, cached). [] when the phone does not let us read it. */
+async function cpuFreqs(): Promise<number[]> {
+  try {
+    const cached = await AsyncStorage.getItem(CPU_FREQ_KEY);
+    if (cached) {
+      const a = JSON.parse(cached);
+      if (Array.isArray(a) && a.length >= 4) return a;
+    }
+    const out = await Terminal.runAndroid('for f in /sys/devices/system/cpu/cpu[0-9]*; do echo "$(basename $f) $(cat $f/cpufreq/cpuinfo_max_freq 2>/dev/null)"; done', 10);
+    const freqs = parseFreqs(out);
+    if (freqs.length >= 4) await AsyncStorage.setItem(CPU_FREQ_KEY, JSON.stringify(freqs));
+    return freqs;
+  } catch { return []; }
+}
+
+/** MTP (multi-token prediction) = speculative decoding with no second model. Only some GGUFs carry the layers. */
+async function detectMtp(uri: string): Promise<boolean> {
+  try { return hasMtp((await loadLlamaModelInfo(uri)) as Record<string, unknown>); } catch { return false; }
+}
+
+type InitParams = Parameters<typeof initLlama>[0];
+
+/** Typed on purpose (no ternary spreads): the compiler checks every option against llama.rn's own types. */
+function buildInitParams(model: ModelInfo, nCtx: number, threads: number, plan: AccelPlan, opts: LoadOptions, mtp: boolean): InitParams {
+  const p: InitParams = {
+    model: model.uri,
+    n_ctx: nCtx,
+    n_threads: opts.nThreads ?? threads,
+    n_gpu_layers: opts.gpuLayers ?? plan.nGpuLayers,
+    use_mlock: false,
+  };
+  if (plan.devices) p.devices = plan.devices;
+  if (plan.noGpuDevices) p.no_gpu_devices = true;
+  if (plan.flashAttn) p.flash_attn_type = plan.flashAttn;
+  if (mtp) p.speculative = { type: 'draft-mtp', n_max: 3 };
+  return p;
+}
 
 /**
  * Loads a text model (and its vision projector if one is paired).
@@ -381,30 +486,49 @@ export async function loadModel(
   await unloadModel();
   await AsyncStorage.setItem(LOADING_FLAG_KEY, model.uri);
 
+  const mode = opts.accel ?? (await getAccelMode());
+  const [devices, bad, freqs, mtp] = await Promise.all([backendDevices(), getBadAccel(), cpuFreqs(), detectMtp(model.uri)]);
+  const threads = planThreads(freqs);
+  const firstPlan = planAcceleration({ mode, fileName: model.name, devices, bad });
+  // An accelerated plan gets one try. If it fails, the CPU plan runs and the failure is remembered.
+  const cpuFallback: AccelPlan = {
+    ...planAcceleration({ mode: 'cpu', fileName: model.name, devices, bad }),
+    noGpuDevices: false,
+    label: `CPU (بعد فشل ${firstPlan.mode === 'npu' ? 'الـ NPU' : 'الـ GPU'})`,
+  };
+  const plans: AccelPlan[] = firstPlan.mode === 'cpu' ? [firstPlan] : [firstPlan, cpuFallback];
+
   const sizes = opts.nCtx ? [opts.nCtx] : [8192, 4096, 2048];
   let lastError: any = null;
+  let usedPlan: AccelPlan | null = null;
 
-  for (const nCtx of sizes) {
-    try {
-      ctx = await initLlama(
-        {
-          model: model.uri,
-          n_ctx: nCtx,
-          n_threads: opts.nThreads ?? 4,
-          n_gpu_layers: opts.gpuLayers ?? 0,
-          use_mlock: false,
-        },
-        (p: number) => onProgress?.(Math.max(0, Math.min(1, p / 100))),
-      );
-      loadedModel = model;
-      loadedCtxSize = nCtx;
-      lastError = null;
-      break;
-    } catch (e: any) {
-      lastError = e;
-      ctx = null;
-      // Only a memory-related failure can be fixed with a smaller context.
-      if (!MEMORY_ERR.test(String(e?.message || e))) break;
+  plansLoop: for (const plan of plans) {
+    if (plan.mode !== 'cpu') await AsyncStorage.setItem(ACCEL_TRY_KEY, plan.mode);
+    for (const nCtx of sizes) {
+      try {
+        ctx = await initLlama(
+          buildInitParams(model, nCtx, threads.nThreads, plan, opts, mtp),
+          (p: number) => onProgress?.(Math.max(0, Math.min(1, p / 100))),
+        );
+        // The first GPU/NPU run compiles kernels: do it now so a broken backend shows up here, not mid-chat.
+        if (plan.mode !== 'cpu') await ctx.completion({ prompt: 'Hi', n_predict: 2, temperature: 0 });
+        loadedModel = model;
+        loadedCtxSize = nCtx;
+        usedPlan = plan;
+        lastError = null;
+        await AsyncStorage.removeItem(ACCEL_TRY_KEY);
+        break plansLoop;
+      } catch (e: any) {
+        lastError = e;
+        if (ctx) { try { await ctx.release(); } catch { /* already gone */ } }
+        ctx = null;
+        // Only a memory-related failure can be fixed with a smaller context.
+        if (!MEMORY_ERR.test(String(e?.message || e))) break;
+      }
+    }
+    if (plan.mode !== 'cpu') {
+      await markAccelBad(plan.mode);
+      await AsyncStorage.removeItem(ACCEL_TRY_KEY);
     }
   }
 
@@ -418,6 +542,8 @@ export async function loadModel(
   }
 
   try { profile = analyzeModel(ctx, model.name); } catch { profile = null; }
+  const finalPlan: AccelPlan = usedPlan ?? plans[plans.length - 1];
+  accel = { plan: finalPlan, threads: finalPlan.mode === 'cpu' ? threads.note : '', mtp, hint: speedHint(model.name, finalPlan) };
 
   // Vision (optional)
   try {
@@ -457,7 +583,14 @@ export async function autoLoadLastModel(
   onProgress?: (pct: number) => void,
 ): Promise<{ status: AutoLoadStatus; model?: ModelInfo }> {
   const flag = await AsyncStorage.getItem(LOADING_FLAG_KEY);
-  if (flag) {
+  const tried = await AsyncStorage.getItem(ACCEL_TRY_KEY);
+  if (tried === 'gpu' || tried === 'npu') {
+    // The app died while the GPU/NPU was being initialised: that backend is the suspect, not the model.
+    // Remember it as bad and load the same model on the CPU instead of skipping it.
+    await markAccelBad(tried);
+    await AsyncStorage.removeItem(ACCEL_TRY_KEY);
+    await AsyncStorage.removeItem(LOADING_FLAG_KEY);
+  } else if (flag) {
     await AsyncStorage.removeItem(LOADING_FLAG_KEY);
     await AsyncStorage.removeItem(LAST_MODEL_KEY);
     return { status: 'skipped_after_crash' };

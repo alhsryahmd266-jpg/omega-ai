@@ -21,6 +21,7 @@ import { inspectFile } from './fileInspect';
 import * as DocumentPicker from 'expo-document-picker';
 import { analyzeImage, isVisionReady } from './localLLM';
 import { prepareVideoForAnalysis, VIDEO_LIMITS } from '../modules/video-processor/src';
+import { safeFileName } from './agentLogic';
 
 const B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -42,8 +43,13 @@ function base64ToBinary(b64: string): string {
   return parts.join('');
 }
 
+// Every character that goes into the prompt costs seconds of reading time on a phone (a big model reads
+// ~10-40 tokens/s). Anything more than this stays on disk, where the tools (read_file, search_code,
+// inspect_file, terminal) can fetch exactly the part that is needed.
 export const LIMITS = {
-  maxTextChars: 20000,        // ~5k tokens of raw text injected into prompt
+  maxTextChars: 9000,         // ~2.5k tokens of raw text injected into prompt
+  maxFileSummaryChars: 1800,  // APK / zip / office: only the head of the report, the rest via inspect_file
+  maxPdfChars: 6000,
   maxPdfPages: 30,
   maxImageDimPx: 1536,        // images larger than this get downscaled first
 };
@@ -58,6 +64,37 @@ export interface PreparedAttachment {
   /** What actually gets fed to the model — always real, never a stub. */
   extractedContent: string;
   warnings: string[];
+  /** Safe copy inside the app workspace, so tools can reach the file: real path (Android) … */
+  workPath?: string;
+  /** … and the same file as Alpine Linux sees it (/workspace/uploads/<name>). */
+  linuxPath?: string;
+}
+
+const UPLOADS = `${FileSystem.documentDirectory ?? 'file:///'}workspace/uploads/`;
+
+/**
+ * The picker leaves the file in the cache under a name like "app-release (3).apk" that no shell command can
+ * use and that the model never sees. Copy it into the workspace with a safe name and report both paths.
+ */
+async function stageAttachment(asset: DocumentPicker.DocumentPickerAsset): Promise<{ workPath: string; linuxPath: string } | null> {
+  try {
+    await FileSystem.makeDirectoryAsync(UPLOADS, { intermediates: true }).catch(() => {});
+    const safe = safeFileName(asset.name);
+    const dot = safe.lastIndexOf('.');
+    const stem = dot > 0 ? safe.slice(0, dot) : safe;
+    const ext = dot > 0 ? safe.slice(dot) : '';
+    let target = UPLOADS + safe;
+    for (let n = 2; n < 60; n++) {
+      const info = await FileSystem.getInfoAsync(target, { size: true });
+      if (!info.exists || (info.size === asset.size && !!asset.size)) break;      // free name, or the same file again
+      target = `${UPLOADS}${stem}_${n}${ext}`;
+    }
+    const existing = await FileSystem.getInfoAsync(target);
+    if (!existing.exists) await FileSystem.copyAsync({ from: asset.uri, to: target });
+    return { workPath: target.replace(/^file:\/\//, ''), linuxPath: `/workspace/uploads/${target.slice(UPLOADS.length)}` };
+  } catch {
+    return null;
+  }
 }
 
 function detectKind(name: string, mime?: string | null): AttachmentKind {
@@ -85,7 +122,7 @@ async function prepareText(asset: DocumentPicker.DocumentPickerAsset): Promise<P
   let content = await FileSystem.readAsStringAsync(asset.uri, { length: LIMITS.maxTextChars * 4 });
   if (content.length > LIMITS.maxTextChars) {
     content = content.slice(0, LIMITS.maxTextChars);
-    warnings.push(`File truncated to ${LIMITS.maxTextChars} characters (was longer).`);
+    warnings.push(`Only the first ${LIMITS.maxTextChars} characters are in the prompt: use read_file or search_code on the saved copy for the rest.`);
   }
   return {
     kind: 'text', name: asset.name, uri: asset.uri,
@@ -105,15 +142,16 @@ async function prepareFile(
 ): Promise<PreparedAttachment> {
   const warnings: string[] = [];
   let content = '';
+  const cap = kind === 'pdf' ? LIMITS.maxPdfChars : LIMITS.maxFileSummaryChars;
   try {
-    content = await inspectFile({ uri: asset.uri, name: asset.name, size: asset.size || 0, mime: asset.mimeType });
+    content = await inspectFile({ uri: asset.uri, name: asset.name, size: asset.size || 0, mime: asset.mimeType }, cap);
   } catch (e: any) {
     warnings.push(`Could not fully read this file: ${e?.message || e}`);
     content = `File: ${asset.name}\nsize: ${asset.size || 0} bytes\ntype: ${asset.mimeType || 'unknown'}`;
   }
-  if (content.length > LIMITS.maxTextChars) {
-    content = content.slice(0, LIMITS.maxTextChars);
-    warnings.push(`Report truncated to ${LIMITS.maxTextChars} characters.`);
+  if (content.length > cap) {
+    content = content.slice(0, cap);
+    warnings.push(`Only the beginning of the report is in the prompt (${cap} characters): call inspect_file / read_file for the rest.`);
   }
   return {
     kind, name: asset.name, uri: asset.uri,
@@ -190,11 +228,15 @@ export async function prepareAttachment(
   asset: DocumentPicker.DocumentPickerAsset
 ): Promise<PreparedAttachment> {
   const kind = detectKind(asset.name, asset.mimeType);
+  let prepared: PreparedAttachment;
   switch (kind) {
-    case 'text':  return prepareText(asset);
-    case 'pdf':   return preparePdf(asset);
-    case 'image': return prepareImage(asset);
-    case 'video': return prepareVideo(asset);
-    default:  return prepareFile(asset, 'file');
+    case 'text':  prepared = await prepareText(asset); break;
+    case 'pdf':   prepared = await preparePdf(asset); break;
+    case 'image': prepared = await prepareImage(asset); break;
+    case 'video': return prepareVideo(asset);                 // frames only; the video itself stays where it is
+    default:      prepared = await prepareFile(asset, 'file');
   }
+  const staged = await stageAttachment(asset);
+  if (staged) { prepared.workPath = staged.workPath; prepared.linuxPath = staged.linuxPath; }
+  return prepared;
 }

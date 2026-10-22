@@ -34,6 +34,14 @@ jobs:
         working-directory: GVRChat
         run: npm install --legacy-peer-deps
 
+      - name: Type-check (tsc --noEmit)
+        working-directory: GVRChat
+        run: npm run typecheck
+
+      - name: Unit + integration tests (logic, router, acceleration planning, tool approvals, engine)
+        working-directory: GVRChat
+        run: npm test
+
       - name: Download llama.rn native artifacts explicitly
         working-directory: GVRChat
         run: |

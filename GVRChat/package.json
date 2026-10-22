@@ -4,7 +4,9 @@
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android"
+    "android": "expo run:android",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx tests/run-all.ts"
   },
   "dependencies": {
     "expo": "~51.0.0",
@@ -29,12 +31,16 @@
     "expo-video-processor": "file:./modules/video-processor",
     "terminal": "file:./modules/terminal",
     "fflate": "^0.8.2",
-    "expo-clipboard": "~6.0.3"
+    "expo-clipboard": "~6.0.3",
+    "expo-intent-launcher": "~11.0.1",
+    "expo-keep-awake": "~13.0.2",
+    "expo-sharing": "~12.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "babel-preset-expo": "~11.0.0",
-    "@expo/config-plugins": "~8.0.0"
+    "@expo/config-plugins": "~8.0.0",
+    "tsx": "^4.23.15"
   },
   "private": true
 }

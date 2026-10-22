@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, KeyboardAvoidingView, Platform, StatusBar,
   ActivityIndicator, Dimensions, Animated, Modal,
-  TouchableWithoutFeedback, ScrollView, Alert, Keyboard,
+  TouchableWithoutFeedback, ScrollView, Alert, Keyboard, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,18 +11,21 @@ import { BlurView } from 'expo-blur';
 import Svg, { Circle, Line, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import {
   listLocalModels, importModelFromDevice, loadModel, deleteModel, autoLoadLastModel,
-  isModelLoaded, isVisionReady, getLoadedModel, getVisionNote, stopGeneration,
+  isModelLoaded, isVisionReady, getLoadedModel, getVisionNote,
+  getAccelMode, setAccelMode, getAccelStatus, getSpeedHint, type AccelMode,
   getModelProfile, downloadRecommendedModel, cancelDownload, RECOMMENDED_MODELS, type RecommendedModel,
   type ModelInfo,
 } from './src/localLLM';
-import { runWithAttachment, resetConversation, type StepEvent, type AgentStep } from './src/gvrEngine';
+import { runWithAttachment, resetConversation, requestStop, restoreHistory, type StepEvent, type AgentStep } from './src/gvrEngine';
+import { endMission, interruptedMission } from './src/agentMemory';
 import { prepareAttachment, pickAnyFile, type PreparedAttachment } from './src/attachments';
 import {
   setToolConfirmHandler, resetToolApprovals, resetTerminalState, toolTerminal,
-  setOpenTerminalHandler, refreshLinuxState,
+  setOpenTerminalHandler, refreshLinuxState, setAutonomy, toolOutcome,
 } from './src/tools';
 import Terminal from './modules/terminal/src';
 import * as Clipboard from 'expo-clipboard';
@@ -118,10 +121,21 @@ const TOOL_LABELS: Record<string, { icon: string; label: string }> = {
   pkg_install:  { icon: 'package-variant',      label: 'يثبّت حزمة' },
   copy_clipboard:{ icon: 'content-copy',        label: 'ينسخ للحافظة' },
   read_clipboard:{ icon: 'clipboard-text-outline', label: 'يقرأ الحافظة' },
+  install_tool: { icon: 'package-down',         label: 'يثبّت أداة' },
+  edit_file:    { icon: 'file-edit-outline',    label: 'يعدّل ملف' },
+  search_code:  { icon: 'text-search',          label: 'يبحث في الملفات' },
+  view_image:   { icon: 'image-search-outline', label: 'يشوف الصورة' },
+  deliver_file: { icon: 'file-send-outline',    label: 'يسلّمك الملف' },
+  apk_tool:     { icon: 'android',              label: 'يشتغل على APK' },
+  mem_search:   { icon: 'brain',                label: 'يدوّر في الذاكرة' },
+};
+
+const ACCEL_LABELS: Record<AccelMode, string> = {
+  auto: 'تلقائي', cpu: 'المعالج فقط', gpu: 'GPU (OpenCL)', npu: 'NPU (تجريبي)',
 };
 
 /** Tools whose output is rendered as a real console block, not a generic card. */
-const CONSOLE_TOOLS = new Set(['terminal', 'python', 'pkg_install']);
+const CONSOLE_TOOLS = new Set(['terminal', 'python', 'pkg_install', 'apk_tool']);
 
 
 /** Three staggered pulsing dots — the "thinking" / "running" indicator used everywhere below. */
@@ -170,6 +184,8 @@ function StepCard({ tool, arg, result, done, defaultOpen }: {
 }) {
   const meta = TOOL_LABELS[tool] || { icon: 'tools', label: tool };
   const isConsole = CONSOLE_TOOLS.has(tool);
+  // ✓ only when the tool really worked: a refused or failed call used to show the same green check.
+  const outcome = done && result ? toolOutcome(result) : 'ok';
   const [open, setOpen] = useState(!!defaultOpen || (isConsole && done));
   const mount = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -193,7 +209,12 @@ function StepCard({ tool, arg, result, done, defaultOpen }: {
             {isConsole ? arg.split('\n')[0] : arg}
           </Text>
         )}
-        <View style={{ marginLeft: 'auto' }}>{done ? <DonePop /> : <ThinkingDots />}</View>
+        <View style={{ marginLeft: 'auto' }}>
+          {!done ? <ThinkingDots />
+            : outcome === 'denied' ? <Ionicons name="close-circle" size={15} color={C.warn} />
+            : outcome === 'error' ? <Ionicons name="alert-circle" size={15} color={C.error} />
+            : <DonePop />}
+        </View>
         {!!result && (
           <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={C.textDim} style={{ marginStart: 2 }} />
         )}
@@ -204,7 +225,7 @@ function StepCard({ tool, arg, result, done, defaultOpen }: {
           <View style={styles.consoleBlock}>
             <View style={styles.consoleHeader}>
               <View style={styles.consoleDot} /><View style={styles.consoleDot} /><View style={styles.consoleDot} />
-              <Text style={styles.consoleHeaderText}>{tool === 'python' ? 'python3' : tool === 'pkg_install' ? 'apk' : 'شل'}</Text>
+              <Text style={styles.consoleHeaderText}>{tool === 'python' ? 'python3' : tool === 'pkg_install' ? 'apk' : tool === 'apk_tool' ? 'gvr-apk' : 'شل'}</Text>
             </View>
             {!!arg && <Text style={styles.consoleCmd} selectable>$ {arg}</Text>}
             <Text style={styles.consoleOut} selectable>
@@ -432,6 +453,34 @@ export default function App() {
   const [dl, setDl] = useState<{ id: string; pct: number } | null>(null);
   const [linuxReady, setLinuxReady] = useState(false);
   const [linuxBusy, setLinuxBusy] = useState('');
+  const [autonomyState, setAutonomyState] = useState<{ mode: 'auto' | 'ask'; guard: boolean }>({ mode: 'auto', guard: true });
+  const [accelModeState, setAccelModeState] = useState<AccelMode>('auto');
+  const [resumeOffer, setResumeOffer] = useState<string | null>(null);
+  const [approval, setApproval] = useState<{ tool: string; arg: string; risky: boolean } | null>(null);
+  const approvalResolve = useRef<((d: 'once' | 'always' | 'deny') => void) | null>(null);
+
+  // The approval card lives inside the screen (not a native Alert, which never showed up on some phones and
+  // counted every dismissal as "denied").
+  const answerApproval = useCallback((d: 'once' | 'always' | 'deny') => {
+    const r = approvalResolve.current;
+    approvalResolve.current = null;
+    setApproval(null);
+    r?.(d);
+  }, []);
+
+  const changeAutonomy = async (patch: Partial<{ mode: 'auto' | 'ask'; guard: boolean }>) => {
+    const next = { ...autonomyState, ...patch };
+    setAutonomyState(next);
+    setAutonomy(next);
+    await AsyncStorage.setItem('gvr_autonomy_mode', next.mode);
+    await AsyncStorage.setItem('gvr_autonomy_guard', next.guard ? '1' : '0');
+  };
+
+  const changeAccel = async (mode: AccelMode) => {
+    await setAccelMode(mode);
+    setAccelModeState(mode);
+    Alert.alert('التسريع', 'هيتطبّق لما تعيد تحميل النموذج (اختار النموذج تاني من القايمة).');
+  };
 
   const showProfileWarnings = () => {
     const w = getModelProfile()?.warnings ?? [];
@@ -446,6 +495,17 @@ export default function App() {
         const h = await AsyncStorage.getItem('gvr_msgs');
         if (h) setMsgs(JSON.parse(h));
       } catch { /* corrupt history — start clean */ }
+      try {
+        await restoreHistory();                                  // the model remembers the chat after a restart too
+        const mode = await AsyncStorage.getItem('gvr_autonomy_mode');
+        const guard = await AsyncStorage.getItem('gvr_autonomy_guard');
+        const st = { mode: mode === 'ask' ? 'ask' as const : 'auto' as const, guard: guard !== '0' };
+        setAutonomyState(st);
+        setAutonomy(st);
+        setAccelModeState(await getAccelMode());
+        const job = await interruptedMission();                  // the app was closed in the middle of a job
+        if (job) setResumeOffer(job.goal);
+      } catch { /* defaults are fine */ }
       try {
         setLocalModels(await listLocalModels());
       } catch (e: any) {
@@ -469,23 +529,25 @@ export default function App() {
     })();
   }, []);
 
-  // Side-effect tools (terminal, writing files, ...) ask the user first.
+  // Tools that need an answer (autonomy off, or a command that could wipe real files) show the card above the input bar.
   useEffect(() => {
-    setToolConfirmHandler((tool, arg) => new Promise<'once' | 'always' | 'deny'>((resolve) => {
-      const label = TOOL_LABELS[tool]?.label || tool;
-      Alert.alert(
-        `GVR عايز: ${label}`,
-        arg.length > 400 ? arg.slice(0, 400) + '…' : (arg || '(بدون وسيط)'),
-        [
-          { text: 'رفض', style: 'cancel', onPress: () => resolve('deny') },
-          { text: 'دايماً (الجلسة)', onPress: () => resolve('always') },
-          { text: 'نفّذ', onPress: () => resolve('once') },
-        ],
-        { cancelable: true, onDismiss: () => resolve('deny') },
-      );
-    }));
+    setToolConfirmHandler(
+      (tool, arg, risky) => new Promise<'once' | 'always' | 'deny'>((resolve) => {
+        approvalResolve.current?.('deny');                      // never leave an older request hanging
+        approvalResolve.current = resolve;
+        setApproval({ tool, arg, risky });
+      }),
+      () => answerApproval('deny'),                             // the Stop button dismisses the card
+    );
     return () => setToolConfirmHandler(null);
-  }, []);
+  }, [answerApproval]);
+
+  // Keep the screen on while the agent works, so Android does not freeze it mid-job.
+  useEffect(() => {
+    if (!loading) return undefined;
+    void activateKeepAwakeAsync('gvr-run');
+    return () => { void deactivateKeepAwake('gvr-run'); };
+  }, [loading]);
 
   useEffect(() => {
     if (showSettings) getPermissionsStatus().then(setPerms).catch(() => {});
@@ -556,7 +618,6 @@ export default function App() {
             setLiveSteps(prev => prev.map(st => (st.id === e.id ? { ...st, result: e.result, done: true } : st)));
           }
         },
-        5
       );
 
       const toolsUsed = [...new Set(res.steps.map(s => s.tool))];
@@ -759,7 +820,7 @@ export default function App() {
               <View style={styles.statusRow}>
                 <View style={[styles.statusDot, { backgroundColor: modelReady ? C.green : C.textDim }]} />
                 <Text style={styles.statusText}>
-                  {modelLoading ? 'جارٍ تحميل النموذج…' : modelReady ? `${visionReady ? 'نص + رؤية' : 'نص فقط'}${getModelProfile()?.warnings.length ? ' ⚠' : ''}` : 'مفيش نموذج'}
+                  {modelLoading ? 'جارٍ تحميل النموذج…' : modelReady ? `${visionReady ? 'نص + رؤية' : 'نص فقط'} · ${getAccelStatus().split(' ')[0] || 'CPU'}${getModelProfile()?.warnings.length ? ' ⚠' : ''}` : 'مفيش نموذج'}
                 </Text>
               </View>
             </View>
@@ -797,6 +858,48 @@ export default function App() {
             <AIAvatar size={28} />
             <View style={styles.liveStatusWrap}>
               <LiveTrace thought={liveThought} steps={liveSteps} />
+            </View>
+          </View>
+        )}
+
+        {resumeOffer && !loading && !approval && (
+          <View style={styles.resumeBar}>
+            <MaterialCommunityIcons name="history" size={18} color={C.warn} />
+            <Text style={styles.resumeText} numberOfLines={2}>مهمة اتقطعت: {resumeOffer}</Text>
+            <TouchableOpacity style={styles.resumeBtn} onPress={() => { setResumeOffer(null); void send('كمل'); }}>
+              <Text style={styles.resumeBtnText}>كمّل</Text>
+            </TouchableOpacity>
+            <TouchableOpacity hitSlop={8} onPress={() => { setResumeOffer(null); void endMission('paused'); }}>
+              <Ionicons name="close" size={18} color={C.textDim} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {approval && (
+          <View style={[styles.approvalCard, approval.risky && styles.approvalCardRisky]}>
+            <View style={styles.approvalHead}>
+              <MaterialCommunityIcons name={approval.risky ? 'alert-octagon' : 'shield-check-outline'} size={18} color={approval.risky ? C.error : C.warn} />
+              <Text style={styles.approvalTitle}>
+                {approval.risky ? 'أمر ممكن يمسح ملفاتك الحقيقية — ' : 'GVR عايز: '}{TOOL_LABELS[approval.tool]?.label || approval.tool}
+              </Text>
+            </View>
+            <ScrollView style={styles.approvalBody} nestedScrollEnabled>
+              <Text style={styles.approvalArg} selectable>
+                {approval.arg.length > 1200 ? `${approval.arg.slice(0, 1200)}…` : (approval.arg || '(بدون وسيط)')}
+              </Text>
+            </ScrollView>
+            <View style={styles.approvalBtns}>
+              <TouchableOpacity style={[styles.approvalBtn, styles.approvalDeny]} onPress={() => answerApproval('deny')}>
+                <Text style={styles.approvalBtnText}>رفض</Text>
+              </TouchableOpacity>
+              {!approval.risky && (
+                <TouchableOpacity style={[styles.approvalBtn, styles.approvalAlways]} onPress={() => answerApproval('always')}>
+                  <Text style={styles.approvalBtnText}>دايماً (الجلسة)</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={[styles.approvalBtn, styles.approvalOk]} onPress={() => answerApproval('once')}>
+                <Text style={styles.approvalBtnText}>نفّذ</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -840,7 +943,7 @@ export default function App() {
 
               <TouchableOpacity
                 style={[styles.sendBtn, (!loading && ((!input.trim() && !pendingAttachment) || !modelReady)) && styles.sendBtnOff]}
-                onPress={() => (loading ? stopGeneration() : send())}
+                onPress={() => (loading ? requestStop() : send())}
                 disabled={!loading && ((!input.trim() && !pendingAttachment) || !modelReady)}
               >
                 <LinearGradient colors={[C.user1, C.glow2]} start={{x:0,y:0}} end={{x:1,y:1}}
@@ -966,6 +1069,47 @@ export default function App() {
                 <Text style={styles.recBtnText}>اختبار ذاتي</Text>
               </TouchableOpacity>
             </View>
+
+            <Text style={[styles.modalTitle, { marginTop: 18, fontSize: 16, marginBottom: 8 }]}>الوضع الذاتي</Text>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchTitle}>تنفيذ تلقائي كامل</Text>
+                <Text style={styles.switchSub}>
+                  {autonomyState.mode === 'auto' ? 'الأدوات بتشتغل لوحدها من غير ما تسأل، وبيكمّل المهمة لحد ما تخلص' : 'كل أداة بتسأل الأول (أبطأ)'}
+                </Text>
+              </View>
+              <Switch
+                value={autonomyState.mode === 'auto'}
+                onValueChange={(v) => { void changeAutonomy({ mode: v ? 'auto' : 'ask' }); }}
+                trackColor={{ false: '#334155', true: C.accent }}
+              />
+            </View>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchTitle}>حماية ملفاتك الحقيقية</Text>
+                <Text style={styles.switchSub}>بيسألك قبل أي أمر مسح ممكن يلمس برّه فولدر التطبيق (زي /sdcard). فكّها لو عايزه ينفّذ كل حاجة.</Text>
+              </View>
+              <Switch
+                value={autonomyState.guard}
+                disabled={autonomyState.mode === 'ask'}
+                onValueChange={(v) => { void changeAutonomy({ guard: v }); }}
+                trackColor={{ false: '#334155', true: C.accent }}
+              />
+            </View>
+
+            <Text style={[styles.modalTitle, { marginTop: 18, fontSize: 16, marginBottom: 8 }]}>التسريع</Text>
+            <View style={styles.permWrap}>
+              {(['auto', 'cpu', 'gpu', 'npu'] as AccelMode[]).map((m) => (
+                <TouchableOpacity key={m} style={[styles.permChip, accelModeState === m && styles.chipActive]} onPress={() => { void changeAccel(m); }}>
+                  <Text style={styles.permText}>{ACCEL_LABELS[m]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {!!(getAccelStatus() || getSpeedHint()) && (
+              <Text style={styles.switchSub}>
+                {[getAccelStatus() ? `الشغّال دلوقتي: ${getAccelStatus()}` : '', getSpeedHint()].filter(Boolean).join('\n')}
+              </Text>
+            )}
 
             <Text style={[styles.modalTitle, { marginTop: 18, fontSize: 16, marginBottom: 8 }]}>الصلاحيات</Text>
             <View style={styles.permWrap}>
@@ -1201,4 +1345,32 @@ const styles = StyleSheet.create({
                         paddingHorizontal:9, paddingVertical:5, borderRadius:10,
                         backgroundColor:'rgba(255,255,255,0.03)' },
   toolTraceHeaderText: { color:C.textDim, fontSize:11, fontWeight:'600' },
+
+  /* approval card, resume bar, switches */
+  approvalCard: {
+    marginHorizontal: 12, marginBottom: 8, padding: 12, borderRadius: 16,
+    backgroundColor: 'rgba(20,16,40,0.96)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.5)',
+  },
+  approvalCardRisky: { borderColor: 'rgba(239,68,68,0.8)', backgroundColor: 'rgba(40,12,16,0.96)' },
+  approvalHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  approvalTitle: { flex: 1, color: '#f1f5f9', fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  approvalBody: { maxHeight: 130, borderRadius: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.35)', marginBottom: 10 },
+  approvalArg: { color: '#67e8f9', fontSize: 12, fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo', textAlign: 'left' },
+  approvalBtns: { flexDirection: 'row', gap: 8 },
+  approvalBtn: { flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: 'center' },
+  approvalDeny: { backgroundColor: 'rgba(239,68,68,0.25)' },
+  approvalAlways: { backgroundColor: 'rgba(139,92,246,0.3)' },
+  approvalOk: { backgroundColor: 'rgba(16,185,129,0.4)' },
+  approvalBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  resumeBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, marginBottom: 8,
+    padding: 10, borderRadius: 14, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.4)',
+  },
+  resumeText: { flex: 1, color: '#f1f5f9', fontSize: 13, textAlign: 'right' },
+  resumeBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(245,158,11,0.35)' },
+  resumeBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  switchTitle: { color: '#f1f5f9', fontSize: 14, fontWeight: '600', textAlign: 'right' },
+  switchSub: { color: '#64748b', fontSize: 12, marginTop: 2, textAlign: 'right' },
+  chipActive: { borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.25)' },
 });

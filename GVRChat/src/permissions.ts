@@ -14,6 +14,10 @@
  */
 import { PermissionsAndroid, Platform, Linking } from 'react-native';
 import type { Permission } from 'react-native';
+import * as IntentLauncher from 'expo-intent-launcher';
+
+/** Must match android.package in app.json (checked by tests/config.test.ts). */
+export const APP_ID = 'com.ahmedxg.gvrchat';
 
 export type PermKey =
   | 'storage'
@@ -21,10 +25,12 @@ export type PermKey =
   | 'camera'
   | 'microphone'
   | 'location'
-  | 'notifications';
+  | 'notifications'
+  | 'install_apps'
+  | 'battery';
 
 export const PERM_KEYS: PermKey[] = [
-  'storage', 'all_files', 'camera', 'microphone', 'location', 'notifications',
+  'storage', 'all_files', 'install_apps', 'battery', 'camera', 'microphone', 'location', 'notifications',
 ];
 
 export const PERMISSION_LABELS: Record<PermKey, string> = {
@@ -34,6 +40,8 @@ export const PERMISSION_LABELS: Record<PermKey, string> = {
   microphone: 'الميكروفون',
   location: 'الموقع',
   notifications: 'الإشعارات',
+  install_apps: 'تثبيت التطبيقات (APK)',
+  battery: 'العمل في الخلفية (تجاهل توفير البطارية)',
 };
 
 export type PermStatus = 'granted' | 'denied' | 'unknown';
@@ -59,6 +67,8 @@ function androidPermsFor(key: PermKey): Permission[] {
     case 'location':      return [P('ACCESS_FINE_LOCATION'), P('ACCESS_COARSE_LOCATION')];
     case 'notifications': return api >= 33 ? [P('POST_NOTIFICATIONS')] : [];
     case 'all_files':     return [];
+    case 'install_apps':  return [];
+    case 'battery':       return [];
   }
 }
 
@@ -76,13 +86,15 @@ export function normalizePermKey(raw: string): PermKey | null {
     mic: 'microphone', audio: 'microphone', record_audio: 'microphone',
     gps: 'location', position: 'location',
     notification: 'notifications', notify: 'notifications',
+    install: 'install_apps', install_apk: 'install_apps', unknown_sources: 'install_apps', install_packages: 'install_apps', apk: 'install_apps',
+    background: 'battery', battery_optimization: 'battery', ignore_battery: 'battery', keep_alive: 'battery', doze: 'battery',
   };
   return alias[s] ?? null;
 }
 
 export async function checkPermission(key: PermKey): Promise<PermStatus> {
   if (Platform.OS !== 'android') return 'unknown';
-  if (key === 'all_files') return 'unknown';
+  if (key === 'all_files' || key === 'install_apps' || key === 'battery') return 'unknown';
   const perms = androidPermsFor(key);
   if (perms.length === 0) return 'granted'; // not needed on this Android version
   try {
@@ -119,6 +131,22 @@ export async function requestPermission(key: PermKey): Promise<PermResult> {
       };
     } catch (e: any) {
       return { key, status: 'unknown', message: `Could not open settings: ${e?.message || e}` };
+    }
+  }
+
+  if (key === 'install_apps' || key === 'battery') {
+    const action = key === 'install_apps' ? 'android.settings.MANAGE_UNKNOWN_APP_SOURCES' : 'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS';
+    try {
+      await IntentLauncher.startActivityAsync(action, { data: `package:${APP_ID}` });
+      return {
+        key, status: 'unknown',
+        message: key === 'install_apps'
+          ? 'Opened the "install unknown apps" screen for this app. The user must switch it ON (a popup cannot grant it).'
+          : 'Opened the battery screen. The user must choose "Allow" so the agent keeps working with the screen off.',
+      };
+    } catch (e: any) {
+      try { await Linking.openSettings(); } catch { /* nothing else to try */ }
+      return { key, status: 'unknown', message: `Could not open that screen (${e?.message || e}); opened the app settings instead.` };
     }
   }
 

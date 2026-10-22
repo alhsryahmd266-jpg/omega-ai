@@ -21,6 +21,13 @@ import { installScript, parseInstallOutput, sanitizePkgName } from './toolCard';
 import {
   PERM_KEYS, PERMISSION_LABELS, getPermissionsStatus, normalizePermKey, requestPermission,
 } from './permissions';
+import {
+  DEFAULT_AUTONOMY, DENIED_PREFIX, STOPPED_PREFIX, commandRisk, extractExports, headTail, missingCommands, oneLine, packagesFor,
+  planCurl, rankMemories, type AutonomyState, type MemItem,
+} from './agentLogic';
+import { createExtraTools } from './toolsExtra';
+
+export { isDestructiveCommand, toolOutcome } from './agentLogic';
 
 const MEMORY_KEY = 'gvr_agent_memory';
 const UA = 'Mozilla/5.0 (Linux; Android 14; GVRChat/2.0) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36';
@@ -30,17 +37,41 @@ const clip = (s: string, n: number): string =>
 
 /* ── CONFIRMATION GATE ─────────────────────────────────────────────────── */
 export type ConfirmDecision = 'once' | 'always' | 'deny';
-export type ConfirmHandler = (tool: string, arg: string) => Promise<ConfirmDecision>;
+/** `risky` = a command that could destroy files OUTSIDE the app (the approval card shows it in red). */
+export type ConfirmHandler = (tool: string, arg: string, risky: boolean) => Promise<ConfirmDecision>;
 
 let confirmHandler: ConfirmHandler | null = null;
+let cancelConfirm: (() => void) | null = null;
 const alwaysAllowed = new Set<string>();
+let autonomy: AutonomyState = { ...DEFAULT_AUTONOMY };
+let stopRequested = false;
 
-export function setToolConfirmHandler(fn: ConfirmHandler | null): void {
+/** `onCancel` lets the Stop button dismiss an approval card that is waiting for an answer. */
+export function setToolConfirmHandler(fn: ConfirmHandler | null, onCancel?: () => void): void {
   confirmHandler = fn;
+  cancelConfirm = onCancel ?? null;
 }
 export function resetToolApprovals(): void {
   alwaysAllowed.clear();
 }
+
+/** 'auto' = tools run by themselves (default). 'ask' = tools with side effects ask first. */
+export function setAutonomy(next: Partial<AutonomyState>): void {
+  autonomy = { ...autonomy, ...next };
+}
+export const getAutonomy = (): AutonomyState => autonomy;
+
+/** Call when a new request starts: tools may run again. */
+export function beginToolRun(): void {
+  stopRequested = false;
+}
+/** Stop button: refuse any further tool, dismiss a pending approval, and kill the command that is running. */
+export function stopAllTools(): void {
+  stopRequested = true;
+  try { cancelConfirm?.(); } catch { /* nothing pending */ }
+  void Terminal.cancelRunning();
+}
+export const isStopRequested = (): boolean => stopRequested;
 
 /* ── PATHS ─────────────────────────────────────────────────────────────── */
 const SANDBOX = FileSystem.documentDirectory ?? 'file:///';
@@ -60,6 +91,7 @@ function resolvePath(raw: string): ResolvedPath {
   let uri: string;
   if (p.startsWith('file://')) uri = p;
   else if (p.startsWith('/sdcard')) uri = `file://${p.replace(/^\/sdcard/, '/storage/emulated/0')}`;
+  else if (p === '/workspace' || p.startsWith('/workspace/')) uri = WORKDIR + p.slice('/workspace/'.length);   // what Alpine calls the workspace
   else if (p.startsWith('/')) uri = `file://${p}`;
   else uri = WORKDIR + p;
 
@@ -80,26 +112,25 @@ async function ensureParent(uri: string): Promise<void> {
 /* ── TERMINAL ──────────────────────────────────────────────────────────── */
 const CWD_MARK = '__GVR_CWD__';
 let termCwd = '';
+let workdirReady = false;
+/** `export X=…` lines from earlier commands (a fresh shell starts every call; this makes them stick like in a terminal). */
+const sessionEnv = new Map<string, string>();
 const shQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
-/**
- * Runs a command in the Android shell. The working directory persists between
- * calls (cd works like in a real terminal). A first line "#timeout=120" raises
- * the time limit (default 30 s, max 300 s).
- */
-export async function toolTerminal(arg: string): Promise<string> {
-  let command = arg;
-  let timeout = 30;
-  const tm = /^#timeout=(\d{1,3})[ \t]*\r?\n/.exec(command);
-  if (tm) {
-    timeout = Math.min(300, Math.max(1, parseInt(tm[1], 10)));
-    command = command.slice(tm[0].length);
-  }
-  if (!command.trim()) return 'Empty command.';
+/** Where a command starts: the workspace (/workspace inside Alpine, the real folder in the Android shell). */
+const defaultCwd = (): string => (linuxReady ? '/workspace' : WORKDIR.replace(/^file:\/\//, '').replace(/\/$/, ''));
 
+async function runInShell(command: string, timeout: number): Promise<string> {
+  if (!workdirReady) {
+    try { await FileSystem.makeDirectoryAsync(WORKDIR, { intermediates: true }); } catch { /* already there */ }
+    workdirReady = true;
+  }
+  const env = [...sessionEnv.values()].join('\n');
   const wrapped =
-    (termCwd ? `cd ${shQuote(termCwd)} 2>/dev/null\n` : '') +
+    `cd ${shQuote(termCwd || defaultCwd())} 2>/dev/null\n` +
+    (env ? `${env}\n` : '') +
     `{\n${command}\n}\n__gvr_rc=$?\nprintf '\\n${CWD_MARK}%s\\n' "$(pwd)"\nexit $__gvr_rc`;
+  for (const e of extractExports(command)) sessionEnv.set(e.name, e.line);
 
   const out = await Terminal.run(wrapped, timeout);
   const m = new RegExp(`\\n?${CWD_MARK}(.*)\\n?`).exec(out);
@@ -108,11 +139,67 @@ export async function toolTerminal(arg: string): Promise<string> {
     termCwd = m[1].trim();
     clean = out.replace(m[0], '\n');
   }
-  return clip(clean.trim() || '(no output)', 8000);
+  return clean.trim() || '(no output)';
+}
+
+/**
+ * Runs a command in the shell (Alpine Linux when installed, otherwise the Android shell). The working
+ * directory persists between calls (cd works like in a real terminal) and starts in the workspace.
+ * A first line "#timeout=120" raises the time limit (default 30 s, max 900 s).
+ * A program that is not installed (unzip, curl, java …) is installed automatically and the command retried.
+ */
+export async function toolTerminal(arg: string): Promise<string> {
+  let command = arg;
+  let timeout = 30;
+  const tm = /^#timeout=(\d{1,3})[ \t]*\r?\n/.exec(command);
+  if (tm) {
+    timeout = Math.min(900, Math.max(1, parseInt(tm[1], 10)));
+    command = command.slice(tm[0].length);
+  }
+  if (!command.trim()) return 'Empty command.';
+
+  // Without Linux a plain curl/wget cannot run — but it is just a web request, so do it with fetch.
+  if (!linuxReady) {
+    const plan = planCurl(command);
+    if (plan.kind === 'fetch') return toolFetchUrl(plan.arg);
+    if (plan.kind === 'download') return toolDownloadFile(plan.arg);
+  }
+
+  const first = await runInShell(command, timeout);
+  const missing = missingCommands(first);
+  if (missing.length === 0) return finishOutput(first);
+
+  const pkgs = packagesFor(missing);
+  if (linuxReady && pkgs.length && autonomy.mode === 'auto' && !stopRequested) {
+    const installLog = await Terminal.installPackages(pkgs.join(' '));
+    const second = await runInShell(command, timeout);
+    const still = missingCommands(second);
+    const note = still.length
+      ? `[tried to install ${pkgs.join(', ')} but '${still.join(', ')}' is still missing: ${oneLine(installLog, 200)}]`
+      : `[auto-installed ${pkgs.join(', ')}]`;
+    return finishOutput(`${note}\n${second}`);
+  }
+  const hint = linuxReady
+    ? `\n(hint: '${missing.join(', ')}' is not installed — call install_tool with the package name${pkgs.length ? ` (${pkgs.join(' ')})` : ''}, then run the command again)`
+    : `\n(hint: '${missing.join(', ')}' does not exist in the Android shell — Alpine Linux (Settings → Linux) provides it)`;
+  return finishOutput(first + hint);
 }
 
 export function resetTerminalState(): void {
   termCwd = '';
+  sessionEnv.clear();
+}
+
+/** Long output: beginning + end go to the model, the whole thing is saved where read_file / search_code can reach it. */
+async function finishOutput(out: string): Promise<string> {
+  if (headTail(out, 2500, 5000).omitted === 0) return out;
+  let note = '';
+  try {
+    await FileSystem.writeAsStringAsync(`${WORKDIR}.last_output.txt`, out);
+    note = ' — the full output is in /workspace/.last_output.txt: use read_file or search_code';
+  } catch { /* the shortened text is still useful */ }
+  // The note lives in the middle marker so the text still ENDS with the real end (errors, "(exit code N)").
+  return headTail(out, 2500, 5000, note).text;
 }
 
 /* ── FILES ─────────────────────────────────────────────────────────────── */
@@ -370,8 +457,14 @@ export async function toolWebSearch(query: string): Promise<string> {
     try {
       const hits = (await p.run(q)).filter(h => h.url && h.title).slice(0, 6);
       if (hits.length > 0) {
-        const lines = hits.map(h => `• ${h.title}\n  ${h.url}${h.snippet ? `\n  ${h.snippet.slice(0, 240)}` : ''}`);
-        return `[${p.name}]\n${lines.join('\n')}\n\nTip: use fetch_url on a link above to read the full page.`;
+        const list = hits.map(h => `• ${h.title}\n  ${h.url}${h.snippet ? `\n  ${h.snippet.slice(0, 160)}` : ''}`).join('\n');
+        // Titles alone are useless to a small model that would need a second (slow) round to open a page:
+        // read the top pages now and hand over the passages that answer the question.
+        let pages = '';
+        try { pages = await extra.deepenSearch(q, hits, 2, 900); } catch { /* the list is still useful */ }
+        return pages
+          ? `[${p.name}] Content of the top results:\n${pages}\n\nAll results:\n${list}`
+          : `[${p.name}]\n${list}\n\nTip: use fetch_url on a link above to read the full page.`;
       }
       errors.push(`${p.name}: no results`);
     } catch (e: any) {
@@ -409,7 +502,8 @@ export async function toolFetchUrl(arg: string): Promise<string> {
     let body = r.text;
     if (/html/i.test(r.contentType)) {
       const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body);
-      body = (title ? `Title: ${htmlToText(title[1])}\n\n` : '') + htmlToText(body);
+      const readable = extra.readPageText(body);           // real paragraphs, without menus and footers
+      body = (title ? `Title: ${htmlToText(title[1])}\n\n` : '') + (readable ?? htmlToText(body));
     } else if (/json/i.test(r.contentType)) {
       try { body = JSON.stringify(JSON.parse(body), null, 1); } catch { /* keep raw */ }
     }
@@ -741,18 +835,34 @@ export async function toolMemoryDelete(key: string): Promise<string> {
 export async function memoryDigest(maxChars = 600): Promise<string> {
   const mem = await loadMemory();
   const keys = Object.keys(mem);
-  const notes = keys.filter(k => !k.startsWith('tool:')).map(k => `${k}: ${mem[k].value.slice(0, 100)}`);
+  const notes = keys.filter(k => !k.startsWith('tool:') && !k.startsWith('ep:')).map(k => `${k}: ${mem[k].value.slice(0, 100)}`);
   const tools = keys.filter(k => k.startsWith('tool:')).map(k => k.slice(5));
   if (tools.length) notes.push(`installed tools (how to run: mem_get tool:NAME): ${tools.join(', ')}`);
   return notes.join('; ').slice(0, maxChars);
 }
 
+/** Every saved memory (without the how-to cards of installed tools). Used for search and for recall. */
+export async function loadMemoryItems(): Promise<MemItem[]> {
+  const mem = await loadMemory();
+  return Object.keys(mem).filter(k => !k.startsWith('tool:')).map(k => ({ key: k, value: mem[k].value, ts: mem[k].ts }));
+}
+
+export async function toolMemorySearch(query: string): Promise<string> {
+  const items = await loadMemoryItems();
+  if (!items.length) return 'Memory is empty.';
+  const hits = rankMemories(query, items, 5, 0.5);
+  if (!hits.length) return `Nothing in memory matches "${query.trim()}". (mem_list shows everything.)`;
+  return hits.map(h => `• ${h.key}: ${h.value.slice(0, 300)}`).join('\n');
+}
+
 /* ── LINUX (Alpine) STATE ──────────────────────────────────────────────── */
 let linuxReady = false;
 export const isLinuxReady = (): boolean => linuxReady;
-/** Lets the engine tell the user "waiting for your approval" instead of looking frozen. */
-export const toolNeedsConfirm = (name: string): boolean =>
-  !!TOOLS.find(t => t.name === normalizeToolName(name))?.confirm;
+/** Will this call stop and ask the user? (Lets the engine say "waiting for your approval" instead of looking frozen.) */
+export function toolNeedsConfirm(name: string, arg = ''): boolean {
+  const spec = TOOLS.find(t => t.name === normalizeToolName(name));
+  return !!spec && approvalFor(spec, arg).ask;
+}
 
 /** Re-checks whether Alpine Linux is installed and usable; call at startup and after installing. */
 export async function refreshLinuxState(): Promise<boolean> {
@@ -787,6 +897,18 @@ export async function toolInspectFile(arg: string): Promise<string> {
   return inspectFile({ uri, name, size: info.size }, 14000);
 }
 
+/* ── NEWER TOOLS (edit_file, search_code, view_image, deliver_file, apk_tool, deep web reading) ── */
+const extra = createExtraTools({
+  resolvePath,
+  ensureParent,
+  terminal: toolTerminal,
+  linuxReady: () => linuxReady,
+  autoInstall: () => autonomy.mode === 'auto',
+  fetchText,
+  workdir: WORKDIR,
+  sharedRoot: SHARED_ROOT,
+});
+
 /* ── TOOL REGISTRY ─────────────────────────────────────────────────────── */
 export type ToolName =
   | 'search' | 'fetch_url' | 'download_file' | 'terminal' | 'javascript' | 'calc' | 'datetime'
@@ -794,7 +916,8 @@ export type ToolName =
   | 'device_info' | 'open_url' | 'share_text' | 'permission'
   | 'mem_save' | 'mem_get' | 'mem_list' | 'mem_delete'
   | 'copy_clipboard' | 'read_clipboard'
-  | 'python' | 'pkg_install' | 'install_tool';
+  | 'python' | 'pkg_install' | 'install_tool'
+  | 'edit_file' | 'search_code' | 'view_image' | 'deliver_file' | 'apk_tool' | 'mem_search';
 
 interface ToolSpec {
   name: ToolName;
@@ -809,7 +932,7 @@ interface ToolSpec {
 
 const TOOLS: ToolSpec[] = [
   { name: 'search', confirm: false, advertise: true,
-    usage: 'search the web. Argument: the query. Returns titles, links and snippets.',
+    usage: 'search the web and READ the best pages. Argument: the query. Returns the passages that answer it (from the top results) plus the list of links.',
     run: toolWebSearch },
   { name: 'fetch_url', confirm: false, advertise: true,
     usage: 'read a web page or call an API (GET/POST/...). Argument: a URL, or JSON {"url","method","headers","body","max"}. HTML is converted to readable text; redirects and retries are handled.',
@@ -865,7 +988,7 @@ const TOOLS: ToolSpec[] = [
     usage: 'read whatever text is currently on the system clipboard. No argument.',
     run: () => toolReadClipboard() },
   { name: 'permission', confirm: false, advertise: true,
-    usage: 'check or request an Android permission. Argument: "status", or one of storage, all_files, camera, microphone, location, notifications.',
+    usage: 'check or request an Android permission. Argument: "status", or one of storage, all_files, install_apps (install APKs), battery (keep working in the background), camera, microphone, location, notifications.',
     run: toolPermission },
   { name: 'mem_save', confirm: false, advertise: true,
     usage: 'remember something across chats. Argument: key | value',
@@ -882,6 +1005,24 @@ const TOOLS: ToolSpec[] = [
   { name: 'mem_delete', confirm: false, advertise: true,
     usage: 'delete one saved memory. Argument: key.',
     run: toolMemoryDelete },
+  { name: 'edit_file', confirm: true, advertise: true,
+    usage: 'change part of a file by replacing exact lines (Aider format); send ONLY the lines that change. Argument: first line = path, then <<<<<<< SEARCH / the old lines / ======= / the new lines / >>>>>>> REPLACE. An empty SEARCH creates a new file. read_file first so SEARCH matches exactly.',
+    run: extra.editFile },
+  { name: 'search_code', confirm: false, advertise: true,
+    usage: 'search inside files (grep). Argument: pattern (plain text or /regex/); optional 2nd line = folder; optional 3rd line = file filter like *.ts.',
+    run: extra.searchCode },
+  { name: 'view_image', confirm: false, advertise: true,
+    usage: 'look at an image file (vision model if one is loaded, otherwise OCR that reads its text). Argument: the path; optional next lines = what to look for.',
+    run: extra.viewImage },
+  { name: 'deliver_file', confirm: true, advertise: true,
+    usage: 'give a finished file to the user: saves it in Downloads/GVR and opens the share sheet. Argument: the path, or "path | install" to open the APK installer, or "path | link" for a public download link.',
+    run: extra.deliverFile },
+  { name: 'apk_tool', confirm: true, advertise: () => linuxReady,
+    usage: 'work on APK files. Argument: "info APK", "unpack APK [DIR]" (plain unzip), "pack DIR OUT.apk" (zip back, align, sign), "sign APK", "decode APK" (smali + readable manifest), "build DIR OUT.apk". Change files between unpack and pack with edit_file / write_file / terminal.',
+    run: extra.apkTool },
+  { name: 'mem_search', confirm: false, advertise: true,
+    usage: 'search saved memories and past jobs by keywords. Argument: what to look for.',
+    run: toolMemorySearch },
   // Real tools once Alpine Linux is installed (Settings → Linux); otherwise hidden but still answer honestly.
   { name: 'python', confirm: true, advertise: () => linuxReady,
     usage: 'run Python 3 code inside Alpine Linux and return its output. Argument: the code.',
@@ -934,6 +1075,13 @@ const ALIASES: Record<string, ToolName> = {
   memory_save: 'mem_save', remember: 'mem_save', memory_get: 'mem_get', memory_list: 'mem_list',
   memory_delete: 'mem_delete', forget: 'mem_delete',
   get_tool: 'install_tool', install_package: 'install_tool', learn_tool: 'install_tool',
+  edit: 'edit_file', patch: 'edit_file', replace: 'edit_file', str_replace: 'edit_file', apply_patch: 'edit_file', edit_code: 'edit_file',
+  grep: 'search_code', rg: 'search_code', find_in_files: 'search_code', search_files: 'search_code', code_search: 'search_code',
+  see_image: 'view_image', look: 'view_image', ocr: 'view_image', image: 'view_image', view: 'view_image', describe_image: 'view_image',
+  send_file: 'deliver_file', share_file: 'deliver_file', give_file: 'deliver_file', export: 'deliver_file', export_file: 'deliver_file', deliver: 'deliver_file',
+  apktool: 'apk_tool', apk_edit: 'apk_tool', apk_tools: 'apk_tool', repack: 'apk_tool',
+  recall: 'mem_search', memory_search: 'mem_search', search_memory: 'mem_search',
+  research: 'search', deep_search: 'search',
 };
 
 export function normalizeToolName(raw: string): string {
@@ -981,7 +1129,7 @@ const NATIVE: Partial<Record<ToolName, NativeSpec>> = {
   copy_clipboard: { props: { text: P('text to copy') }, required: ['text'], toArg: o => asStr(o.text) },
   read_clipboard: NO_ARGS,
   permission: {
-    props: { name: P('"status" or one of storage, all_files, camera, microphone, location, notifications') }, required: [],
+    props: { name: P('"status" or one of storage, all_files, install_apps, battery, camera, microphone, location, notifications') }, required: [],
     toArg: o => asStr(o.name) || 'status',
   },
   mem_save: {
@@ -994,15 +1142,38 @@ const NATIVE: Partial<Record<ToolName, NativeSpec>> = {
   python: { props: { code: P('Python 3 code to run') }, required: ['code'], toArg: o => asStr(o.code) },
   install_tool: { props: { name: P('tool/package name, e.g. ffmpeg, git, tesseract-ocr') }, required: ['name'], toArg: o => asStr(o.name) },
   pkg_install: { props: { packages: P('space-separated Alpine package names, e.g. "ffmpeg tesseract-ocr"') }, required: ['packages'], toArg: o => asStr(o.packages) },
+  edit_file: {
+    props: { path: P('file path'), search: P('exact existing lines to replace (empty = create a new file)'), replace: P('the new lines') },
+    required: ['path', 'search', 'replace'],
+    toArg: o => `${asStr(o.path)}\n<<<<<<< SEARCH\n${asStr(o.search)}\n=======\n${asStr(o.replace)}\n>>>>>>> REPLACE`,
+  },
+  search_code: {
+    props: { pattern: P('text or /regex/ to find'), path: P('folder to search (optional)'), glob: P('file filter like *.ts (optional)') },
+    required: ['pattern'],
+    toArg: o => [asStr(o.pattern), asStr(o.path), asStr(o.glob)].join('\n').replace(/\n+$/, ''),
+  },
+  view_image: {
+    props: { path: P('image file path'), question: P('what to look for (optional)') }, required: ['path'],
+    toArg: o => (o.question ? `${asStr(o.path)}\n${asStr(o.question)}` : asStr(o.path)),
+  },
+  deliver_file: {
+    props: { path: P('file to give to the user'), action: P('share (default), install (APK) or link (public download link)') }, required: ['path'],
+    toArg: o => (o.action ? `${asStr(o.path)} | ${asStr(o.action)}` : asStr(o.path)),
+  },
+  apk_tool: {
+    props: { command: P('e.g. "unpack /workspace/uploads/app.apk" or "pack /workspace/apk_work/app /workspace/out/app.apk"') }, required: ['command'],
+    toArg: o => asStr(o.command),
+  },
+  mem_search: { props: { query: P('what to look for in memory') }, required: ['query'], toArg: o => asStr(o.query) },
 };
 
 /** Tools offered to capable models through the native `tools` parameter (kept short: every tool costs prompt tokens). */
 export const NATIVE_TOOLS_DEFAULT: ToolName[] = [
   'search', 'fetch_url', 'terminal', 'calc', 'datetime', 'read_file', 'write_file', 'list_dir',
-  'install_tool', 'mem_save', 'mem_get', 'python',
+  'install_tool', 'mem_save', 'mem_get', 'python', 'edit_file', 'search_code', 'view_image', 'deliver_file', 'apk_tool',
 ];
 /** Big/slow models pay for every prompt token — give them only the essentials (the router covers time/files). */
-export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc'];
+export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc', 'edit_file', 'deliver_file', 'apk_tool', 'view_image'];
 
 /** OpenAI-style function schemas for llama.rn's `tools` option. */
 export function nativeToolSpecs(only: ToolName[] = NATIVE_TOOLS_DEFAULT): object[] {
@@ -1032,34 +1203,48 @@ export function nativeArgToString(tool: string, args: unknown): string {
   return first ?? JSON.stringify(o);
 }
 
-/* ── DESTRUCTIVE COMMAND GUARD ─────────────────────────────────────────── */
-// Shared storage is mounted inside Alpine (/sdcard), so a hallucinated `rm -rf` could wipe real files.
-// These always need an explicit OK — even if the user ticked "always allow" for the terminal.
-const DESTRUCTIVE_CMD: RegExp[] = [
-  /\brm\s+(?:-\S*\s+)*-\S*[rRfF]/,
-  /\brm\s+--(?:recursive|force)/,
-  /\b(?:mkfs(?:\.\w+)?|shred|wipefs|fdisk|sfdisk|parted)\b/,
-  /\bdd\b[^\n]*\bof=/,
-  /\bfind\b[^\n]*(?:-delete|-exec\s+rm)/,
-  />\s*\/dev\/(?:sd|mmc|block|nvme)/,
-  /\b(?:chmod|chown)\s+-R\b/,
-  /:\(\)\s*\{\s*:\|:&\s*\}\s*;\s*:/,
-];
-export const isDestructiveCommand = (cmd: string): boolean => DESTRUCTIVE_CMD.some(re => re.test(cmd));
+/* ── APPROVAL ──────────────────────────────────────────────────────────── */
+/**
+ * Does this call have to wait for the user?
+ *  - autonomy 'auto' (default): never, except a destructive command that reaches OUTSIDE the app's folders
+ *    (shared storage is mounted in Alpine as /sdcard, so a hallucinated `rm -rf` could wipe real files),
+ *    or uploading a file for a public link — and only while the guard is on (Settings).
+ *  - autonomy 'ask': every tool with side effects asks once ("always" remembers it for the session).
+ */
+function approvalFor(spec: ToolSpec, arg: string): { ask: boolean; risky: boolean } {
+  const risky =
+    (spec.name === 'terminal' && commandRisk(arg, termCwd) === 'risky') ||
+    (spec.name === 'deliver_file' && /\|\s*link\s*$/i.test(arg.split('\n')[0] || ''));
+  if (!spec.confirm) return { ask: false, risky };
+  const ask = autonomy.mode === 'ask' ? risky || !alwaysAllowed.has(spec.name) : risky && autonomy.guard;
+  return { ask, risky };
+}
 
-export async function dispatchTool(rawTool: string, arg: string): Promise<string> {
-  const name = normalizeToolName(rawTool);
+export async function dispatchTool(rawTool: string, argIn: string): Promise<string> {
+  let name = normalizeToolName(rawTool);
+  let arg = argIn;
+  if (stopRequested) return `${STOPPED_PREFIX}.`;
+
+  // The model often "calls" curl/wget, or sends a shell-style line to fetch_url: translate it instead of failing.
+  if ((name === 'fetch_url' || name === 'download_file') && /^\s*(?:curl|wget)\b/.test(arg)) {
+    const plan = planCurl(arg);
+    if (plan.kind === 'fetch') { name = 'fetch_url'; arg = plan.arg; }
+    else if (plan.kind === 'download') { name = 'download_file'; arg = plan.arg; }
+    else name = 'terminal';
+  }
+
   const spec = TOOLS.find(t => t.name === name);
-  if ((name === 'python' || name === 'pkg_install') && !linuxReady) {
+  if ((name === 'python' || name === 'pkg_install' || name === 'apk_tool') && !linuxReady) {
     return 'Alpine Linux is not installed yet. Ask the user to install it from Settings → Linux, then try again.';
   }
   if (!spec) return `Unknown tool '${rawTool}'. Available: ${availableTools().join(', ')}`;
 
-  const risky = spec.name === 'terminal' && isDestructiveCommand(arg);
-  if (spec.confirm && (risky || !alwaysAllowed.has(spec.name))) {
+  const { ask, risky } = approvalFor(spec, arg);
+  if (ask) {
     if (!confirmHandler) return 'Denied: no confirmation UI is available for this action.';
-    const decision = await confirmHandler(spec.name, risky ? `⚠️ أمر خطير (حذف/تعديل واسع):\n${arg}` : arg);
-    if (decision === 'deny') return 'The user denied this action. Do not retry it; explain or ask what they prefer.';
+    const decision = await confirmHandler(spec.name, arg, risky);
+    if (stopRequested) return `${STOPPED_PREFIX}.`;
+    if (decision === 'deny') return `${DENIED_PREFIX}. Do not retry it; explain or ask what they prefer.`;
     if (decision === 'always' && !risky) alwaysAllowed.add(spec.name);
   }
 
