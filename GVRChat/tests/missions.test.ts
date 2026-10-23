@@ -98,6 +98,7 @@ export const mission = (id: string, title: string, run: () => Promise<void>): vo
   await import('./missions/m5-video');
   await import('./missions/m2-build-app');
   await import('./missions/m3-apk');
+  await import('./missions/m8-browse');
   const want = process.argv.slice(2).map(s => s.toUpperCase());
   let failed = 0;
   for (const m of missions) {

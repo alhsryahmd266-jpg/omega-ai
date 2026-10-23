@@ -203,7 +203,8 @@ export const done = (async () => {
     queue('تمام');
     await runWithAttachment('ازاي اعمل فولدر في لينكس؟', null, noop);
     const sys = seen[0].messages[0].content as string;
-    assert.ok(sys.length <= 3300, `system prompt is ${sys.length} chars`);
+    // 3,500: the browse tool (~200 characters) is part of the prompt on purpose; the old prompt was 6,673.
+    assert.ok(sys.length <= 3500, `system prompt is ${sys.length} chars`);
   });
 
   finish();

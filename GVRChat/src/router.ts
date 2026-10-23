@@ -144,7 +144,7 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
 
   // 1) URLs → fetch
   const urls = raw.match(/https?:\/\/[^\s<>"'`)\]]+/gi) || [];
-  for (const u of urls.slice(0, 2)) add('fetch_url', u.replace(/[.,،;:!?؟]+$/, ''), 'url');
+  for (const u of urls.slice(0, 2)) add('browse', `open ${u.replace(/[.,،;:!?؟]+$/, '')}`, 'url');
 
   // 2) "open the terminal" → run a real probe command inline, right now
   if (OPEN_TERMINAL_RE.test(n)) {

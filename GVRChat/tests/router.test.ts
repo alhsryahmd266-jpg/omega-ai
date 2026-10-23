@@ -17,7 +17,11 @@ const zip: RouteAttachment = { name: 'data.zip', kind: 'file', path: '/data/user
 const tools = (hits: { tool: string }[]) => hits.map(h => h.tool);
 
 /* ── existing behaviour must not change ── */
-t('url → fetch_url', () => assert.deepEqual(tools(autoRoute('شوفلي https://example.com/a')), ['fetch_url']));
+t('url → browse (the agent opens the page and can go inside it)', () => {
+  const h = autoRoute('شوفلي https://example.com/a');
+  assert.deepEqual(tools(h), ['browse']);
+  assert.equal(h[0].arg, 'open https://example.com/a');
+});
 t('search verb → search', () => assert.deepEqual(tools(autoRoute('ابحث عن سعر الذهب اليوم')), ['search']));
 t('math → calc', () => assert.deepEqual(autoRoute('احسب 2+2*3').map(h => h.tool), ['calc']));
 t('install a single tool → install_tool', () => {

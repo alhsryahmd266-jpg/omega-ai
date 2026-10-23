@@ -364,20 +364,24 @@ export function createExtraTools(d: ExtraDeps) {
   /* ── deep web reading ────────────────────────────────────────────────── */
   const SKIP_HOSTS = /\.(?:pdf|zip|apk|mp4|mp3|exe|rar|7z)(?:[?#]|$)|(?:youtube\.com|youtu\.be|facebook\.com|instagram\.com|tiktok\.com|twitter\.com|\/\/x\.com|linkedin\.com|pinterest\.)/i;
 
-  /** Fetches the top results in parallel and returns the passages that answer the query. */
-  async function deepenSearch(query: string, hits: { title: string; url: string }[], pages: number, perPage: number): Promise<string> {
-    const targets = hits.filter(h => /^https?:\/\//i.test(h.url) && !SKIP_HOSTS.test(h.url)).slice(0, pages);
+  /**
+   * Reads the best result pages in parallel and keeps the first three that really have text. A page that is blocked,
+   * empty (a JavaScript app) or not HTML is skipped, and the next candidate takes its place.
+   */
+  async function deepenSearch(query: string, hits: { title: string; url: string }[], candidates: number, perPage: number): Promise<string> {
+    const targets = hits.filter(h => /^https?:\/\//i.test(h.url) && !SKIP_HOSTS.test(h.url)).slice(0, candidates);
     const settled = await Promise.allSettled(targets.map(async h => {
-      const r = await d.fetchText(h.url, {}, { timeoutMs: 7000, retries: 0 });
+      const r = await d.fetchText(h.url, {}, { timeoutMs: 8000, retries: 0 });
       if (r.status >= 400) throw new Error(`HTTP ${r.status}`);
       if (r.contentType && !/html|text|xml/i.test(r.contentType)) throw new Error('not a web page');
       const text = pickPassages(htmlParagraphs(r.text), query, perPage);
-      if (!text) throw new Error('no readable text');
+      if (text.length < 60) throw new Error('no readable text');
       return { h, text };
     }));
     const blocks: string[] = [];
-    for (const s of settled) {
-      if (s.status === 'fulfilled') blocks.push(`▸ ${oneLine(s.value.h.title, 90)}\n  ${s.value.h.url}\n  ${s.value.text.replace(/\n/g, '\n  ')}`);
+    for (const r of settled) {
+      if (blocks.length >= 3) break;
+      if (r.status === 'fulfilled') blocks.push(`▸ ${oneLine(r.value.h.title, 90)}\n  ${r.value.h.url}\n  ${r.value.text.replace(/\n/g, '\n  ')}`);
     }
     return blocks.join('\n');
   }

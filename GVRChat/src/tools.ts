@@ -26,6 +26,11 @@ import {
   planCurl, rankMemories, type AutonomyState, type MemItem,
 } from './agentLogic';
 import { createExtraTools } from './toolsExtra';
+import {
+  findInChunks, normalizeOpenUrl, parseBrowseCommand, parseHtmlPage, renderLinks, renderPage, siteSearchUrl, textPage,
+  type PageLink,
+  type PageModel,
+} from './webBrowse';
 
 export { isDestructiveCommand, toolOutcome } from './agentLogic';
 
@@ -376,7 +381,7 @@ async function searchDdgHtml(q: string): Promise<SearchHit[]> {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `q=${encodeURIComponent(q)}&b=`,
-  }, { timeoutMs: 15000, retries: 1 });
+  }, { timeoutMs: 9000, retries: 0 });
   const links: { title: string; url: string }[] = [];
   const snippets: string[] = [];
   const aRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
@@ -398,7 +403,7 @@ async function searchDdgLite(q: string): Promise<SearchHit[]> {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `q=${encodeURIComponent(q)}`,
-  }, { timeoutMs: 15000, retries: 1 });
+  }, { timeoutMs: 9000, retries: 0 });
   const links: { title: string; url: string }[] = [];
   const snippets: string[] = [];
   const aRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
@@ -415,7 +420,7 @@ async function searchDdgLite(q: string): Promise<SearchHit[]> {
 }
 
 async function searchBing(q: string): Promise<SearchHit[]> {
-  const r = await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(q)}&setlang=en`, {}, { timeoutMs: 15000, retries: 1 });
+  const r = await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(q)}&setlang=en`, {}, { timeoutMs: 9000, retries: 0 });
   const hits: SearchHit[] = [];
   const blocks = r.text.split(/<li[^>]*class="[^"]*\bb_algo\b[^"]*"/).slice(1);
   for (const b of blocks) {
@@ -431,7 +436,7 @@ async function searchWikipedia(q: string): Promise<SearchHit[]> {
   const lang = /[\u0600-\u06FF]/.test(q) ? 'ar' : 'en';
   const r = await fetchText(
     `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=6&format=json&origin=*`,
-    {}, { timeoutMs: 15000, retries: 1 },
+    {}, { timeoutMs: 9000, retries: 0 },
   );
   const data = JSON.parse(r.text);
   return (data?.query?.search || []).map((x: any) => ({
@@ -452,26 +457,147 @@ const PROVIDERS: { name: string; run: (q: string) => Promise<SearchHit[]> }[] = 
 export async function toolWebSearch(query: string): Promise<string> {
   const q = query.trim();
   if (!q) return 'Empty query.';
+  const t0 = Date.now();
+  // All engines at once (they used to run one after another: a blocked first engine cost a minute). The first
+  // engine in PROVIDERS order that has results wins, so the best source still comes first.
+  const settled = await Promise.allSettled(PROVIDERS.map(p => p.run(q)));
   const errors: string[] = [];
-  for (const p of PROVIDERS) {
-    try {
-      const hits = (await p.run(q)).filter(h => h.url && h.title).slice(0, 6);
-      if (hits.length > 0) {
-        const list = hits.map(h => `• ${h.title}\n  ${h.url}${h.snippet ? `\n  ${h.snippet.slice(0, 160)}` : ''}`).join('\n');
-        // Titles alone are useless to a small model that would need a second (slow) round to open a page:
-        // read the top pages now and hand over the passages that answer the question.
-        let pages = '';
-        try { pages = await extra.deepenSearch(q, hits, 2, 900); } catch { /* the list is still useful */ }
-        return pages
-          ? `[${p.name}] Content of the top results:\n${pages}\n\nAll results:\n${list}`
-          : `[${p.name}]\n${list}\n\nTip: use fetch_url on a link above to read the full page.`;
+  let chosen: { name: string; hits: SearchHit[] } | null = null;
+  for (let i = 0; i < settled.length; i++) {
+    const name = PROVIDERS[i].name;
+    const r = settled[i];
+    if (r.status === 'rejected') { errors.push(`${name}: ${(r.reason as any)?.message || r.reason}`); continue; }
+    const hits = r.value.filter(h => h.url && h.title).slice(0, 6);
+    if (hits.length === 0) { errors.push(`${name}: no results`); continue; }
+    if (!chosen) chosen = { name, hits };
+  }
+  if (!chosen) return `Search failed on every provider:\n${errors.join('\n')}\nCheck the internet connection, or open a known site with browse.`;
+  const { name, hits } = chosen;
+  const list = hits.map(h => `• ${h.title}\n  ${h.url}${h.snippet ? `\n  ${h.snippet.slice(0, 160)}` : ''}`).join('\n');
+  // Titles are not an answer: read the best pages now (in parallel, with fallbacks) and hand over what answers the question.
+  let pages = '';
+  try { pages = await extra.deepenSearch(q, hits, 5, 650); } catch { /* the list is still useful */ }
+  const took = `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+  const hint = 'To go inside one of them: browse open <url>, then links / follow N / find word.';
+  return pages
+    ? `[${name} · ${took}] Content of the top results:\n${pages}\n\nAll results:\n${list}\n\n${hint}`
+    : `[${name} · ${took}]\n${list}\n\n${hint}`;
+}
+
+/* ── BROWSE: the agent moves INSIDE websites (open, read parts, links, follow, find, site search, back, download) ── */
+interface BrowseState { current: PageModel | null; history: string[]; cache: Map<string, PageModel>; cursor: number }
+const browse: BrowseState = { current: null, history: [], cache: new Map(), cursor: 0 };
+const NO_PAGE = 'No page is open. Start with: browse open <url>  (for example a site you found with search).';
+
+export function resetBrowseSession(): void {
+  browse.current = null;
+  browse.history = [];
+  browse.cache.clear();
+  browse.cursor = 0;
+}
+
+/**
+ * GitHub's project pages are JavaScript apps: their Releases link and download list are not in the HTML a plain
+ * fetch receives. Do what a person clicks instead: open the Releases page, follow "latest" to its tag, and read the
+ * files of that release from the site itself (no API: the API is rate-limited per IP and would fail on shared phone networks).
+ */
+async function addGithubLinks(model: PageModel, owner: string, repo: string): Promise<void> {
+  const base = `https://github.com/${owner}/${repo}`;
+  const extra: PageLink[] = [{ text: 'Releases', url: `${base}/releases`, same: true }];
+  try {
+    const latest = await fetchText(`${base}/releases/latest`, {}, { timeoutMs: 8000, retries: 0 });
+    const tag = /\/releases\/tag\/([^\/?#]+)/.exec(latest.url || '')?.[1];
+    if (tag) {
+      const frag = await fetchText(`${base}/releases/expanded_assets/${encodeURIComponent(tag)}`, {}, { timeoutMs: 8000, retries: 0 });
+      const files = parseHtmlPage(frag.text, `${base}/releases/expanded_assets/${tag}`).links.filter(l => /\/releases\/download\//.test(l.url));
+      for (const f of files.slice(0, 6)) {
+        const name = f.url.replace(/[?#].*$/, '').split('/').pop() || 'file';
+        extra.push({ text: `${name} (release ${tag})`, url: f.url, same: false });
       }
-      errors.push(`${p.name}: no results`);
-    } catch (e: any) {
-      errors.push(`${p.name}: ${e?.message || e}`);
+    }
+  } catch { /* offline or blocked: the page's own links are still there */ }
+  const seen = new Set(extra.map(l => l.url));
+  model.links = [...extra, ...model.links.filter(l => !seen.has(l.url))];
+}
+
+async function openPage(url: string, pushHistory: boolean): Promise<string> {
+  const target = normalizeOpenUrl(url);
+  if (!target) return `Tool error (browse): not a web address: ${url}`;
+  let r: Awaited<ReturnType<typeof fetchText>>;
+  try {
+    r = await fetchText(target, {}, { timeoutMs: 15000, retries: 1 });
+  } catch (e: any) {
+    return `Tool error (browse): could not open ${target} — ${e?.message || e}`;
+  }
+  if (r.status >= 400) return `Tool error (browse): ${target} answered HTTP ${r.status}. Try another page of the site, or search.`;
+  const ct = r.contentType.toLowerCase();
+  const finalUrl = r.url || target;
+  let model: PageModel;
+  if (/html|xml/.test(ct) || (!ct && /<html|<body/i.test(r.text.slice(0, 4000)))) {
+    model = parseHtmlPage(r.text, finalUrl);
+    const repo = /^https:\/\/github\.com\/([^\/?#]+)\/([^\/?#]+)(\/releases)?\/?$/i.exec(finalUrl);
+    if (repo) await addGithubLinks(model, repo[1], repo[2]);
+  }
+  else if (/json|text\/plain|markdown/.test(ct)) model = textPage(r.text, finalUrl);
+  else return `Tool error (browse): ${target} is not a web page (type: ${ct || 'unknown'}). To keep a file, use download N on a link, or download_file.`;
+  if (pushHistory && browse.current && browse.current.url !== model.url) browse.history.push(browse.current.url);
+  if (browse.history.length > 20) browse.history.splice(0, browse.history.length - 20);
+  browse.current = model;
+  browse.cursor = 0;
+  browse.cache.set(model.url, model);
+  if (browse.cache.size > 12) {
+    const oldest = browse.cache.keys().next().value;
+    if (oldest !== undefined) browse.cache.delete(oldest);
+  }
+  return renderPage(model);
+}
+
+export async function toolBrowse(arg: string): Promise<string> {
+  const cmd = parseBrowseCommand(arg);
+  if (cmd.action === 'error') return `Tool error (browse): ${cmd.message}`;
+  if (cmd.action === 'open') return openPage(cmd.url, true);
+  if (cmd.action === 'back') {
+    const prev = browse.history.pop();
+    if (!prev) return 'No earlier page in this session.';
+    return openPage(prev, false);
+  }
+  const p = browse.current;
+  if (!p) return NO_PAGE;
+  switch (cmd.action) {
+    case 'info':
+      return renderPage(p);
+    case 'read': {
+      if (!p.chunks.length) return 'This page has no readable text (see the note on the page). Try links or find.';
+      const part = cmd.part ?? browse.cursor + 1;
+      if (part < 1 || part > p.chunks.length) return `There are ${p.chunks.length} part(s). Use read 1 to read ${p.chunks.length}, or links / find.`;
+      browse.cursor = part;
+      return `Part ${part} of ${p.chunks.length}:\n${p.chunks[part - 1]}`;
+    }
+    case 'links':
+      return renderLinks(p, cmd.filter);
+    case 'follow': {
+      const link = p.links[cmd.n - 1];
+      if (!link) return `Tool error (browse): there is no link ${cmd.n}. The links are numbered 1 to ${p.links.length} (see links).`;
+      return openPage(link.url, true);
+    }
+    case 'find': {
+      const hits = findInChunks(p.chunks, cmd.words);
+      if (!hits.length) return `Nothing on this page matches "${cmd.words}". Try other words, links, or site_search.`;
+      return `Found in ${hits.length} part(s):\n${hits.map(h => `• part ${h.part}: ${h.snippet}`).join('\n')}\nUse read N to see a part.`;
+    }
+    case 'download': {
+      const link = p.links[cmd.n - 1];
+      if (!link) return `Tool error (browse): there is no link ${cmd.n} to download (see links).`;
+      const name = (link.url.replace(/[?#].*$/, '').split('/').pop() || 'download').replace(/[^A-Za-z0-9._-]+/g, '_') || 'download';
+      return toolDownloadFile(`${link.url} | ${name}`);
+    }
+    case 'site_search': {
+      const form = p.forms.find(f => f.method === 'get' && f.textField);
+      if (!form) return 'This page has no search box I can use (no GET form with a text field). Try links or find.';
+      return openPage(siteSearchUrl(form, cmd.words), true);
     }
   }
-  return `Search failed on every provider:\n${errors.join('\n')}\nCheck the internet connection, or try fetch_url on a known site.`;
+  return NO_PAGE;
 }
 
 export async function toolFetchUrl(arg: string): Promise<string> {
@@ -917,7 +1043,7 @@ export type ToolName =
   | 'mem_save' | 'mem_get' | 'mem_list' | 'mem_delete'
   | 'copy_clipboard' | 'read_clipboard'
   | 'python' | 'pkg_install' | 'install_tool'
-  | 'edit_file' | 'search_code' | 'view_image' | 'deliver_file' | 'apk_tool' | 'mem_search';
+  | 'edit_file' | 'search_code' | 'view_image' | 'deliver_file' | 'apk_tool' | 'mem_search' | 'browse';
 
 interface ToolSpec {
   name: ToolName;
@@ -932,7 +1058,7 @@ interface ToolSpec {
 
 const TOOLS: ToolSpec[] = [
   { name: 'search', confirm: false, advertise: true,
-    usage: 'search the web and read the best pages. Argument: the query. Returns the passages that answer it, plus the links.',
+    usage: 'search the web and read the best pages: returns their relevant passages and links. Argument: the query. To go inside a result use browse.',
     run: toolWebSearch },
   { name: 'fetch_url', confirm: false, advertise: true,
     usage: 'read a web page or call an API. Argument: a URL, or JSON {"url","method","headers","body"}.',
@@ -1020,6 +1146,9 @@ const TOOLS: ToolSpec[] = [
   { name: 'apk_tool', confirm: true, advertise: () => linuxReady,
     usage: 'work on APK files: "info APK", "unpack APK [DIR]", "pack DIR OUT.apk", "sign APK", "decode APK", "build DIR OUT.apk".',
     run: extra.apkTool },
+  { name: 'browse', confirm: false, advertise: true,
+    usage: 'browse a website from the inside: open URL, read N, links [word], follow N, find word, site_search words, back, download N. One command per call.',
+    run: toolBrowse },
   { name: 'mem_search', confirm: false, advertise: true,
     usage: 'search saved memories and past jobs by keywords. Argument: the words.',
     run: toolMemorySearch },
@@ -1049,7 +1178,7 @@ export const AVAILABLE_TOOLS: ToolName[] = TOOLS.filter(t => typeof t.advertise 
 /** The small set shown to weak models so they are not overwhelmed. */
 /** The tools listed in the prompt. The others stay callable; listing them all made every request slow. */
 export const PROMPT_TOOLS: ToolName[] = [
-  'search', 'fetch_url', 'download_file', 'terminal', 'calc', 'read_file', 'write_file', 'edit_file', 'search_code',
+  'search', 'browse', 'fetch_url', 'download_file', 'terminal', 'calc', 'read_file', 'write_file', 'edit_file', 'search_code',
   'view_image', 'deliver_file', 'apk_tool', 'install_tool', 'permission', 'mem_save', 'mem_search', 'open_terminal', 'open_url',
 ];
 export const CORE_TOOLS: ToolName[] = ['search', 'fetch_url', 'terminal', 'calc', 'datetime', 'read_file', 'list_dir', 'open_terminal', 'mem_save', 'mem_get'];
@@ -1063,7 +1192,7 @@ export function toolPromptLines(only?: ToolName[]): string {
 const ALIASES: Record<string, ToolName> = {
   web_search: 'search', websearch: 'search', google: 'search',
   fetch: 'fetch_url', http: 'fetch_url', get: 'fetch_url',
-  download: 'download_file', wget: 'download_file', save_url: 'download_file', curl: 'fetch_url', browse: 'fetch_url', url: 'fetch_url',
+  download: 'download_file', wget: 'download_file', save_url: 'download_file', curl: 'fetch_url', url: 'fetch_url',
   shell: 'terminal', bash: 'terminal', sh: 'terminal', cmd: 'terminal', command: 'terminal',
   js: 'javascript', node: 'javascript', code: 'javascript',
   calculator: 'calc', math: 'calc',
@@ -1086,6 +1215,7 @@ const ALIASES: Record<string, ToolName> = {
   send_file: 'deliver_file', share_file: 'deliver_file', give_file: 'deliver_file', export: 'deliver_file', export_file: 'deliver_file', deliver: 'deliver_file',
   apktool: 'apk_tool', apk_edit: 'apk_tool', apk_tools: 'apk_tool', repack: 'apk_tool',
   recall: 'mem_search', memory_search: 'mem_search', search_memory: 'mem_search',
+  visit: 'browse', open_page: 'browse', browse_web: 'browse', web_browse: 'browse', navigate: 'browse', open_site: 'browse',
   research: 'search', deep_search: 'search',
 };
 
@@ -1169,16 +1299,21 @@ const NATIVE: Partial<Record<ToolName, NativeSpec>> = {
     props: { command: P('e.g. "unpack /workspace/uploads/app.apk" or "pack /workspace/apk_work/app /workspace/out/app.apk"') }, required: ['command'],
     toArg: o => asStr(o.command),
   },
+  browse: {
+    props: { command: P('e.g. "open https://github.com/x/y", "links releases", "follow 3", "read 2", "find install", "site_search apk", "back", "download 4"') },
+    required: ['command'],
+    toArg: o => asStr(o.command),
+  },
   mem_search: { props: { query: P('what to look for in memory') }, required: ['query'], toArg: o => asStr(o.query) },
 };
 
 /** Tools offered to capable models through the native `tools` parameter (kept short: every tool costs prompt tokens). */
 export const NATIVE_TOOLS_DEFAULT: ToolName[] = [
   'search', 'fetch_url', 'terminal', 'calc', 'datetime', 'read_file', 'write_file', 'list_dir',
-  'install_tool', 'mem_save', 'mem_get', 'python', 'edit_file', 'search_code', 'view_image', 'deliver_file', 'apk_tool',
+  'install_tool', 'mem_save', 'mem_get', 'python', 'browse', 'edit_file', 'search_code', 'view_image', 'deliver_file', 'apk_tool',
 ];
 /** Big/slow models pay for every prompt token — give them only the essentials (the router covers time/files). */
-export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'fetch_url', 'terminal', 'install_tool', 'calc', 'edit_file', 'deliver_file', 'apk_tool', 'view_image'];
+export const NATIVE_TOOLS_LEAN: ToolName[] = ['search', 'browse', 'fetch_url', 'terminal', 'install_tool', 'calc', 'edit_file', 'deliver_file', 'apk_tool', 'view_image'];
 
 /** OpenAI-style function schemas for llama.rn's `tools` option. */
 export function nativeToolSpecs(only: ToolName[] = NATIVE_TOOLS_DEFAULT): object[] {

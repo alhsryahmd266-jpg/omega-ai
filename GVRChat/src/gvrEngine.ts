@@ -20,7 +20,7 @@ import {
   isVisionReady, samplingFor, STOP_WORDS, stripThinking, withGenerationLock,
 } from './localLLM';
 import {
-  beginToolRun, CORE_TOOLS, PROMPT_TOOLS, dispatchTool, getAutonomy, isLinuxReady, memoryDigest, NATIVE_TOOLS_LEAN, nativeArgToString,
+  beginToolRun, CORE_TOOLS, PROMPT_TOOLS, dispatchTool, resetBrowseSession, getAutonomy, isLinuxReady, memoryDigest, NATIVE_TOOLS_LEAN, nativeArgToString,
   nativeToolSpecs, normalizeToolName, stopAllTools, toolNeedsConfirm, toolPromptLines,
 } from './tools';
 import {
@@ -93,6 +93,7 @@ let history: RNLlamaOAICompatibleMessage[] = [];
 export function resetConversation(): void {
   history = [];
   void clearConversationMemory();
+  resetBrowseSession();
 }
 
 /** Brings the model-facing conversation back after the app was closed (the chat screen restores itself). */

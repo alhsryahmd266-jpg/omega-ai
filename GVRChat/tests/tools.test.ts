@@ -7,7 +7,7 @@ import * as Sharing from './stubs/expo-sharing';
 import * as Intent from './stubs/expo-intent-launcher';
 import { calls as termCalls, state as term } from './stubs/terminal';
 import { flags } from './stubs/localLLM';
-import { dispatchTool, setAutonomy, setToolConfirmHandler, stopAllTools, toolOutcome, beginToolRun, getAutonomy } from '../src/tools';
+import { dispatchTool, setAutonomy, setToolConfirmHandler, stopAllTools, toolOutcome, beginToolRun, getAutonomy, toolBrowse, resetBrowseSession, toolWebSearch, normalizeToolName } from '../src/tools';
 
 const { t, finish } = runner('tools');
 const decisions: { tool: string; arg: string; risky: boolean }[] = [];
@@ -284,5 +284,64 @@ export const done = (async () => {
     assert.match(await dispatchTool('mem_search', 'الطقس'), /Nothing in memory/);
   });
 
+
+  await t('the word "browse" is the browse tool (not an alias of fetch_url)', () => {
+    assert.equal(normalizeToolName('browse'), 'browse');
+    assert.equal(normalizeToolName('visit'), 'browse');
+    assert.equal(normalizeToolName('fetch_url'), 'fetch_url');
+  });
+
+  /* ── browse: going INSIDE a website (fetch mocked) ── */
+  const setPages = (map: Record<string, string>) => {
+    (globalThis as any).fetch = async (url: string) => {
+      const body = map[url];
+      return { status: body === undefined ? 404 : 200, url, headers: { get: (k: string) => (k.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) }, text: async () => body ?? '' };
+    };
+  };
+  const SITE: Record<string, string> = {
+    'https://example.com/a/': '<html><head><title>Home</title></head><body><main><h1>Home</h1><p>Welcome to the example home page, read the second page for the install steps.</p><a href="/b">Second page</a><form method="get" action="/search"><input name="q" type="text"></form></main></body></html>',
+    'https://example.com/b': '<html><head><title>Second</title></head><body><main><p>The second page has the install steps for the tool, download the jar first.</p><a href="/a/">Back home</a></main></body></html>',
+  };
+  await t('browse: open a page, follow a link, find text, go back, read a part', async () => {
+    await fresh(); resetBrowseSession(); setPages(SITE);
+    assert.match(await toolBrowse('open https://example.com/a/'), /^\[browse\] Home — https:\/\/example\.com\/a\//);
+    assert.match(await toolBrowse('links'), /\[1\] Second page/);
+    assert.match(await toolBrowse('follow 1'), /^\[browse\] Second — https:\/\/example\.com\/b/);
+    assert.match(await toolBrowse('find install steps'), /part 1:/);
+    assert.match(await toolBrowse('back'), /^\[browse\] Home/);
+    assert.match(await toolBrowse('read 2'), /There are 1 part/);
+  });
+
+  await t('browse: the site search box builds the real GET URL; bad input gives clear errors', async () => {
+    await fresh(); resetBrowseSession();
+    setPages({ ...SITE, 'https://example.com/search?q=welcome': '<html><head><title>Results</title></head><body><main><p>Search results for welcome on the example site.</p></main></body></html>' });
+    await toolBrowse('open https://example.com/a/');
+    assert.match(await toolBrowse('site_search welcome'), /^\[browse\] Results — https:\/\/example\.com\/search\?q=welcome/);
+    assert.match(await toolBrowse('open https://example.com/missing'), /Tool error \(browse\).*HTTP 404/);
+    assert.match(await toolBrowse('open ftp://nope'), /Tool error \(browse\)/);
+    assert.match(await toolBrowse('frobnicate'), /unknown browse command/);
+    resetBrowseSession();
+    assert.match(await toolBrowse('links'), /No page is open/);
+  });
+
+  await t('search: engines run together and the best pages are read, not only their titles', async () => {
+    await fresh(); resetBrowseSession();
+    const ddgHtml = `<html><body>
+      <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent('https://docs.example.org/apk')}&amp;rut=1">Apk docs</a>
+      <a class="result__snippet" href="#">How to decode an apk</a>
+      <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent('https://blog.example.net/x')}&amp;rut=1">Blog</a>
+      <a class="result__snippet" href="#">a blog post</a></body></html>`;
+    (globalThis as any).fetch = async (url: string) => {
+      if (/duckduckgo\.com\/html/.test(url)) return { status: 200, url, headers: { get: () => 'text/html' }, text: async () => ddgHtml };
+      if (url === 'https://docs.example.org/apk') return { status: 200, url, headers: { get: () => 'text/html' }, text: async () => '<html><head><title>Apk docs</title></head><body><main><p>To decode an apk run the decoder with the d command and the file name, it writes smali files.</p></main></body></html>' };
+      if (url === 'https://blog.example.net/x') return { status: 200, url, headers: { get: () => 'text/html' }, text: async () => '<html><body></body></html>' };
+      return { status: 404, url, headers: { get: () => null }, text: async () => '' };
+    };
+    const out = await toolWebSearch('how to decode apk');
+    assert.match(out, /^\[DuckDuckGo · /);
+    assert.match(out, /Content of the top results/);
+    assert.match(out, /run the decoder with the d command/);
+    assert.match(out, /browse open <url>/);
+  });
   finish();
 })();
