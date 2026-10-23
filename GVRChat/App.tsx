@@ -20,7 +20,7 @@ import {
   getModelProfile, downloadRecommendedModel, cancelDownload, RECOMMENDED_MODELS, type RecommendedModel,
   type ModelInfo,
 } from './src/localLLM';
-import { runWithAttachment, resetConversation, requestStop, restoreHistory, type StepEvent, type AgentStep } from './src/gvrEngine';
+import { runWithAttachment, resetConversation, requestStop, restoreHistory, warmUpAgent, type StepEvent, type AgentStep } from './src/gvrEngine';
 import { endMission, interruptedMission } from './src/agentMemory';
 import { prepareAttachment, pickAnyFile, type PreparedAttachment } from './src/attachments';
 import {
@@ -523,6 +523,7 @@ export default function App() {
         setModelLoading(false);
         setModelLoadPct(0);
         setModelReady(isModelLoaded());
+        if (isModelLoaded()) void warmUpAgent();
         setVisionReadyState(isVisionReady());
         if (isModelLoaded()) showProfileWarnings();
       }
@@ -657,6 +658,7 @@ export default function App() {
 
   const afterLoad = () => {
     setModelReady(isModelLoaded());
+    if (isModelLoaded()) void warmUpAgent();
     setVisionReadyState(isVisionReady());
     const note = getVisionNote();
     if (note) Alert.alert('الرؤية', note);
@@ -681,6 +683,7 @@ export default function App() {
       setModelLoading(false);
       setModelLoadPct(0);
       setModelReady(isModelLoaded());
+      if (isModelLoaded()) void warmUpAgent();
     }
   };
 
@@ -696,6 +699,7 @@ export default function App() {
       setModelLoading(false);
       setModelLoadPct(0);
       setModelReady(isModelLoaded());
+      if (isModelLoaded()) void warmUpAgent();
     }
   };
 

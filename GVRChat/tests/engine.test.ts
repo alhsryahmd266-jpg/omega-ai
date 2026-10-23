@@ -138,7 +138,7 @@ export const done = (async () => {
     await runWithAttachment('اعمل فولدر part-a', null, noop);
     queue('أهلاً!');
     const before = seen.length;
-    await runWithAttachment('صباح الخير', null, noop);
+    await runWithAttachment('اكتب لي جملة عن البحر', null, noop);
     assert.ok(!lastUser(seen[before]).includes('Work log'));
   });
 
@@ -175,11 +175,35 @@ export const done = (async () => {
   await t('conversation is saved for the next app start', async () => {
     await fresh();
     queue('أهلاً بيك.');
-    await runWithAttachment('صباح الخير', null, noop);
+    await runWithAttachment('اكتب لي جملة عن البحر', null, noop);
     await new Promise(r => setTimeout(r, 10));
     const saved = JSON.parse((await AsyncStorage.getItem('gvr_history_v1')) || '[]');
     assert.equal(saved.length, 2);
     assert.equal(saved[1].content, 'أهلاً بيك.');
+  });
+
+
+  await t('greeting: answered locally, the model is not called', async () => {
+    await fresh();
+    const res = await runWithAttachment('مرحبا', null, noop);
+    assert.equal(seen.length, 0, 'a greeting must not reach the model');
+    assert.match(res.answer, /GVR/);
+  });
+
+  await t('"هل يمكنك فتح تريمنال": the terminal opens locally, no model call', async () => {
+    await fresh();
+    term.handler = () => '/workspace';
+    const res = await runWithAttachment('هل يمكنك فتح تريمنال', null, noop);
+    assert.equal(seen.length, 0, 'opening the terminal must not wait for the model');
+    assert.match(res.answer, /فتحت الترمنال/);
+  });
+
+  await t('the instructions sent to the model stay small (phone CPU prefill budget)', async () => {
+    await fresh();
+    queue('تمام');
+    await runWithAttachment('ازاي اعمل فولدر في لينكس؟', null, noop);
+    const sys = seen[0].messages[0].content as string;
+    assert.ok(sys.length <= 3300, `system prompt is ${sys.length} chars`);
   });
 
   finish();

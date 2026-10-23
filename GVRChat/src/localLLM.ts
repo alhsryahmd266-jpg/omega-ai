@@ -15,7 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Terminal from '../modules/terminal/src';
 import {
-  hasMtp, parseFreqs, planAcceleration, planThreads, speedHint,
+  hasMtp, openclFriendly, parseFreqs, planAcceleration, planThreads, speedHint,
   type AccelMode, type AccelPlan, type AccelUsed, type BackendDevice,
 } from './accel';
 
@@ -487,7 +487,12 @@ export async function loadModel(
   await AsyncStorage.setItem(LOADING_FLAG_KEY, model.uri);
 
   const mode = opts.accel ?? (await getAccelMode());
-  const [devices, bad, freqs, mtp] = await Promise.all([backendDevices(), getBadAccel(), cpuFreqs(), detectMtp(model.uri)]);
+  // Asking the GPU driver for its devices initialises OpenCL (seconds on a phone): only when a GPU/NPU could be used.
+  const needDevices = mode === 'gpu' || mode === 'npu' || (mode === 'auto' && openclFriendly(model.name));
+  const [devices, bad, freqs, mtp] = await Promise.all([
+    needDevices ? backendDevices() : Promise.resolve([] as BackendDevice[]),
+    getBadAccel(), cpuFreqs(), detectMtp(model.uri),
+  ]);
   const threads = planThreads(freqs);
   const firstPlan = planAcceleration({ mode, fileName: model.name, devices, bad });
   // An accelerated plan gets one try. If it fails, the CPU plan runs and the failure is remembered.

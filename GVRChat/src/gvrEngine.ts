@@ -20,11 +20,11 @@ import {
   isVisionReady, samplingFor, STOP_WORDS, stripThinking, withGenerationLock,
 } from './localLLM';
 import {
-  beginToolRun, CORE_TOOLS, dispatchTool, getAutonomy, isLinuxReady, memoryDigest, NATIVE_TOOLS_LEAN, nativeArgToString,
+  beginToolRun, CORE_TOOLS, PROMPT_TOOLS, dispatchTool, getAutonomy, isLinuxReady, memoryDigest, NATIVE_TOOLS_LEAN, nativeArgToString,
   nativeToolSpecs, normalizeToolName, stopAllTools, toolNeedsConfirm, toolPromptLines,
 } from './tools';
 import {
-  clipResult, endsWithConfirmQuestion, extractShellBlock, isAffirmation, repeatCount, stubOldToolResults, toolOutcome, wantsAction,
+  clipResult, endsWithConfirmQuestion, isSmallTalk, smallTalkReply, extractShellBlock, isAffirmation, repeatCount, stubOldToolResults, toolOutcome, wantsAction,
 } from './agentLogic';
 import {
   beginMission, clearConversationMemory, digestForPrompt, endMission, loadHistory, noteStep, recallFor, saveHistory,
@@ -139,11 +139,8 @@ function today(): string {
 }
 
 const AUTO_RULES = [
-  '- You have FULL permission to act. Do the work yourself with the tools, step by step, until the job is finished. NEVER ask the user for permission or confirmation (no "do you want me to continue?") and never stop to describe what you will do next: do it.',
-  '- NEVER show a shell command as text for the user to run later: call the `terminal` tool and run it yourself, then read the result. Files the user attached are saved on disk; their exact path is in the message.',
-  '- Work on files with the tools: `edit_file` changes only the lines that differ, `apk_tool` unpacks/packs/signs APKs, `deliver_file` hands the finished file to the user, `view_image` looks at pictures.',
-  '- When a step FAILS, read the error, fix the cause (missing tool → install it; wrong path or flag → correct it) or try a DIFFERENT approach (another tool, package, command or source). Never give up after one failure: report that something cannot be done only after at least two different attempts, and say what you tried.',
-  '- To learn something, use `search` (it already reads the top pages) and `fetch_url` for a specific page; to get a program, `install_tool` or `download_file`, then run it with `terminal`.',
+  '- Act with the tools until the job is done. Do not ask for permission or confirmation, and never print a command for the user to run: run it with `terminal`.',
+  '- When a step fails, fix the cause or try another way before giving up.',
 ];
 
 async function buildSystemPrompt(mode: PromptMode, native = false, auto = false): Promise<string> {
@@ -158,45 +155,36 @@ async function buildSystemPrompt(mode: PromptMode, native = false, auto = false)
   if (native) {
     // Tool definitions are injected by the chat template (native `tools`), so no tag instructions here.
     return [
-      'You are GVR, an AI assistant running on the user\'s Android phone, with tools.',
-      '',
+      'You are GVR, an AI assistant on the user\'s Android phone, with tools.',
       'RULES:',
-      '- You do NOT reliably know current or real-world facts (news, prices, who holds an office, numbers, versions, sports, weather, "how many", "who is", "latest"). For any such question, or whenever you are not sure, call `search` FIRST and answer from the results, naming the source. Never answer those from memory and never say you cannot look things up.',
-      '- Linux commands, files, scripts → `terminal` / `python`. Math → `calc`. Chit-chat, opinions, creative writing and code you can write yourself need no tool.',
-      '- Missing a program? Call `install_tool` with its name: it installs it and returns how to run it (executables + --help). Then run it with `terminal`. Never give up just because something is not installed.',
-      '- One tool call at a time; wait for the result. Never invent tool output. If a tool fails, try another way.',
-      '- If the message already contains results the app obtained, use them; do not repeat those tools.',
-      ...(auto ? AUTO_RULES : ['- Ask before destructive actions (deleting, overwriting).']),
-      '- Reply in the user\'s language (Arabic dialects are fine). Be concise: short answers unless detail is requested. Never repeat sentences.',
+      '- Facts that change (news, prices, office holders, versions, scores, weather): call `search` first and name the source. Never guess them.',
+      '- Commands, files and scripts go to `terminal`; math to `calc`. Chit-chat and writing need no tool.',
+      '- One tool call at a time; wait for its result. Never invent tool output.',
+      '- A program is missing? `install_tool` installs it and shows how to run it.',
+      ...(auto ? AUTO_RULES : ['- Ask before destructive actions.']),
+      '- Reply in the user\'s language (Arabic dialects are fine). Be concise.',
       linux,
       '',
       date,
       mem ? `Saved memory: ${mem}` : '',
     ].filter(Boolean).join('\n');
   }
-  const tools = toolPromptLines(mode === 'compact' ? CORE_TOOLS : undefined);
+  const tools = toolPromptLines(mode === 'compact' ? CORE_TOOLS : PROMPT_TOOLS);
   return [
-    'You are GVR, an AI assistant running entirely on the user\'s Android phone, with tools.',
-    '',
-    'To use a tool, write exactly ONE tool call and then stop and wait for the result:',
-    '<tool name="TOOL_NAME">argument</tool>',
-    'The result comes back in the next message. Then continue, or answer the user.',
-    '',
-    'Example:',
-    'User: ابحث عن أحدث إصدار من أندرويد',
-    'Assistant: <tool name="search">أحدث إصدار من أندرويد</tool>',
+    'You are GVR, an AI assistant on the user\'s Android phone, with tools.',
+    'To use a tool, output ONE line: <tool name="TOOL_NAME">argument</tool>, then stop and wait for the result.',
+    'Example: User: ابحث عن أحدث إصدار من أندرويد -> <tool name="search">أحدث إصدار من أندرويد</tool>',
     '',
     'TOOLS:',
     tools,
     '',
     'RULES:',
-    '- If you are not sure about a fact (news, prices, people, numbers, versions), use search first instead of guessing. Chit-chat: just answer, briefly.',
-    '- Never invent tool output. If a tool fails, say so and try another way or explain.',
-    '- One tool call per message. Nothing after the closing tag.',
-    '- If the message already contains tool results, use them to answer; do not call the same tool again.',
-    ...(auto ? AUTO_RULES : ['- Before destructive actions (deleting, overwriting), make sure the user asked for it.']),
-    '- Reply in the same language the user writes in (Arabic dialects are fine). Be concise. Never repeat sentences.',
-    mode === 'full' && isLinuxReady() ? '- Missing a program? <tool name="install_tool">ffmpeg</tool> installs it and shows how to run it.' : '',
+    '- Facts that change: use search first and name the source. Chit-chat: just answer.',
+    '- Never invent tool output. One tool call per message; nothing after the closing tag.',
+    '- If the message already contains tool results, use them; do not repeat the call.',
+    ...(auto ? AUTO_RULES : ['- Before destructive actions, make sure the user asked for it.']),
+    '- Reply in the user\'s language (Arabic dialects are fine). Be concise.',
+    mode === 'full' && isLinuxReady() ? '- Missing a program? <tool name="install_tool">ffmpeg</tool> installs it.' : '',
     linux,
     '',
     date,
@@ -354,6 +342,15 @@ async function runTurn(
   const nextId = () => `s${++stepSeq}`;
   const answerParts: string[] = [];
   const question = userText.trim();
+  // Greetings never need the model: a one-word hello through the full prompt took minutes on a phone CPU.
+  if (!attachment && isSmallTalk(question)) {
+    const reply = smallTalkReply(question);
+    history.push({ role: 'user', content: question });
+    history.push({ role: 'assistant', content: reply });
+    if (history.length > HISTORY_MAX_MESSAGES) history = history.slice(-HISTORY_MAX_MESSAGES);
+    void saveHistory(history.map(h => ({ role: h.role === 'assistant' ? 'assistant' as const : 'user' as const, content: typeof h.content === 'string' ? h.content : '' })));
+    return { answer: reply, steps: [], elapsed: 0, attachmentWarnings: [] };
+  }
   // "yes, do it" after the assistant proposed a plan, or "continue": the same job goes on.
   const approved = auto && history.length > 0 && isAffirmation(question);
   const continuing = isAffirmation(question) || CONTINUE_RE.test(question);
@@ -409,6 +406,10 @@ async function runTurn(
     const got = steps[steps.length - 1];
     if (only.tool === 'datetime') {
       finalText = formatNowArabic();
+      skipModel = true;
+      showRaw = false;
+    } else if (only.why === 'open_terminal' && got && toolOutcome(got.result) !== 'error') {
+      finalText = 'فتحت الترمنال تحت ✅ اكتب أي أمر وأنا أنفّذه على Alpine.';
       skipModel = true;
       showRaw = false;
     } else if (only.tool === 'calc' && got && !/error|invalid|خطأ/i.test(got.result)) {
@@ -723,4 +724,33 @@ async function runTurn(
     elapsed: Math.round((Date.now() - t0) / 100) / 10,
     attachmentWarnings: warnings,
   };
+}
+
+
+/**
+ * Processes the fixed prefix (system prompt + tool list) while the model is idle, right after it loads, so the first
+ * real message only has to process its own text. The prefix must match the one runTurn sends, byte for byte.
+ */
+export async function warmUpAgent(): Promise<void> {
+  if (!isModelLoaded() || stopFlag) return;
+  try {
+    await withGenerationLock(async () => {
+      if (stopFlag) return;
+      const ctx = getContext();
+      const profile = getModelProfile();
+      const weak = !!profile && (profile.tier === 'tiny' || profile.looksBase);
+      const mode = promptMode();
+      const big = !weak && (profile?.paramsB ?? 0) >= BIG_MODEL_B;
+      let useNative = false;
+      try { useNative = !weak && mode === 'full' && (profile?.supportsTools ?? true) && ctx.isJinjaSupported(); } catch { useNative = false; }
+      const nativeTools = useNative ? nativeToolSpecs(big ? NATIVE_TOOLS_LEAN : undefined) : [];
+      if (!nativeTools.length) useNative = false;
+      const system = await buildSystemPrompt(mode, useNative, getAutonomy().mode === 'auto');
+      const messages: RNLlamaOAICompatibleMessage[] = [{ role: 'system', content: system }, { role: 'user', content: 'ok' }];
+      await ctx.completion(
+        buildCompletionParams({ messages, nPredict: 1, sampling: samplingFor(profile), nativeRound: useNative, nativeTools, stop: STOP_WORDS, mtp: false }),
+        () => {},
+      );
+    });
+  } catch { /* best effort: a failed warm-up only costs time on the first message */ }
 }

@@ -80,5 +80,11 @@ t('image with a vision model → the model looks at it itself', () => {
   assert.deepEqual(autoRoute('ايه المكتوب في الصورة دي', { hasAttachment: true, attachment: img, linuxReady: true, visionReady: true }), []);
 });
 
+t('open the terminal: every phrasing, including the question form from the phone', () => {
+  for (const m of ['هل يمكنك فتح تريمنال', 'ممكن تفتح الترمنال', 'افتح التريمنال', 'تقدر تفتح ترمنال؟', 'open the terminal']) {
+    assert.ok(autoRoute(m).some(h => h.why === 'open_terminal'), m);
+  }
+  assert.equal(autoRoute('مرحبا').length, 0);
+});
 console.log(`router: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

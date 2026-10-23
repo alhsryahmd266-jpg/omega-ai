@@ -714,3 +714,19 @@ export function extractExports(command: string): { name: string; line: string }[
   }
   return out;
 }
+
+
+/* ═══ 8. SMALL TALK (answered without the model) ══════════════════════════ */
+const SMALLTALK_RE = /^(?:مرحبا|مرحب|اهلا|اهلين|هلا|هاي|السلام عليكم|وعليكم السلام|سلام|صباح الخير|صباح النور|مساء الخير|مساء النور|ازيك|ازي حالك|ازاي حالك|عامل ايه|عامل اي|hi|hello|hey|yo|good morning|good evening)[\s!.،؟?]*$/;
+
+/** A greeting or "how are you" and nothing else: no tool and no model call needed. */
+export function isSmallTalk(text: string): boolean {
+  const t = stripMarks(text.trim().toLowerCase()).replace(/\s+/g, ' ');
+  return t.length > 0 && t.length <= 40 && SMALLTALK_RE.test(t);
+}
+
+export function smallTalkReply(text: string): string {
+  const t = stripMarks(text.trim().toLowerCase());
+  if (/ازيك|ازي حالك|ازاي حالك|عامل|how are you/.test(t)) return 'الحمد لله تمام 😊 تحب نبدأ بإيه؟';
+  return 'أهلاً بيك 👋 أنا GVR. أقدر أفتح الترمنال، أبحث على النت، أفك وأعدّل الملفات زي APK، وأحلل الصور والفيديوهات. قولّي تحب تعمل إيه؟';
+}

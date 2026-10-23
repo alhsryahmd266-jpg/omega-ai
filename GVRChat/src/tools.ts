@@ -932,13 +932,13 @@ interface ToolSpec {
 
 const TOOLS: ToolSpec[] = [
   { name: 'search', confirm: false, advertise: true,
-    usage: 'search the web and READ the best pages. Argument: the query. Returns the passages that answer it (from the top results) plus the list of links.',
+    usage: 'search the web and read the best pages. Argument: the query. Returns the passages that answer it, plus the links.',
     run: toolWebSearch },
   { name: 'fetch_url', confirm: false, advertise: true,
-    usage: 'read a web page or call an API (GET/POST/...). Argument: a URL, or JSON {"url","method","headers","body","max"}. HTML is converted to readable text; redirects and retries are handled.',
+    usage: 'read a web page or call an API. Argument: a URL, or JSON {"url","method","headers","body"}.',
     run: toolFetchUrl },
   { name: 'download_file', confirm: true, advertise: true,
-    usage: 'download a file from the internet into the phone. Argument: url | path (path optional; relative = app workspace).',
+    usage: 'download a file from the internet. Argument: url | path (optional; relative = app workspace).',
     run: toolDownloadFile },
   { name: 'terminal', confirm: true, advertise: true,
     usage: () => linuxReady
@@ -946,19 +946,19 @@ const TOOLS: ToolSpec[] = [
       : 'run a shell command on the phone (Android toybox: ls cat grep sed find tar ps df ping …). The folder you cd into is remembered. Multi-line scripts work. Start with a line "#timeout=120" for long jobs. No python/package manager until Alpine Linux is installed from Settings. Argument: the command.',
     run: toolTerminal },
   { name: 'javascript', confirm: true, advertise: true,
-    usage: 'run JavaScript for calculations or data processing. Use console.log(...) or return a value. No infinite loops.',
+    usage: 'run a shell command in Alpine Linux (apk, python3, git, ffmpeg...). Argument: the command. For long jobs put #timeout=N on the first line.',
     run: toolJavascript },
   { name: 'calc', confirm: false, advertise: true,
-    usage: 'evaluate a math expression. Supports + - * / % ^ ( ), sqrt, sin, cos, tan, log, ln, abs, round, floor, ceil, min, max, pow, pi, e.',
+    usage: 'evaluate a math expression. Argument: the expression.',
     run: toolCalc },
   { name: 'datetime', confirm: false, advertise: true,
     usage: 'current date, time and timezone. No argument.',
     run: () => toolDatetime() },
   { name: 'read_file', confirm: false, advertise: true,
-    usage: 'read a text file. Argument: a path (relative paths are inside the app workspace; absolute paths like /storage/emulated/0/Download/x.txt work if permission is granted).',
+    usage: 'read a text file. Argument: the path (relative = app workspace).',
     run: toolReadFile },
   { name: 'write_file', confirm: true, advertise: true,
-    usage: 'write a text file. Argument: first line = path, the following lines = file content. Allowed: app workspace or /storage/emulated/0.',
+    usage: 'write a text file. Argument: first line = path, the rest = content.',
     run: toolWriteFile },
   { name: 'list_dir', confirm: false, advertise: true,
     usage: 'list a folder. Argument: a path (empty = app workspace).',
@@ -967,7 +967,7 @@ const TOOLS: ToolSpec[] = [
     usage: 'analyse ANY file: APK (package, permissions, components, signing), zip/office/pdf (text), or unknown binaries. Argument: a path.',
     run: toolInspectFile },
   { name: 'open_terminal', confirm: false, advertise: true,
-    usage: 'open the terminal window for the user. No argument.',
+    usage: 'open the terminal panel for the user. No argument.',
     run: () => toolOpenTerminal() },
   { name: 'delete_file', confirm: true, advertise: true,
     usage: 'delete a file or folder inside the app workspace. Argument: the path.',
@@ -976,7 +976,7 @@ const TOOLS: ToolSpec[] = [
     usage: 'phone model, Android version, free storage, app folders. No argument.',
     run: () => toolDeviceInfo() },
   { name: 'open_url', confirm: true, advertise: true,
-    usage: 'open a link or app on the phone (https://, tel:, mailto:, geo:). Argument: the URL.',
+    usage: 'open a link or app on the phone (https, tel:, mailto:). Argument: the link.',
     run: toolOpenUrl },
   { name: 'share_text', confirm: true, advertise: true,
     usage: 'open the Android share sheet with some text. Argument: the text.',
@@ -988,10 +988,10 @@ const TOOLS: ToolSpec[] = [
     usage: 'read whatever text is currently on the system clipboard. No argument.',
     run: () => toolReadClipboard() },
   { name: 'permission', confirm: false, advertise: true,
-    usage: 'check or request an Android permission. Argument: "status", or one of storage, all_files, install_apps (install APKs), battery (keep working in the background), camera, microphone, location, notifications.',
+    usage: 'check or request a permission. Argument: status, storage, all_files, install_apps, battery, camera, microphone, location, notifications.',
     run: toolPermission },
   { name: 'mem_save', confirm: false, advertise: true,
-    usage: 'remember something across chats. Argument: key | value',
+    usage: 'remember something across chats. Argument: key | value.',
     run: a => {
       const [k, ...rest] = a.split('|');
       return toolMemorySave(k, rest.join('|'));
@@ -1006,22 +1006,22 @@ const TOOLS: ToolSpec[] = [
     usage: 'delete one saved memory. Argument: key.',
     run: toolMemoryDelete },
   { name: 'edit_file', confirm: true, advertise: true,
-    usage: 'change part of a file by replacing exact lines (Aider format); send ONLY the lines that change. Argument: first line = path, then <<<<<<< SEARCH / the old lines / ======= / the new lines / >>>>>>> REPLACE. An empty SEARCH creates a new file. read_file first so SEARCH matches exactly.',
+    usage: 'change exact lines in a file. Argument: path, then <<<<<<< SEARCH / old lines / ======= / new lines / >>>>>>> REPLACE. Read the file first.',
     run: extra.editFile },
   { name: 'search_code', confirm: false, advertise: true,
-    usage: 'search inside files (grep). Argument: pattern (plain text or /regex/); optional 2nd line = folder; optional 3rd line = file filter like *.ts.',
+    usage: 'search inside files. Argument: pattern (text or /regex/); optional 2nd line = folder; 3rd line = glob like *.ts.',
     run: extra.searchCode },
   { name: 'view_image', confirm: false, advertise: true,
-    usage: 'look at an image file (vision model if one is loaded, otherwise OCR that reads its text). Argument: the path; optional next lines = what to look for.',
+    usage: 'look at an image (vision model, or OCR of its text). Argument: the path; optional question on the next line.',
     run: extra.viewImage },
   { name: 'deliver_file', confirm: true, advertise: true,
-    usage: 'give a finished file to the user: saves it in Downloads/GVR and opens the share sheet. Argument: the path, or "path | install" to open the APK installer, or "path | link" for a public download link.',
+    usage: 'give a finished file to the user (Downloads/GVR + share). Argument: path; or "path | install" for an APK; or "path | link".',
     run: extra.deliverFile },
   { name: 'apk_tool', confirm: true, advertise: () => linuxReady,
-    usage: 'work on APK files. Argument: "info APK", "unpack APK [DIR]" (plain unzip), "pack DIR OUT.apk" (zip back, align, sign), "sign APK", "decode APK" (smali + readable manifest), "build DIR OUT.apk". Change files between unpack and pack with edit_file / write_file / terminal.',
+    usage: 'work on APK files: "info APK", "unpack APK [DIR]", "pack DIR OUT.apk", "sign APK", "decode APK", "build DIR OUT.apk".',
     run: extra.apkTool },
   { name: 'mem_search', confirm: false, advertise: true,
-    usage: 'search saved memories and past jobs by keywords. Argument: what to look for.',
+    usage: 'search saved memories and past jobs by keywords. Argument: the words.',
     run: toolMemorySearch },
   // Real tools once Alpine Linux is installed (Settings → Linux); otherwise hidden but still answer honestly.
   { name: 'python', confirm: true, advertise: () => linuxReady,
@@ -1034,7 +1034,7 @@ const TOOLS: ToolSpec[] = [
     usage: 'install Alpine packages with apk. Argument: package names separated by spaces (e.g. python3 py3-pip git nodejs).',
     run: async a => Terminal.installPackages(a) },
   { name: 'install_tool', confirm: true, advertise: () => linuxReady,
-    usage: 'install any command-line tool into Alpine Linux and learn how to run it. Argument: the package name (e.g. ffmpeg, git, tesseract-ocr). Returns its executables, version and --help, and remembers them.',
+    usage: 'install a command-line tool into Alpine and learn how to run it. Argument: its name.',
     run: a => toolInstallTool(a) },
 ];
 
@@ -1047,6 +1047,11 @@ export function availableTools(): ToolName[] {
 export const AVAILABLE_TOOLS: ToolName[] = TOOLS.filter(t => typeof t.advertise === 'boolean' && t.advertise).map(t => t.name);
 
 /** The small set shown to weak models so they are not overwhelmed. */
+/** The tools listed in the prompt. The others stay callable; listing them all made every request slow. */
+export const PROMPT_TOOLS: ToolName[] = [
+  'search', 'fetch_url', 'download_file', 'terminal', 'calc', 'read_file', 'write_file', 'edit_file', 'search_code',
+  'view_image', 'deliver_file', 'apk_tool', 'install_tool', 'permission', 'mem_save', 'mem_search', 'open_terminal', 'open_url',
+];
 export const CORE_TOOLS: ToolName[] = ['search', 'fetch_url', 'terminal', 'calc', 'datetime', 'read_file', 'list_dir', 'open_terminal', 'mem_save', 'mem_get'];
 
 /** Lines for the system prompt: "- name: usage" */

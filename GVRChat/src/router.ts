@@ -129,6 +129,10 @@ const FRESH_WORDS = /(اخبار|الاخبار|سعر|اسعار|الطقس|د�
 // "how many people are on earth NOW" — facts that change, asked without an explicit "search".
 const NOW_QUESTION = /(?:^|\s)(?:كم|ما هو|ما هي|من هو|مين|ايه|what is|who is|how many|how much)(?:\s|$).*(?:حاليا|الان|دلوقتي|current|currently|right now|these days|as of now)/;
 
+/** "افتح الترمنال" · "هل يمكنك فتح تريمنال" · "ممكن تفتح الترمنال" · "open the terminal" */
+const OPEN_TERMINAL_RE =
+  /(?:^|\s)(?:هل\s+)?(?:(?:ممكن|تقدر|يمكنك|يمكن|ينفع|عايز|عاوز|حاول|جرب)\s+)?(?:تفتح|افتح|فتح|فتحلي|شغل|شغّل|اعرض|اعرضلي|وريني|وريلي|اظهر|اظهرلي|open|show|launch|start|run)\s+(?:the\s+)?(?:ال)?(?:ترمنال|تيرمنال|تريمنال|ترمينال|تيرمينال|terminal|shell|console|طرفيه|طرفية)(?=\s|$|[?؟.!،])/i;
+
 export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   const hits: RouteHit[] = [];
   const add = (tool: string, arg: string, why: string) => {
@@ -143,7 +147,7 @@ export function autoRoute(text: string, opts: RouteOptions = {}): RouteHit[] {
   for (const u of urls.slice(0, 2)) add('fetch_url', u.replace(/[.,،;:!?؟]+$/, ''), 'url');
 
   // 2) "open the terminal" → run a real probe command inline, right now
-  if (/(افتح|شغل|اعرض|وريني|اظهر|open|show|launch|start|run)\s+(?:the\s+)?(ال)?(ترمنال|تيرمنال|تريمنال|ترمينال|تيرمينال|terminal|shell|console|طرفيه)/.test(n)) {
+  if (OPEN_TERMINAL_RE.test(n)) {
     add('terminal', TERMINAL_PROBE, 'open_terminal');
   }
 

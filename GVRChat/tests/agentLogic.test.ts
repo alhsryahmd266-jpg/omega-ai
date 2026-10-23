@@ -7,7 +7,7 @@ import {
   addNote, applyEditBlocks, commandRisk, cwdIsSafe, endsWithConfirmQuestion, extractFiles, extractShellBlock,
   grepText, isAffirmation, journalDigest, missingCommands, mimeForName, newMission, packagesFor, parseEditArgs,
   rankMemories, recordStep, repeatCount, safeFileName, searchRegex, stubOldToolResults, toolOutcome, tokenize, wantsAction,
-  clipResult, extractExports, globToRegExp, headTail, htmlParagraphs, pickPassages, planCurl, shellSplit,
+  clipResult, extractExports, isSmallTalk, smallTalkReply, globToRegExp, headTail, htmlParagraphs, pickPassages, planCurl, shellSplit,
   type MsgLike,
 } from '../src/agentLogic';
 
@@ -351,5 +351,10 @@ t('globToRegExp', () => {
   assert.ok(globToRegExp('?.md').test('a.md') && !globToRegExp('?.md').test('ab.md'));
 });
 
+t('small talk: greetings only, answered without the model', () => {
+  for (const x of ['مرحبا', 'مرحباً!', 'اهلا', 'السلام عليكم', 'صباح الخير', 'ازيك؟', 'عامل ايه', 'hi', 'hello']) assert.ok(isSmallTalk(x), x);
+  for (const x of ['مرحبا بيك افتح الترمنال', 'هل يمكنك فتح تريمنال', 'ابحث عن سعر الذهب', 'مرحبا، اعمل فولدر']) assert.ok(!isSmallTalk(x), x);
+  assert.ok(smallTalkReply('مرحبا').includes('GVR'));
+});
 console.log(`\nagentLogic: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
