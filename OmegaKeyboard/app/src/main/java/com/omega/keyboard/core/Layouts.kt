@@ -152,7 +152,7 @@ object Layouts {
             Row(listOf(Key(KeyKind.SYMBOLS2, "=\\<", weight = 1.5f * s)) + r3k + Key(KeyKind.BACKSPACE, "⌫", weight = 1.5f * s)),
             bottomRow(lang, Key(KeyKind.LETTERS, if (ar) "أبج" else "ABC"), total),
         )
-        return Layout("sym1_$lang", lang, LayoutKind.SYMBOLS1, rows, ar)
+        return Layout("sym1_$lang", lang, LayoutKind.SYMBOLS1, rows, false)
     }
 
     fun symbols2(lang: String): Layout {
@@ -169,7 +169,7 @@ object Layouts {
             ),
             bottomRow(lang, Key(KeyKind.LETTERS, if (ar) "أبج" else "ABC"), 10f * s),
         )
-        return Layout("sym2_$lang", lang, LayoutKind.SYMBOLS2, rows, ar)
+        return Layout("sym2_$lang", lang, LayoutKind.SYMBOLS2, rows, false)
     }
 
     fun numeric(phone: Boolean): Layout {

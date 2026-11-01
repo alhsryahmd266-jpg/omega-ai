@@ -50,7 +50,7 @@ object LlmPrompts {
     }
 
     private val LABEL_PREFIX = Regex("^\\s*(?:me|reply|my reply|message|أنا|انا|الرد|رد)\\s*[:：]\\s*", RegexOption.IGNORE_CASE)
-    private val STOP_AT = Regex("(?m)^\\s*(?:them|me|أنا|انا|هو|هي)\\s*[:：]")
+    private val STOP_AT = Regex("(?m)^\\s*(?:them|me|أنا|انا|هو|هي)\\s*[:：]", RegexOption.IGNORE_CASE)
     private val QUOTES = charArrayOf('"', '“', '”', '«', '»', '\'', '‘', '’', '`')
 
     /** @return the message to send, or null when the model decided not to answer / produced nothing usable */

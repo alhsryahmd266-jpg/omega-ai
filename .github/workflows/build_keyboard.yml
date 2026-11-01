@@ -1,0 +1,117 @@
+name: Build Omega Keyboard
+
+on:
+  push:
+    branches: [omega-keyboard]
+    paths:
+      - 'OmegaKeyboard/**'
+      - '.github/workflows/build_keyboard.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub Release with the APK (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: omega-keyboard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: OmegaKeyboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK packages
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+
+      - name: Pick LiteRT-LM version
+        id: lite
+        run: |
+          META="$RUNNER_TEMP/litertlm-meta.xml"
+          curl -fsSL https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/maven-metadata.xml -o "$META" || true
+          echo "available versions:"
+          grep -o '<version>[^<]*</version>' "$META" 2>/dev/null | sed 's/<[^>]*>//g' | tr '\n' ' ' || true
+          echo
+          V=0.18.1
+          if ! grep -q "<version>$V</version>" "$META" 2>/dev/null; then
+            V=$(grep -o '<release>[^<]*</release>' "$META" 2>/dev/null | sed 's/<[^>]*>//g' | head -1)
+          fi
+          [ -n "$V" ] || V=0.18.1
+          echo "using litertlm-android $V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Core logic tests
+        run: gradle :app:testDebugUnitTest -PlitertlmVersion=${{ steps.lite.outputs.version }} --stacktrace --no-daemon
+
+      - name: Build release APK
+        run: >
+          gradle :app:assembleRelease
+          -PappVersionCode=${{ github.run_number }}
+          -PappVersionName=1.0.${{ github.run_number }}
+          -PlitertlmVersion=${{ steps.lite.outputs.version }}
+          --stacktrace --no-daemon
+
+      - name: Inspect APK
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          ls -la "$APK"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/aapt2" dump badging "$APK" | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable|uses-permission" | head -30
+          "$BT/apksigner" verify --print-certs "$APK" | head -4
+          echo "native libraries:"
+          unzip -l "$APK" | grep -E "\.so$" | awk '{print $4}' | head -40
+          cp "$APK" OmegaKeyboard.apk
+          sha256sum OmegaKeyboard.apk | tee OmegaKeyboard.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OmegaKeyboard-apk
+          path: |
+            OmegaKeyboard/OmegaKeyboard.apk
+            OmegaKeyboard/OmegaKeyboard.apk.sha256
+
+      - name: Keep reports when something failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            OmegaKeyboard/app/build/reports
+            OmegaKeyboard/app/build/test-results
+
+      - name: Publish release
+        if: github.event.inputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="omega-keyboard-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" OmegaKeyboard.apk OmegaKeyboard.apk.sha256 \
+            --title "Omega Keyboard 1.0.${{ github.run_number }}" \
+            --notes "Android keyboard with whole-screen translation, an autonomous reply mode driven by a local model file, and voice control. Install OmegaKeyboard.apk, then open the app and follow the setup steps." \
+            --target "${{ github.sha }}"
+          echo "release: https://github.com/${{ github.repository }}/releases/tag/$TAG"

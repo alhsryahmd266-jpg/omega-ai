@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Omega Keyboard</string>
+    <string name="ime_name">Omega Keyboard</string>
+    <string name="accessibility_label">Omega Keyboard - قراءة الشاشة</string>
+    <string name="accessibility_description">يسمح لكيبورد أوميغا بقراءة الشاشة عشان يترجمها، وبكتابة الردود وإرسالها في الوضع الذاتي لما تطلب إنت. كل ده بيتم على جهازك وبس.</string>
+    <string name="subtype_ar">العربية</string>
+    <string name="subtype_en">English</string>
+</resources>
