@@ -50,15 +50,14 @@ jobs:
         run: |
           META="$RUNNER_TEMP/litertlm-meta.xml"
           curl -fsSL https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/maven-metadata.xml -o "$META" || true
-          echo "available versions:"
-          grep -o '<version>[^<]*</version>' "$META" 2>/dev/null | sed 's/<[^>]*>//g' | tr '\n' ' ' || true
-          echo
+          ALL=$(grep -o '<version>[^<]*</version>' "$META" 2>/dev/null | sed 's/<[^>]*>//g' | tr '\n' ' ')
           V=0.18.1
           if ! grep -q "<version>$V</version>" "$META" 2>/dev/null; then
             V=$(grep -o '<release>[^<]*</release>' "$META" 2>/dev/null | sed 's/<[^>]*>//g' | head -1)
           fi
           [ -n "$V" ] || V=0.18.1
-          echo "using litertlm-android $V"
+          echo "using litertlm-android $V (available: $ALL)"
+          echo "::notice title=litertlm::using $V; available: $ALL"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - uses: gradle/actions/setup-gradle@v4
@@ -66,27 +65,35 @@ jobs:
           gradle-version: '8.14.3'
 
       - name: Core logic tests
-        run: gradle :app:testDebugUnitTest -PlitertlmVersion=${{ steps.lite.outputs.version }} --stacktrace --no-daemon
+        run: |
+          set -o pipefail
+          gradle :app:testDebugUnitTest -PlitertlmVersion=${{ steps.lite.outputs.version }} --stacktrace --no-daemon 2>&1 | tee "$RUNNER_TEMP/test.log"
 
       - name: Build release APK
-        run: >
-          gradle :app:assembleRelease
-          -PappVersionCode=${{ github.run_number }}
-          -PappVersionName=1.0.${{ github.run_number }}
-          -PlitertlmVersion=${{ steps.lite.outputs.version }}
-          --stacktrace --no-daemon
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease \
+            -PappVersionCode=${{ github.run_number }} \
+            -PappVersionName=1.0.${{ github.run_number }} \
+            -PlitertlmVersion=${{ steps.lite.outputs.version }} \
+            --stacktrace --no-daemon 2>&1 | tee "$RUNNER_TEMP/build.log"
 
       - name: Inspect APK
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
-          ls -la "$APK"
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BT/aapt2" dump badging "$APK" | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable|uses-permission" | head -30
-          "$BT/apksigner" verify --print-certs "$APK" | head -4
-          echo "native libraries:"
-          unzip -l "$APK" | grep -E "\.so$" | awk '{print $4}' | head -40
+          {
+            ls -la "$APK"
+            "$BT/aapt2" dump badging "$APK" | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable" | head -12
+            "$BT/apksigner" verify --print-certs "$APK" | head -3
+            echo "native libraries:"
+            unzip -l "$APK" | grep -E "\.so$" | awk '{print $4}' | head -40
+          } > "$RUNNER_TEMP/apk-info.txt" 2>&1
+          cat "$RUNNER_TEMP/apk-info.txt"
           cp "$APK" OmegaKeyboard.apk
           sha256sum OmegaKeyboard.apk | tee OmegaKeyboard.apk.sha256
+          MSG=$(cat "$RUNNER_TEMP/apk-info.txt" OmegaKeyboard.apk.sha256 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+          echo "::notice title=apk::$MSG"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -94,6 +101,17 @@ jobs:
           path: |
             OmegaKeyboard/OmegaKeyboard.apk
             OmegaKeyboard/OmegaKeyboard.apk.sha256
+
+      - name: Show why it failed
+        if: failure()
+        run: |
+          for f in "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/build.log"; do
+            [ -f "$f" ] || continue
+            ERR=$(grep -nE "^e: |error:|FAILED|What went wrong|Execution failed|Could not|Unresolved|AAPT|Manifest merger|Caused by|Test.*failed|AssertionError" "$f" | head -40)
+            TAIL=$(tail -n 40 "$f")
+            MSG=$(printf '%s\n--- tail ---\n%s' "$ERR" "$TAIL" | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' | cut -c1-60000)
+            echo "::error title=$(basename "$f")::$MSG"
+          done
 
       - name: Keep reports when something failed
         if: failure()
@@ -114,4 +132,4 @@ jobs:
             --title "Omega Keyboard 1.0.${{ github.run_number }}" \
             --notes "Android keyboard with whole-screen translation, an autonomous reply mode driven by a local model file, and voice control. Install OmegaKeyboard.apk, then open the app and follow the setup steps." \
             --target "${{ github.sha }}"
-          echo "release: https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          echo "::notice title=release::https://github.com/${{ github.repository }}/releases/tag/$TAG"
