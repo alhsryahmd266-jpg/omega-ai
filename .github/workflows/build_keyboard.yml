@@ -134,3 +134,30 @@ jobs:
             --notes "Android keyboard with whole-screen translation, an autonomous reply mode driven by a local model file, and voice control. Install OmegaKeyboard.apk, then open the app and follow the setup steps." \
             --target "${{ github.sha }}"
           echo "::notice title=release::https://github.com/${{ github.repository }}/releases/tag/$TAG"
+
+      # A copy of the newest APK on its own branch: raw.githubusercontent.com serves it as a plain download in any
+      # browser (a github.com link is grabbed by the GitHub app on phones and opens its release page instead).
+      - name: Publish direct-download copy
+        if: github.event.inputs.publish == 'true' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          SRC="$GITHUB_WORKSPACE/OmegaKeyboard"
+          D="$RUNNER_TEMP/apk-branch"
+          rm -rf "$D" && mkdir -p "$D"
+          cp "$SRC/OmegaKeyboard.apk" "$SRC/OmegaKeyboard.apk.sha256" "$D/"
+          printf 'Newest Omega Keyboard build: 1.0.%s (source commit %s)\n' "${{ github.run_number }}" "${{ github.sha }}" > "$D/README.txt"
+          cd "$D"
+          git init -q -b omega-keyboard-apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Omega Keyboard 1.0.${{ github.run_number }} (direct download copy)"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          if git -c http.extraheader="AUTHORIZATION: basic $AUTH" push -f "https://github.com/${{ github.repository }}.git" omega-keyboard-apk; then
+            echo "::notice title=direct-link::https://raw.githubusercontent.com/${{ github.repository }}/omega-keyboard-apk/OmegaKeyboard.apk"
+          else
+            echo "::warning title=direct-link::could not publish the direct-download branch"
+          fi
