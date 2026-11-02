@@ -37,9 +37,10 @@ class Prefs private constructor(ctx: Context) {
     var autoCap by B("auto_cap", true)
     var suggestions by B("suggestions", true)
     var doubleSpacePeriod by B("double_space", true)
+    var autoCorrect by B("auto_correct", true)
     var langs by S("langs", "ar,en")
     var lastLang by S("last_lang", "ar")
-    var toolbarOpen by B("toolbar_open", false)
+    var toolbarOpen by B("toolbar_open", true)
 
     // ---- translation
     var screenTarget by S("screen_target", "ar")

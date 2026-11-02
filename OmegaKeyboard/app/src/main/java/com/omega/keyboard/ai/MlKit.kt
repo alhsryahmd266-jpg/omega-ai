@@ -1,5 +1,6 @@
 package com.omega.keyboard.ai
 
+import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
@@ -29,12 +30,34 @@ object MlKit {
     fun detect(text: String): String? {
         val t = text.trim()
         if (t.length < 2) return null
-        val id = identifier ?: LanguageIdentification
-            .getClient(LanguageIdentificationOptions.Builder().setConfidenceThreshold(0.4f).build())
-            .also { identifier = it }
+        val id = identifierLocked()
         val code: String? = Tasks.await(id.identifyLanguage(t.take(400)), 10, TimeUnit.SECONDS)
         return if (code.isNullOrBlank() || code == "und") null else code
     }
+
+    /** Detects many texts at once (all requests are started first, so this is much faster than one by one). */
+    fun detectMany(texts: List<String>): List<String?> {
+        val id = identifierLocked()
+        val tasks: List<Task<String>?> = texts.map { t ->
+            val s = t.trim()
+            if (s.length < 2) null else id.identifyLanguage(s.take(300))
+        }
+        return tasks.map { t ->
+            try {
+                if (t == null) null else {
+                    val c: String? = Tasks.await(t, 12, TimeUnit.SECONDS)
+                    if (c.isNullOrBlank() || c == "und") null else c
+                }
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
+
+    @Synchronized
+    private fun identifierLocked(): LanguageIdentifier = identifier ?: LanguageIdentification
+        .getClient(LanguageIdentificationOptions.Builder().setConfidenceThreshold(0.4f).build())
+        .also { identifier = it }
 
     @Synchronized
     private fun client(src: String, dst: String): Translator = translators.getOrPut("$src>$dst") {

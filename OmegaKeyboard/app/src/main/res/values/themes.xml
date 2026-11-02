@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Screens draw their own colors at runtime (see ui/UiKit.kt); this only avoids a white flash on start. -->
-    <style name="Theme.Omega" parent="@android:style/Theme.Material.NoActionBar">
+    <!-- Screens draw their own colors at runtime (see ui/UiKit.kt); the theme gives dialogs and system bars the matching look. -->
+    <style name="Theme.Omega" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/omega_bg</item>
         <item name="android:statusBarColor">@color/omega_bg</item>
         <item name="android:navigationBarColor">@color/omega_bg</item>

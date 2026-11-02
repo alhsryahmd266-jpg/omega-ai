@@ -55,6 +55,9 @@ class Dictionary(private val lang: String) {
 
     fun contains(word: String): Boolean = byKey.containsKey(key(word)) || user.containsKey(word)
 
+    /** How common a word is in the built-in list (0 when unknown). */
+    fun frequency(word: String): Int = byKey[key(word)]?.let { scores[it] } ?: 0
+
     /** Completions for [prefix], most frequent first. */
     fun suggest(prefix: String, limit: Int = 3): List<String> {
         if (prefix.isEmpty()) return emptyList()

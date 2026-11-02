@@ -134,3 +134,23 @@ class LangPanel(ctx: Context) : ListPanel(ctx) {
         setPadding(context.dpi(16f), context.dpi(10f), context.dpi(16f), context.dpi(4f))
     }
 }
+
+/** Writing helpers that use the local model: fix, formal, casual, shorter. */
+class AiPanel(ctx: Context) : ListPanel(ctx) {
+    var onPick: ((String) -> Unit)? = null
+
+    fun show() {
+        setTitle("تحسين الكتابة بالذكاء المحلي")
+        list.removeAllViews()
+        list.addView(row("تصحيح الإملاء والنحو", "يصلّح الأخطاء من غير ما يغيّر المعنى") { onPick?.invoke("fix") })
+        list.addView(row("أسلوب رسمي", "مناسب للشغل والرسايل المهمة") { onPick?.invoke("formal") })
+        list.addView(row("أسلوب ودّي", "عفوي وقريب") { onPick?.invoke("casual") })
+        list.addView(row("اختصار", "نفس الفكرة بكلام أقل") { onPick?.invoke("short") })
+        list.addView(TextView(context).apply {
+            text = "بتشتغل على النص اللي إنت محدده، أو على الخانة كلها لو مفيش تحديد."
+            textSize = 12f
+            setTextColor(theme.textSub)
+            setPadding(context.dpi(16f), context.dpi(12f), context.dpi(16f), context.dpi(12f))
+        })
+    }
+}
