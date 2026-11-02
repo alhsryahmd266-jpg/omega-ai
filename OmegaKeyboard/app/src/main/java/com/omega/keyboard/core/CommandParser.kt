@@ -52,6 +52,19 @@ object CommandParser {
         return if (autopilotRunning) VoiceCommand.Instruction(raw) else VoiceCommand.Text(raw)
     }
 
+    private val ORDER_STARTS = listOf(
+        "قول", "قوله", "قولها", "قولو", "قولهم", "قولي", "قل", "ابعت", "ابعتله", "ابعتلها", "ابعتلهم", "ارسل", "ارسله", "ارسلها",
+        "اكتب", "اكتبله", "اكتبلها", "رد", "ردي", "ارد", "جاوب", "جاوبه", "خبره", "خبرها", "عرفه", "عرفها", "ابلغه", "بلغه", "اسأله", "اسالو", "اسألها",
+        "tell", "say", "reply", "send", "write", "answer", "ask", "let", "inform", "notify",
+    )
+    private val ORDER_SET = ORDER_STARTS.map { n(it) }.toSet()
+
+    /**
+     * "قوله إني جاي بعد ساعة" is a one-off order: send that message now. Anything else ("من دلوقتي رد بأسلوب رسمي")
+     * is a standing instruction that applies to every later reply.
+     */
+    fun isOrder(text: String): Boolean = n(text).substringBefore(' ') in ORDER_SET
+
     private fun cleanName(s: String): String =
         s.replace(Regex("^(?:ال)?(?:اسم|رقم|صاحبي|صديقي|الاستاذ|استاذ|دكتور|الدكتور|م/|ال)\\s+"), "")
             .replace(Regex("\\s+(?:دلوقتي|حالا|الان|من فضلك|لو سمحت|please|now)$"), "")

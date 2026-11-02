@@ -30,7 +30,10 @@ class ScreenAgentService : AccessibilityService() {
         when (e.eventType) {
             AccessibilityEvent.TYPE_VIEW_SCROLLED,
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> ScreenTranslateController.onScreenEvent(e.eventType)
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                ScreenTranslateController.onScreenEvent(e.eventType)
+                AutoPilot.onScreenEvent(e.eventType)
+            }
         }
     }
 

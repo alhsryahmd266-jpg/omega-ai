@@ -122,13 +122,11 @@ object ScreenTranslateController {
         try {
             val prefs = Prefs.get(ctx)
             val target = prefs.screenTarget
-            if (ScreenReader.keyboardVisible(svc)) {
-                OmegaImeService.instance?.hideKeyboard()
-                ScreenReader.waitKeyboardGone(svc, 2500)
-                Thread.sleep(250)
-            }
-            if (force) setStatus("بقرا الشاشة...")
+            // the whole app must be on screen: hide the keyboard (any keyboard) and let the app take its room back
+            if (!Keyboards.ensureHidden(svc)) setStatus("الكيبورد مش راضي يختفي، هقرا اللي ظاهر", warn = true)
+            else if (force) setStatus("بقرا الشاشة...")
             val snap = ScreenReader.read(svc)
+            Keyboards.release(svc)
             if (snap == null) { setStatus("مش قادر أقرا الشاشة دي", warn = true); return }
             val items = ScreenFilter.translatable(snap.screen, target)
             snap.release()

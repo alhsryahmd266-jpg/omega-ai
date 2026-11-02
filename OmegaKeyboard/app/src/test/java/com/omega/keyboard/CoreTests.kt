@@ -18,7 +18,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        commands(); matching(); prompts(); screenFilter()
+        commands(); matching(); prompts(); screenFilter(); scrolling()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -36,11 +36,13 @@ object CoreTests {
             text: String = "", l: Int, t: Int, r: Int, b: Int, desc: String = "", id: String = "",
             cls: String = "android.widget.TextView", editable: Boolean = false, clickable: Boolean = false,
             hint: Boolean = false, depth: Int = 2, p: String = pkg, childCount: Int = 0,
+            scrollDown: Boolean = false, scrollUp: Boolean = false, visible: Boolean = true,
         ): Int {
             val i = nodes.size
             nodes.add(
                 UiNode(i, -1, depth, text, desc, id, cls, p, l, t, r, b, editable = editable, clickable = clickable,
-                    actionable = clickable, showingHint = hint, childCount = childCount)
+                    actionable = clickable, showingHint = hint, childCount = childCount,
+                    scrollDown = scrollDown, scrollUp = scrollUp, visible = visible)
             )
             return i
         }
@@ -163,6 +165,20 @@ object CoreTests {
         val mirrored = ChatParser.parse(plain, Align.LEFT)
         check("alignment flip swaps sides", mirrored.messages.map { it.side } == listOf(Side.ME, Side.THEM, Side.ME)) { "${mirrored.messages.map { it.side }}" }
         check("ticks override alignment", ChatParser.parse(s, Align.LEFT).messages[1].side == Side.ME)
+        // delivery ticks also TEACH the parser which edge is mine (apps in right-to-left layouts mirror the bubbles)
+        val taught = ChatParser.parse(s, Align.LEFT)
+        check("ticks teach the edge", taught.learnedAlign == Align.RIGHT) { "${taught.learnedAlign}" }
+        check("ticks win over a wrong saved alignment", taught.messages.map { it.side } == listOf(Side.THEM, Side.ME, Side.THEM)) { "${taught.messages.map { it.side }}" }
+        val mir = B(rtl = true)
+        mir.add("Hello there", 640, 430, 1010, 500)                 // theirs: right edge
+        mir.add("Hi, how can I help?", 60, 600, 520, 670)           // mine: left edge, with ticks
+        mir.add("", 70, 675, 115, 710, desc = "Read", id = "com.whatsapp:id/status")
+        mir.add("Need a price please", 600, 760, 1010, 830)         // theirs again (last)
+        mir.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/entry")
+        val m = ChatParser.parse(mir.screen())                       // default alignment says RIGHT, the ticks say LEFT
+        check("mirrored chat learned from ticks", m.learnedAlign == Align.LEFT && m.messages.map { it.side } == listOf(Side.THEM, Side.ME, Side.THEM)) { "${m.learnedAlign} ${m.messages.map { it.side }}" }
+        check("no ticks: nothing learned", ChatParser.parse(plain).learnedAlign == null)
+        check("mirrored chat: last message is theirs, so we reply", ReplyPolicy.decide(m, null, force = false).reply)
 
         // search box at the top must not be taken as the composer
         val c = B(pkg = "x.y"); c.add("search", 100, 150, 900, 250, cls = "android.widget.EditText", editable = true)
@@ -316,6 +332,67 @@ object CoreTests {
         check("directive is requested", LlmPrompts.replyUser(msgs, "say I will be late").contains("say I will be late"))
         check("translate prompt format", LlmPrompts.translateUser(listOf(1 to "a\nb", 2 to "c")) == "1|a b\n2|c")
         check("clean translation unquotes", LlmPrompts.cleanTranslation("\"Hello\"") == "Hello")
+    }
+
+    /** A conversation that opened above its newest messages, and the rules for getting down to them. */
+    private fun scrolling() {
+        fun chat(down: Boolean, up: Boolean = true, listBottom: Int = 2050): Screen {
+            val b = B()
+            b.add("أحمد", 150, 90, 600, 150, id = "com.whatsapp:id/conversation_contact_name")
+            b.add("", 0, 200, 1080, listBottom, id = "android:id/list", cls = "android.widget.ListView", scrollDown = down, scrollUp = up, depth = 1)
+            b.add("Hi", 60, 430, 520, 500)
+            b.add("Message", 100, 2150, 900, 2300, id = "com.whatsapp:id/entry", cls = "android.widget.EditText", editable = true, hint = true)
+            return b.screen()
+        }
+        val open = chat(down = true)
+        val list = ScrollLogic.listWithMoreBelow(open)
+        check("finds the list that has more below", list != null && list.shortId == "list") { "$list" }
+        check("at the end: nothing to scroll", ScrollLogic.listWithMoreBelow(chat(down = false)) == null)
+
+        val tiny = B()
+        tiny.add("", 100, 2150, 900, 2300, cls = "android.widget.EditText", editable = true, scrollDown = true)   // multi-line box
+        check("a text box that scrolls is not the conversation", ScrollLogic.listWithMoreBelow(tiny.screen()) == null)
+        val narrow = B()
+        narrow.add("", 0, 200, 300, 2000, scrollDown = true)
+        check("a narrow strip is not the conversation", ScrollLogic.listWithMoreBelow(narrow.screen()) == null)
+        val short = B()
+        short.add("", 0, 200, 1080, 600, scrollDown = true)
+        check("a short strip (chips, carousel) is not the conversation", ScrollLogic.listWithMoreBelow(short.screen()) == null)
+        val hidden = B()
+        hidden.add("", 0, 200, 1080, 2000, scrollDown = true, visible = false)
+        check("an invisible list is ignored", ScrollLogic.listWithMoreBelow(hidden.screen()) == null)
+        val two = B()
+        two.add("", 0, 200, 1080, 1000, id = "small", scrollDown = true)
+        two.add("", 0, 200, 1080, 2000, id = "big", scrollDown = true)
+        check("the biggest list wins", ScrollLogic.listWithMoreBelow(two.screen())?.shortId == "big")
+
+        val p = ScrollLogic.swipeUpPath(list!!)
+        check("swipe goes upwards inside the list", p[0] == list.centerX && p[1] > p[2] && p[2] > list.top && p[1] < list.bottom) { p.joinToString() }
+
+        val sigA = ScrollLogic.signature(open, list)
+        check("signature is stable", sigA == ScrollLogic.signature(chat(down = true), list))
+        val moved = B()
+        moved.add("", 0, 200, 1080, 2050, id = "android:id/list", scrollDown = true)
+        moved.add("Hi", 60, 330, 520, 400)                                          // same text, other place
+        check("signature notices a scroll", ScrollLogic.signature(moved.screen(), list) != sigA)
+
+        // an order works in a brand-new, empty chat; without one there is nothing to answer
+        val empty = B()
+        empty.add("Message", 100, 2150, 900, 2300, id = "com.whatsapp:id/entry", cls = "android.widget.EditText", editable = true, hint = true)
+        val parsed = ChatParser.parse(empty.screen(), Align.RIGHT)
+        check("order in an empty chat is carried out", ReplyPolicy.decide(parsed, null, true).reply)
+        check("no order, no messages: nothing to do", !ReplyPolicy.decide(parsed, null, false).reply)
+        check("order needs a composer", !ReplyPolicy.decide(ChatParser.parse(B().screen(), Align.RIGHT), null, true).reply)
+
+        // spoken orders
+        check("'قول له' is an order", CommandParser.isOrder("قول له إني جاي بعد ساعة"))
+        check("'قوله' is an order", CommandParser.isOrder("قوله اني جاي"))
+        check("'tell him' is an order", CommandParser.isOrder("tell him I'm coming"))
+        check("'ابعتله' is an order", CommandParser.isOrder("ابعتله مرحبا"))
+        check("a style rule is not an order", !CommandParser.isOrder("من دلوقتي كلمه بأسلوب رسمي"))
+        check("while chatting, 'قول له' is an instruction",
+            CommandParser.parse("قول له إني جاي بعد ساعة", true) is VoiceCommand.Instruction)
+        check("the order text reaches the model", LlmPrompts.replyUser(emptyList(), "قول له إني جاي بعد ساعة").contains("قول له إني جاي بعد ساعة"))
     }
 
     private fun screenFilter() {

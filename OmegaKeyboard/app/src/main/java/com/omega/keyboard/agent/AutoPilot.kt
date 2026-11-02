@@ -1,8 +1,8 @@
 package com.omega.keyboard.agent
 
-import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.os.Build
+import android.view.accessibility.AccessibilityEvent
 import com.omega.keyboard.AppLog
 import com.omega.keyboard.Bg
 import com.omega.keyboard.Prefs
@@ -12,10 +12,14 @@ import com.omega.keyboard.core.ArabicText
 import com.omega.keyboard.core.ChatMessage
 import com.omega.keyboard.core.ChatParseResult
 import com.omega.keyboard.core.ChatParser
+import com.omega.keyboard.core.CommandParser
 import com.omega.keyboard.core.LlmPrompts
 import com.omega.keyboard.core.ReplyPolicy
+import com.omega.keyboard.core.ScrollLogic
 import com.omega.keyboard.core.SendFinder
+import com.omega.keyboard.core.Screen
 import com.omega.keyboard.core.Side
+import com.omega.keyboard.core.UiNode
 import com.omega.keyboard.ime.OmegaImeService
 import com.omega.keyboard.voice.VoiceSession
 import java.util.concurrent.CopyOnWriteArrayList
@@ -37,8 +41,12 @@ object AutoPilot {
 
     private val lock = Any()
     private val instructions = ArrayList<String>()
-    @Volatile private var directive: String? = null
+    /** one-off orders ("قوله إني جاي بعد ساعة"), oldest first; an order leaves the queue only once it was carried out */
+    private val pending = ArrayList<String>()
     @Volatile private var stopFlag = false
+    @Volatile private var listening = false
+    @Volatile private var userScrollAt = 0L
+    @Volatile private var lastEventWake = 0L
     private val wake = Semaphore(0)
     private var worker: Thread? = null
     private val listeners = CopyOnWriteArrayList<(Boolean, String, Boolean) -> Unit>()
@@ -46,16 +54,31 @@ object AutoPilot {
     fun addListener(l: (running: Boolean, status: String, warn: Boolean) -> Unit) { listeners.add(l) }
     fun removeListener(l: (Boolean, String, Boolean) -> Unit) { listeners.remove(l) }
 
-    private fun publish(text: String, warn: Boolean = false) {
+    private fun publish(text: String, warn: Boolean = false, voice: Boolean = false) {
         status = text
         val r = running
         val svc = ScreenAgentService.instance
-        if (svc != null && r) Overlays.withBar(svc, true) { it.setStatus(text, warn) }
+        // while the user is talking, the bar shows what is being heard instead of the loop's own chatter
+        if (svc != null && r && (voice || warn || !listening)) Overlays.withBar(svc, true) { it.setStatus(text, warn) }
         for (l in listeners) try { l(r, text, warn) } catch (_: Throwable) {}
     }
 
     /** Lets the voice layer show what it heard / understood on the control bar. */
-    fun note(text: String, warn: Boolean = false) { if (running) publish(text, warn) }
+    fun note(text: String, warn: Boolean = false) { if (running) publish(text, warn, voice = true) }
+
+    private fun barActions(listening: Boolean) = listOf(
+        if (listening) ControlBar.Action("mic", "mic", "خلّصت", 0xFF188038.toInt())
+        else ControlBar.Action("mic", "mic", "تكلّم", 0xFF1A73E8.toInt()),
+        ControlBar.Action("stop", "stop", "إيقاف", 0xFFD93025.toInt()),
+    )
+
+    /** The microphone button shows whether the phone is listening right now. */
+    fun setListening(on: Boolean) {
+        if (listening == on) return
+        listening = on
+        val svc = ScreenAgentService.instance
+        if (svc != null && running) Overlays.withBar(svc, true) { it.setActions(barActions(on)) }
+    }
 
     // ------------------------------------------------------------------ start / stop
 
@@ -69,23 +92,20 @@ object AutoPilot {
 
         synchronized(lock) {
             instructions.clear()
-            directive = null
+            pending.clear()
         }
         stopFlag = false
+        listening = false
+        userScrollAt = 0L
         running = true
         repliesSent = 0
         status = "بجهّز..."
         if (!firstInstruction.isNullOrBlank()) addInstruction(firstInstruction)
 
         Overlays.withBar(svc, keepScreenOn = true) { bar ->
-            bar.setTitle("الوضع الذاتي شغال")
+            bar.setTitle("الوضع الذاتي شغال — دوس «تكلّم» وادّيله أوامر")
             bar.setStatus("بجهّز...")
-            bar.setActions(
-                listOf(
-                    ControlBar.Action("mic", "mic"),
-                    ControlBar.Action("stop", "stop", "إيقاف", 0xFFD93025.toInt()),
-                )
-            )
+            bar.setActions(barActions(false))
             bar.onAction = { id ->
                 when (id) {
                     "stop" -> stop("وقفته من الزرار")
@@ -95,7 +115,7 @@ object AutoPilot {
         }
         // keep our keyboard (and every other one) out of the way for the whole run
         OmegaImeService.instance?.hideKeyboard()
-        try { svc.softKeyboardController.setShowMode(AccessibilityService.SHOW_MODE_HIDDEN) } catch (_: Throwable) {}
+        Keyboards.setMode(svc, true)
         for (l in listeners) try { l(true, status, false) } catch (_: Throwable) {}
 
         val t = Thread({ loop(app) }, "omega-autopilot")
@@ -108,11 +128,12 @@ object AutoPilot {
         if (!running) return
         running = false
         stopFlag = true
+        listening = false
         wake.release()
         Llm.cancel()
         Bg.ui { VoiceSession.cancel() }
         val svc = ScreenAgentService.instance
-        try { svc?.softKeyboardController?.setShowMode(AccessibilityService.SHOW_MODE_AUTO) } catch (_: Throwable) {}
+        if (svc != null) Keyboards.setMode(svc, false)
         Overlays.hideBar()
         status = reason
         AppLog.d("autopilot", "stopped: $reason (replies: $repliesSent)")
@@ -122,35 +143,48 @@ object AutoPilot {
 
     // ------------------------------------------------------------------ instructions from the user (voice)
 
-    private val DIRECTIVE_STARTS = listOf(
-        "قول", "قوله", "قولها", "قولو", "قولهم", "ابعت", "ابعتله", "ابعتلها", "اكتب", "اكتبله", "اكتبلها", "رد", "ردي", "ارد", "جاوب",
-        "tell", "say", "reply", "send", "write", "answer"
-    )
-
     /** "قوله إني جاي بعد ساعة" -> one message right now. "من دلوقتي رد بأسلوب رسمي" -> keeps applying to every reply. */
     fun addInstruction(text: String) {
         val t = text.trim()
         if (t.isEmpty()) return
-        val first = ArabicText.normalize(t).substringBefore(' ').lowercase()
-        val oneOff = DIRECTIVE_STARTS.any { ArabicText.normalize(it) == first }
-        if (oneOff) {
-            directive = t
-            publish("تمام، هبعت: $t")
+        if (CommandParser.isOrder(t)) {
+            synchronized(lock) { pending.add(t) }
+            publish("تمام، هبعت: $t", voice = true)
         } else {
             synchronized(lock) { instructions.add(t) }
-            publish("حفظت التعليمات: $t")
+            publish("حفظت التعليمات: $t", voice = true)
         }
         wake.release()
     }
 
     fun clearInstructions() {
-        synchronized(lock) { instructions.clear() }
-        directive = null
-        publish("مسحت كل التعليمات")
+        synchronized(lock) {
+            instructions.clear()
+            pending.clear()
+        }
+        publish("مسحت كل التعليمات", voice = true)
     }
 
-    fun onScreenEvent() {
-        if (running && wake.availablePermits() < 1) wake.release()
+    /**
+     * Fed by the accessibility service with every content / scroll event of other apps: new content wakes the loop
+     * (at most every 1.5 s, chat apps emit events all the time); a scroll we did not cause means the user is scrolling.
+     */
+    fun onScreenEvent(type: Int) {
+        if (!running) return
+        val now = System.currentTimeMillis()
+        if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            if (now > ChatScroll.ownScrollUntil) userScrollAt = now
+            return
+        }
+        if (now - lastEventWake >= 1500 && wake.availablePermits() < 1) {
+            lastEventWake = now
+            wake.release()
+        }
+    }
+
+    private fun consume(order: String?) {
+        if (order == null) return
+        synchronized(lock) { if (pending.firstOrNull() == order) pending.removeAt(0) }
     }
 
     // ------------------------------------------------------------------ the loop
@@ -185,7 +219,46 @@ object AutoPilot {
                 ChatMessage(m.text, Side.ME, m.top, m.bottom, m.nodeId)
             else m
         }
-        return ChatParseResult(fixed, res.input)
+        return ChatParseResult(fixed, res.input, res.learnedAlign)
+    }
+
+    private val KNOWN_CHAT = listOf(
+        "com.whatsapp", "com.gbwhatsapp", "com.yowhatsapp", "com.fmwhatsapp", "org.telegram", "org.thunderdog.challegram",
+        "com.facebook.orca", "com.facebook.mlite", "com.instagram.android", "com.viber.voip", "org.thoughtcrime.securesms",
+        "jp.naver.line", "com.snapchat.android", "com.google.android.apps.messaging", "com.samsung.android.messaging",
+        "com.android.mms", "com.discord", "com.Slack", "com.microsoft.teams", "com.imo.android", "com.tencent.mm", "com.skype",
+        "com.kakao.talk", "app.threema", "im.vector", "com.vk.im", "com.bbm", "com.truecaller", "com.twitter.android", "com.linkedin.android",
+    )
+    private val MESSAGE_HINTS = listOf(
+        "message", "رسالة", "رسائل", "اكتب", "chat", "type a", "mensaje", "nachricht", "mesaj", "сообщение", "message", "メッセージ", "消息", "메시지",
+    )
+
+    fun isKnownChat(pkg: String): Boolean = KNOWN_CHAT.any { pkg == it || pkg.startsWith("$it.") }
+
+    /** The autonomous mode only types into something that looks like a conversation (never a bank app's text field). */
+    private fun chatLike(screen: Screen, input: UiNode?): Boolean {
+        if (input == null) return false
+        if (isKnownChat(screen.pkg)) return true
+        val hint = (input.text + " " + input.desc).lowercase()
+        if (MESSAGE_HINTS.any { hint.contains(it) }) return true
+        return SendFinder.candidates(screen, input).any { it.score >= 80 }
+    }
+
+    private fun alignFor(prefs: Prefs, pkg: String): Align = when (prefs.apSide) {
+        "left" -> Align.LEFT
+        "right" -> Align.RIGHT
+        else -> prefs.align(pkg)
+    }
+
+    /** Parses the chat; when delivery ticks prove which edge is "mine" in this app, that is remembered. */
+    private fun parseChat(screen: Screen, prefs: Prefs, sent: List<String>): ChatParseResult {
+        val res = fixSides(ChatParser.parse(screen, alignFor(prefs, screen.pkg)), sent)
+        val learned = res.learnedAlign
+        if (learned != null && prefs.apSide == "auto" && learned != prefs.align(screen.pkg)) {
+            prefs.setAlign(screen.pkg, learned)
+            AppLog.d("autopilot", "my bubbles are on the ${learned.name} in ${screen.pkg} (from delivery ticks)")
+        }
+        return res
     }
 
     private fun describe(reason: String, ctx: Context, pkg: String): String = when (reason) {
@@ -195,6 +268,8 @@ object AutoPilot {
         "already_handled" -> "مستني رسالة جديدة..."
         else -> "براقب المحادثة..."
     }
+
+    private const val USER_SCROLL_GRACE_MS = 6000L
 
     private fun loop(ctx: Context) {
         val prefs = Prefs.get(ctx)
@@ -219,35 +294,65 @@ object AutoPilot {
                 if (nap(600)) break
 
                 val svc = ScreenAgentService.instance ?: break
+                // nothing may cover the conversation while we read it
+                if (ScreenReader.keyboardVisible(svc)) Keyboards.ensureHidden(svc)
+                if (stopFlag) break
+
                 val snap = ScreenReader.read(svc) ?: continue
                 val pkg = snap.screen.pkg
                 if (pkg.isBlank() || pkg == ctx.packageName) { snap.release(); continue }
                 val sent = sentTexts[pkg] ?: ArrayList()
-                val parsed = fixSides(ChatParser.parse(snap.screen, prefs.align(pkg)), sent)
+                var parsed = parseChat(snap.screen, prefs, sent)
+                val looksLikeChat = chatLike(snap.screen, parsed.input)
+                val moreBelow = looksLikeChat && ScrollLogic.listWithMoreBelow(snap.screen) != null
                 snap.release()
 
-                val dir = directive
+                if (!looksLikeChat) {
+                    publish("ده مش شكله تطبيق محادثة. افتح المحادثة وأنا هرد (${appLabel(ctx, pkg)})")
+                    continue
+                }
+
+                // the newest messages may sit below the part that is on screen: go down to them before reading
+                if (moreBelow && ChatScroll.canTry()) {
+                    if (System.currentTimeMillis() - userScrollAt < USER_SCROLL_GRACE_MS) {
+                        publish("مستنيك تخلّص سكرول وبعدين هنزل لآخر الرسائل...")
+                        continue
+                    }
+                    publish("بنزّل لآخر الرسائل...")
+                    ChatScroll.toLatest(svc) { stopFlag }
+                    if (stopFlag) break
+                    val s2 = ScreenReader.read(svc) ?: continue
+                    parsed = parseChat(s2.screen, prefs, sent)
+                    s2.release()
+                }
+
+                val dir = synchronized(lock) { pending.firstOrNull() }
                 val decision = ReplyPolicy.decide(parsed, handled[pkg], force = dir != null, unknownAsThem = true)
                 if (!decision.reply) {
                     publish(describe(decision.reason, ctx, pkg))
+                    continue
+                }
+                // the user is typing a message themselves: never overwrite it (the hint text is only reliable from Android 8)
+                val field = parsed.input
+                if (dir == null && Build.VERSION.SDK_INT >= 26 && field != null && !field.showingHint && field.text.isNotBlank()) {
+                    publish("فيه نص مكتوب في الخانة، مستني تبعته أو تمسحه...")
                     continue
                 }
                 val retry = retryAt[pkg]
                 if (dir == null && retry != null && System.currentTimeMillis() < retry) continue
 
                 // a person takes a moment to read and to type
-                publish("فيه رسالة جديدة، بكتب الرد...")
+                publish(if (dir != null) "بكتب اللي قلته..." else "فيه رسالة جديدة، بكتب الرد...")
                 if (dir == null) {
                     val lo = prefs.apDelayMinSec.coerceAtLeast(0)
                     val hi = maxOf(prefs.apDelayMaxSec, lo)
                     if (nap((lo * 1000L) + Random.nextLong((hi - lo) * 1000L + 1))) break
                     // maybe they wrote more in the meantime: decide again on the fresh screen
                     val s2 = ScreenReader.read(svc) ?: continue
-                    val p2 = fixSides(ChatParser.parse(s2.screen, prefs.align(pkg)), sent)
+                    val p2 = parseChat(s2.screen, prefs, sent)
                     s2.release()
                     if (ReplyPolicy.key(p2.messages) != decision.key) continue
                 }
-                if (dir != null) directive = null
 
                 val system = LlmPrompts.replySystem(prefs.apPersona, synchronized(lock) { instructions.toList() })
                 val user = LlmPrompts.replyUser(parsed.messages, dir)
@@ -255,7 +360,6 @@ object AutoPilot {
                     Llm.generate(ctx, system, user, maxTokens = 180, temperature = 0.8f, topK = 40, topP = 0.95f, timeoutMs = 150_000)
                 } catch (e: Exception) {
                     if (stopFlag) break
-                    if (dir != null && directive == null) directive = dir   // the user's order must not get lost
                     failures++
                     retryAt[pkg] = System.currentTimeMillis() + 15_000
                     publish("النموذج فشل: ${e.message}", warn = true)
@@ -267,14 +371,19 @@ object AutoPilot {
                 val reply = LlmPrompts.cleanReply(raw)
                 if (reply == null) {
                     handled[pkg] = decision.key
-                    publish("مفيش داعي أرد على الرسالة دي")
+                    if (dir != null) {
+                        consume(dir)
+                        publish("النموذج ماكتبش رد للأمر ده، جرّب تقوله بشكل تاني", warn = true)
+                    } else {
+                        publish("مفيش داعي أرد على الرسالة دي")
+                    }
                     continue
                 }
 
                 // last look before sending: a newer message means this reply is already out of date
                 val s3 = ScreenReader.read(svc)
                 if (s3 != null) {
-                    val p3 = fixSides(ChatParser.parse(s3.screen, prefs.align(pkg)), sent)
+                    val p3 = parseChat(s3.screen, prefs, sent)
                     s3.release()
                     if (dir == null && ReplyPolicy.key(p3.messages) != decision.key) {
                         publish("وصلت رسالة أحدث، هرد عليها بدل القديمة")
@@ -285,15 +394,17 @@ object AutoPilot {
                 if (!prefs.apAutoSend) {
                     val ok = SendAction.typeOnly(svc, reply)
                     handled[pkg] = decision.key
+                    if (ok) consume(dir)
                     publish(if (ok) "كتبت الرد. ابعته إنت: $reply" else "مقدرتش أكتب الرد", warn = !ok)
                     continue
                 }
 
-                val res = SendAction.sendText(svc, reply)
+                val res = SendAction.sendText(svc, reply, allowBlind = isKnownChat(pkg))
                 if (res.ok) {
                     failures = 0
                     repliesSent++
                     handled[pkg] = decision.key
+                    consume(dir)
                     sent.add(reply)
                     while (sent.size > 12) sent.removeAt(0)
                     sentTexts[pkg] = sent
@@ -338,7 +449,7 @@ object AutoPilot {
             if (n != null) {
                 val left = n.left
                 val right = s.screen.width - n.right
-                if (kotlin.math.abs(left - right) > s.screen.width * 0.08) {
+                if (prefs.apSide == "auto" && kotlin.math.abs(left - right) > s.screen.width * 0.08) {
                     prefs.setAlign(pkg, if (left < right) Align.LEFT else Align.RIGHT)
                 }
             }

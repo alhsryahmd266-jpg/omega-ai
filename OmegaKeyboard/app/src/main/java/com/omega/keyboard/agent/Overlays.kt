@@ -99,7 +99,12 @@ class TranslationLayer(ctx: Context) : View(ctx) {
     }
 }
 
-/** The small floating control strip (stop / refresh / close / microphone + a status line). Draggable. */
+/**
+ * The small floating control strip. Two looks:
+ *  - icon buttons next to the text (screen translation: language / refresh / close)
+ *  - big labelled buttons under the text (autonomous mode: speak / stop)
+ * Draggable by its text.
+ */
 class ControlBar(ctx: Context) : LinearLayout(ctx) {
     class Action(val id: String, val icon: String, val label: String = "", val color: Int = 0x33FFFFFF)
 
@@ -109,33 +114,44 @@ class ControlBar(ctx: Context) : LinearLayout(ctx) {
     private val d = resources.displayMetrics.density
     private val titleView = TextView(ctx)
     private val statusView = TextView(ctx)
-    private val buttons = LinearLayout(ctx)
+    private val texts = LinearLayout(ctx)
+    private val inline = LinearLayout(ctx)   // round icon buttons beside the text
+    private val row = LinearLayout(ctx)      // labelled buttons under the text
+    private val textsLp = LayoutParams((190 * d).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+    private val labeledTextWidth = min((330 * d).toInt(), resources.displayMetrics.widthPixels - (32 * d).toInt()) - (24 * d).toInt()
 
     init {
-        orientation = HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        orientation = VERTICAL
         background = GradientDrawable().apply {
             setColor(0xF2202124.toInt())
             cornerRadius = 26 * d
             setStroke((1 * d).toInt().coerceAtLeast(1), 0x40FFFFFF)
         }
         elevation = 8 * d
-        setPadding((14 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
+        setPadding((14 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
 
-        val texts = LinearLayout(ctx).apply { orientation = VERTICAL }
+        texts.orientation = VERTICAL
         titleView.apply {
             setTextColor(0xFF8AB4F8.toInt()); textSize = 11f; typeface = Typeface.DEFAULT_BOLD; maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
         statusView.apply {
-            setTextColor(Color.WHITE); textSize = 13f; maxLines = 2
+            setTextColor(Color.WHITE); textSize = 13f; maxLines = 3
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
         texts.addView(titleView)
         texts.addView(statusView)
-        val tl = LayoutParams((190 * d).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
-        addView(texts, tl)
-        buttons.orientation = HORIZONTAL
-        addView(buttons, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        val top = LinearLayout(ctx).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        top.addView(texts, textsLp)
+        inline.orientation = HORIZONTAL
+        top.addView(inline, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(top, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        row.orientation = HORIZONTAL
+        row.gravity = Gravity.CENTER
+        row.visibility = View.GONE
+        addView(row, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = (8 * d).toInt() })
 
         // dragging by the text area
         var lx = 0f
@@ -160,36 +176,50 @@ class ControlBar(ctx: Context) : LinearLayout(ctx) {
         statusView.setTextColor(if (warn) 0xFFFFD54F.toInt() else Color.WHITE)
     }
 
-    fun setActions(list: List<Action>) {
-        buttons.removeAllViews()
-        for (a in list) {
-            val btn: View = if (a.label.isEmpty()) {
-                ImageView(context).apply {
-                    setImageDrawable(Icons.get(context, a.icon)?.also { it.setTint(Color.WHITE) })
-                    scaleType = ImageView.ScaleType.CENTER_INSIDE
-                    setPadding((9 * d).toInt(), (9 * d).toInt(), (9 * d).toInt(), (9 * d).toInt())
-                    background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(a.color) }
-                    layoutParams = LayoutParams((38 * d).toInt(), (38 * d).toInt()).also { it.leftMargin = (6 * d).toInt() }
-                }
-            } else {
-                LinearLayout(context).apply {
-                    orientation = HORIZONTAL
-                    gravity = Gravity.CENTER
-                    setPadding((12 * d).toInt(), 0, (14 * d).toInt(), 0)
-                    background = GradientDrawable().apply { setColor(a.color); cornerRadius = 19 * d }
-                    addView(ImageView(context).apply {
-                        setImageDrawable(Icons.get(context, a.icon)?.also { it.setTint(Color.WHITE) })
-                    }, LayoutParams((20 * d).toInt(), (20 * d).toInt()))
-                    addView(TextView(context).apply {
-                        text = a.label; setTextColor(Color.WHITE); textSize = 13f; typeface = Typeface.DEFAULT_BOLD
-                        setPadding((6 * d).toInt(), 0, 0, 0)
-                    })
-                    layoutParams = LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, (38 * d).toInt()).also { it.leftMargin = (6 * d).toInt() }
-                }
+    private fun tinted(a: Action) = Icons.get(context, a.icon)?.also { it.setTint(Color.WHITE) }
+
+    private fun roundButton(a: Action): View = ImageView(context).apply {
+        setImageDrawable(tinted(a))
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        setPadding((9 * d).toInt(), (9 * d).toInt(), (9 * d).toInt(), (9 * d).toInt())
+        background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(a.color) }
+        layoutParams = LayoutParams((38 * d).toInt(), (38 * d).toInt()).also { it.leftMargin = (6 * d).toInt() }
+    }
+
+    private fun pillButton(a: Action): View = LinearLayout(context).apply {
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER
+        background = GradientDrawable().apply { setColor(a.color); cornerRadius = 22 * d }
+        addView(ImageView(context).apply { setImageDrawable(tinted(a)) }, LayoutParams((22 * d).toInt(), (22 * d).toInt()))
+        addView(TextView(context).apply {
+            text = a.label; setTextColor(Color.WHITE); textSize = 14f; typeface = Typeface.DEFAULT_BOLD
+            setPadding((8 * d).toInt(), 0, 0, 0)
+        })
+        layoutParams = LayoutParams(0, (44 * d).toInt(), if (a.id == "mic") 1.35f else 1f).also {
+            it.leftMargin = (4 * d).toInt(); it.rightMargin = (4 * d).toInt()
+        }
+        setOnTouchListener { v, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> v.alpha = 0.7f
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.alpha = 1f
             }
+            false
+        }
+    }
+
+    fun setActions(list: List<Action>) {
+        inline.removeAllViews()
+        row.removeAllViews()
+        val labeled = list.any { it.label.isNotEmpty() }
+        row.visibility = if (labeled) View.VISIBLE else View.GONE
+        textsLp.width = if (labeled) labeledTextWidth else (190 * d).toInt()
+        texts.layoutParams = textsLp
+        for (a in list) {
+            val btn = if (a.label.isEmpty()) roundButton(a) else pillButton(a)
             btn.isClickable = true
+            btn.contentDescription = a.label.ifEmpty { a.id }
             btn.setOnClickListener { onAction?.invoke(a.id) }
-            buttons.addView(btn)
+            if (a.label.isEmpty()) inline.addView(btn) else row.addView(btn)
         }
     }
 }

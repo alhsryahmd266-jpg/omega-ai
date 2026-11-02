@@ -123,7 +123,8 @@ jobs:
             OmegaKeyboard/app/build/test-results
 
       - name: Publish release
-        if: github.event.inputs.publish == 'true'
+        # a manual run with publish=true, or a push whose head commit message contains [release]
+        if: github.event.inputs.publish == 'true' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

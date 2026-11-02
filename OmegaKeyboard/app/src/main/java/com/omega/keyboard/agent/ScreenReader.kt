@@ -69,6 +69,7 @@ object ScreenReader {
                 val r = Rect()
                 n.getBoundsInScreen(r)
                 val clickable = n.isClickable
+                val dir = if (r.height() >= dm.heightPixels * 0.25) scrollDirections(n) else 0
                 out.add(
                     UiNode(
                         id = id,
@@ -89,6 +90,8 @@ object ScreenReader {
                         password = n.isPassword,
                         showingHint = if (Build.VERSION.SDK_INT >= 26) n.isShowingHintText else false,
                         childCount = n.childCount,
+                        scrollDown = dir and SCROLL_DOWN != 0,
+                        scrollUp = dir and SCROLL_UP != 0,
                     )
                 )
                 live.add(n)
@@ -106,6 +109,34 @@ object ScreenReader {
         val rtl = service.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
         val screen = Screen(activePkg.ifEmpty { out.first().pkg }, dm.widthPixels, dm.heightPixels, dm.density, out, rtl)
         return Snapshot(screen, live)
+    }
+
+    private const val SCROLL_DOWN = 1
+    private const val SCROLL_UP = 2
+
+    /**
+     * Which way a view can still scroll, from the actions it offers. Lists only offer a direction while there is
+     * content left in it, so "can scroll down" really means "there is more below what is on screen".
+     * A view that only offers forward/backward (older RecyclerViews) counts as vertical unless it also offers left/right.
+     */
+    private fun scrollDirections(n: AccessibilityNodeInfo): Int = try {
+        var down = false; var up = false; var fwd = false; var back = false; var sideways = false
+        for (a in n.actionList) {
+            when (a.id) {
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.id -> down = true
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.id -> up = true
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id,
+                AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id -> sideways = true
+                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> fwd = true
+                AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> back = true
+            }
+        }
+        var r = 0
+        if (down || (fwd && !sideways)) r = r or SCROLL_DOWN
+        if (up || (back && !sideways)) r = r or SCROLL_UP
+        r
+    } catch (_: Throwable) {
+        0
     }
 
     private fun hasClick(n: AccessibilityNodeInfo): Boolean = try {

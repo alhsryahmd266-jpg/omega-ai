@@ -33,7 +33,7 @@ object SendAction {
     private fun log(s: String) = AppLog.d("send", s)
     private fun nap(ms: Long) { try { Thread.sleep(ms) } catch (_: InterruptedException) {} }
 
-    fun sendText(svc: ScreenAgentService, text: String): Result {
+    fun sendText(svc: ScreenAgentService, text: String, allowBlind: Boolean = true): Result {
         // 1) the composer
         var snap = ScreenReader.read(svc) ?: return fail("مش قادر أقرا الشاشة")
         val input0 = ChatParser.findInput(snap.screen)
@@ -77,7 +77,7 @@ object SendAction {
                     if (enter && waitSent(svc, text)) { snap.release(); return Result(true, "ime-enter", "") }
                 }
                 val x = if (screen.rtl) input.left - screen.dp(24) else input.right + screen.dp(24)
-                if (x in 1 until screen.width) {
+                if (allowBlind && x in 1 until screen.width) {
                     val g = gesture(svc, x, input.centerY)
                     log("blind tap at $x,${input.centerY} -> $g")
                     if (g && waitSent(svc, text)) { snap.release(); return Result(true, "blind-tap", "") }

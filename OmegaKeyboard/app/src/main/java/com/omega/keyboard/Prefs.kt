@@ -54,6 +54,7 @@ class Prefs private constructor(ctx: Context) {
     var apDelayMaxSec by I("ap_delay_max", 6)
     var apMaxReplies by I("ap_max_replies", 100)
     var apAutoSend by B("ap_auto_send", true)
+    var apSide by S("ap_side", "auto")                 // auto | left | right: which edge my chat bubbles hug
 
     // ---- voice
     var voiceLang by S("voice_lang", "auto")

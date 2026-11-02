@@ -69,8 +69,9 @@ object VoiceSession {
     private fun report(text: String, warn: Boolean, listening: Boolean) {
         when (source) {
             Source.KEYBOARD -> sink?.onVoiceState(listening, text, warn)
-            Source.AUTOPILOT -> if (text.isNotBlank()) {
-                if (AutoPilot.running) AutoPilot.note(text, warn)
+            Source.AUTOPILOT -> {
+                AutoPilot.setListening(listening)      // the bar's microphone button shows when we are listening
+                if (text.isNotBlank() && AutoPilot.running) AutoPilot.note(text, warn)
             }
         }
     }
@@ -130,8 +131,13 @@ object VoiceSession {
                 say("مسحت التعليمات", false)
             }
             is VoiceCommand.Instruction -> {
-                if (AutoPilot.running) AutoPilot.addInstruction(cmd.text) else Notice.toast(app, "سمعت: ${cmd.text}")
-                say("سمعت: ${cmd.text}", false)
+                if (AutoPilot.running) {
+                    AutoPilot.setListening(false)
+                    AutoPilot.addInstruction(cmd.text)       // shows "تمام، هبعت: ..." on the bar and wakes the loop
+                } else {
+                    Notice.toast(app, "سمعت: ${cmd.text}")
+                    say("سمعت: ${cmd.text}", false)
+                }
             }
         }
     }

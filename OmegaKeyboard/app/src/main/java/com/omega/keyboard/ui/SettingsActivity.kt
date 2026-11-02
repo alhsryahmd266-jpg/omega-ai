@@ -137,6 +137,7 @@ class SettingsActivity : BaseActivity() {
 
         // ---------------------------------------------------------------- autonomous mode
         h.addView(UiKit.section(this, p, "الوضع الذاتي"))
+        val sides = listOf("auto" to "تلقائي (بيتعلّم لوحده)", "right" to "اليمين", "left" to "الشمال")
         h.addView(UiKit.group(
             this, p,
             UiKit.valueRow(this, p, "أسلوبي في الرد", prefs.apPersona.take(22) + if (prefs.apPersona.length > 22) "…" else "", "بيتبعه النموذج وهو بيكتب بدالك") {
@@ -152,6 +153,10 @@ class SettingsActivity : BaseActivity() {
             },
             UiKit.seekRow(this, p, "أقصى عدد ردود في الجلسة", 1, 500, prefs.apMaxReplies, { "$it" }) { prefs.apMaxReplies = it },
             sw("إرسال تلقائي", "لو مقفول: النموذج بيكتب الرد في الخانة وإنت اللي تبعته", prefs.apAutoSend) { prefs.apAutoSend = it },
+            UiKit.valueRow(this, p, "رسايلي بتظهر على", sides.firstOrNull { it.first == prefs.apSide }?.second ?: "تلقائي",
+                "سيبها تلقائي. غيّرها بس لو بيرد على رسايلك إنت أو مش بيرد خالص") {
+                choose("رسايلي بتظهر على", sides, prefs.apSide) { prefs.apSide = it }
+            },
         ))
 
         // ---------------------------------------------------------------- voice

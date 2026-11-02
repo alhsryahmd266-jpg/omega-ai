@@ -28,6 +28,10 @@ data class UiNode(
     val password: Boolean = false,
     val showingHint: Boolean = false,
     val childCount: Int = 0,
+    /** a scrolling view that can still move towards its end (there is more content below / after what is shown) */
+    val scrollDown: Boolean = false,
+    /** ... and towards its start */
+    val scrollUp: Boolean = false,
 ) {
     val width: Int get() = right - left
     val height: Int get() = bottom - top
@@ -52,6 +56,39 @@ class Screen(
 ) {
     fun dp(v: Float): Int = (v * density).toInt()
     fun dp(v: Int): Int = (v * density).toInt()
+}
+
+/** Decisions about scrolling a conversation to its newest messages. Pure, so it is tested without a phone. */
+object ScrollLogic {
+    /**
+     * The big vertical list (the conversation) that still has content below the visible part, or null when we are
+     * already at its end. Small scrollers (a multi-line text box, a chip row) never count.
+     */
+    fun listWithMoreBelow(screen: Screen): UiNode? {
+        val minH = screen.height * 0.28
+        val minW = screen.width * 0.45
+        return screen.nodes
+            .filter { it.scrollDown && it.visible && it.enabled && !it.editable && it.height >= minH && it.width >= minW }
+            .maxByOrNull { it.area }
+    }
+
+    /** Where to put a finger for a swipe that moves the list towards its newest end: from low to high inside the list. */
+    fun swipeUpPath(list: UiNode): IntArray {
+        val x = list.centerX
+        val y1 = list.bottom - (list.height * 0.18).toInt()
+        val y2 = list.top + (list.height * 0.22).toInt()
+        return intArrayOf(x, y1, y2)
+    }
+
+    /** What the list currently shows, to notice that a scroll did nothing (the same text at the same places). */
+    fun signature(screen: Screen, list: UiNode): Int {
+        var h = 17
+        for (n in screen.nodes) {
+            if (!n.visible || n.label.isBlank() || !list.contains(n)) continue
+            h = h * 31 + (n.label.hashCode() xor (n.top / 6))
+        }
+        return h
+    }
 }
 
 object Matchers {

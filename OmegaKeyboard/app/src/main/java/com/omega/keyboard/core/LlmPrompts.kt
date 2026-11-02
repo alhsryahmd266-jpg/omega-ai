@@ -42,7 +42,10 @@ object LlmPrompts {
         }
         kept.asReversed().forEach { sb.append(it).append('\n') }
         if (!directive.isNullOrBlank()) {
-            sb.append("\nWrite the message I should send to them now so that it does this: ").append(directive.trim()).append('\n')
+            sb.append("\nI am telling you what to say to them (I spoke it out loud, so it may start with \"tell him\" / \"قول له\"): ")
+                .append(directive.trim()).append('\n')
+            sb.append("Write the message I should send to them right now, in my own voice (first person), that says exactly that. ")
+                .append("Keep it short and natural and add nothing I did not ask for.\n")
         } else {
             sb.append("\nWrite my next message.\n")
         }

@@ -9,7 +9,8 @@ enum class Align { LEFT, RIGHT }
 
 data class ChatMessage(val text: String, val side: Side, val top: Int, val bottom: Int, val nodeId: Int)
 
-class ChatParseResult(val messages: List<ChatMessage>, val input: UiNode?) {
+/** [learnedAlign]: the screen edge my own bubbles hug, when delivery ticks proved it on this very screen (else null). */
+class ChatParseResult(val messages: List<ChatMessage>, val input: UiNode?, val learnedAlign: Align? = null) {
     val last: ChatMessage? get() = messages.lastOrNull()
 }
 
@@ -46,7 +47,8 @@ object ChatParser {
                 n.height < screen.dp(40)
         }
 
-        val raw = ArrayList<ChatMessage>()
+        class Cand(val n: UiNode, val text: String, val ticked: Boolean)
+        val cands = ArrayList<Cand>()
         for (n in screen.nodes) {
             if (!n.visible || n.editable || n.password) continue
             if (n.id == input?.id) continue
@@ -56,8 +58,24 @@ object ChatParser {
             val txt = candidateText(n, screen) ?: continue
             if (Matchers.isChatNoise(txt)) continue
             if (n.childCount > 0 && n.text.isBlank()) continue
-            val side = sideOf(n, screen, myAlign, statusNodes)
-            raw.add(ChatMessage(txt.trim(), side, n.top, n.bottom, n.id))
+            cands.add(Cand(n, txt.trim(), hasTicks(n, screen, statusNodes)))
+        }
+
+        // bubbles with delivery ticks are certainly mine: the edge they hug is "my side" in this app, whatever language / layout direction it uses
+        var left = 0
+        var right = 0
+        for (c in cands) if (c.ticked) when (edgeOf(c.n, screen)) { Align.LEFT -> left++; Align.RIGHT -> right++; null -> {} }
+        val learned = when {
+            left > 0 && left >= right * 3 -> Align.LEFT
+            right > 0 && right >= left * 3 -> Align.RIGHT
+            else -> null
+        }
+        val align = learned ?: myAlign
+
+        val raw = ArrayList<ChatMessage>()
+        for (c in cands) {
+            val side = if (c.ticked) Side.ME else edgeSide(c.n, screen, align)
+            raw.add(ChatMessage(c.text, side, c.n.top, c.n.bottom, c.n.id))
         }
         raw.sortWith(compareBy({ it.top }, { it.nodeId }))
 
@@ -67,7 +85,7 @@ object ChatParser {
             val dup = out.any { it.text == m.text && abs(it.top - m.top) < screen.dp(6) }
             if (!dup) out.add(m)
         }
-        return ChatParseResult(out, input)
+        return ChatParseResult(out, input, learned)
     }
 
     private fun candidateText(n: UiNode, screen: Screen): String? {
@@ -85,21 +103,30 @@ object ChatParser {
         "رجوع", "المزيد", "إرفاق", "ارفاق", "كاميرا", "إيموجي", "رسالة صوتية", "إرسال", "قائمة", "profile photo", "صورة الملف"
     )
 
-    private fun sideOf(n: UiNode, screen: Screen, myAlign: Align, statusNodes: List<UiNode>): Side {
-        // 1) delivery ticks next to a bubble mean "outgoing"
+    /** delivery ticks next to a bubble mean "outgoing" */
+    private fun hasTicks(n: UiNode, screen: Screen, statusNodes: List<UiNode>): Boolean {
         for (s in statusNodes) {
             if (s.centerY >= n.top - screen.dp(2) && s.centerY <= n.bottom + screen.dp(14) &&
                 s.centerX >= n.left && s.right <= n.right + screen.dp(40)
-            ) return Side.ME
+            ) return true
         }
-        // 2) horizontal position: my bubbles hug my edge, theirs hug the opposite one
+        return false
+    }
+
+    /** the edge a bubble hugs, or null when it is (nearly) centred */
+    private fun edgeOf(n: UiNode, screen: Screen): Align? {
         val leftGap = n.left
         val rightGap = screen.width - n.right
         val diff = rightGap - leftGap                // > 0: nearer to the left edge
         val threshold = maxOf(screen.dp(20), (screen.width * 0.05f).toInt())
-        if (abs(diff) < threshold) return Side.UNKNOWN
-        val nearLeft = diff > 0
-        return if ((myAlign == Align.LEFT) == nearLeft) Side.ME else Side.THEM
+        if (abs(diff) < threshold) return null
+        return if (diff > 0) Align.LEFT else Align.RIGHT
+    }
+
+    /** my bubbles hug my edge, theirs hug the opposite one */
+    private fun edgeSide(n: UiNode, screen: Screen, myAlign: Align): Side {
+        val e = edgeOf(n, screen) ?: return Side.UNKNOWN
+        return if (e == myAlign) Side.ME else Side.THEM
     }
 }
 
@@ -115,9 +142,9 @@ object ReplyPolicy {
     fun decide(res: ChatParseResult, lastHandledKey: String?, force: Boolean, unknownAsThem: Boolean = false): Decision {
         val k = key(res.messages)
         if (res.input == null) return Decision(false, "no_input", k)
+        if (force) return Decision(true, "directive", k)      // the user told us what to say: works in an empty chat too
         val last = res.last ?: return Decision(false, "no_messages", k)
         val side = if (last.side == Side.UNKNOWN && unknownAsThem) Side.THEM else last.side
-        if (force) return Decision(true, "directive", k)
         if (side == Side.ME) return Decision(false, "last_is_mine", k)
         if (side == Side.UNKNOWN) return Decision(false, "unknown_side", k)
         if (k == lastHandledKey) return Decision(false, "already_handled", k)
