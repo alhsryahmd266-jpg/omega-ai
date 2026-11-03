@@ -113,14 +113,21 @@ object ChatParser {
         return false
     }
 
-    /** the edge a bubble hugs, or null when it is (nearly) centred */
+    /**
+     * The edge a bubble hugs, or null when it is centred or spans (nearly) the whole width.
+     * A real bubble sits against one edge and leaves a clear gap on the other; a plain paragraph of text, a caption or
+     * a disclaimer does not, so it never counts as "mine" or "theirs".
+     */
     private fun edgeOf(n: UiNode, screen: Screen): Align? {
         val leftGap = n.left
         val rightGap = screen.width - n.right
-        val diff = rightGap - leftGap                // > 0: nearer to the left edge
-        val threshold = maxOf(screen.dp(20), (screen.width * 0.05f).toInt())
-        if (abs(diff) < threshold) return null
-        return if (diff > 0) Align.LEFT else Align.RIGHT
+        val far = (screen.width * 0.13f).toInt()                                 // the free side of a bubble
+        val diff = maxOf(screen.dp(20), (screen.width * 0.06f).toInt())          // how much nearer to one edge
+        return when {
+            rightGap < leftGap && leftGap >= far && leftGap - rightGap >= diff -> Align.RIGHT
+            leftGap < rightGap && rightGap >= far && rightGap - leftGap >= diff -> Align.LEFT
+            else -> null
+        }
     }
 
     /** my bubbles hug my edge, theirs hug the opposite one */

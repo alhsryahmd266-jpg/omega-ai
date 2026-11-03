@@ -157,10 +157,11 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     override fun onCreateInputView(): View {
         theme = Themes.resolve(this, prefs.theme)
-        val frame = FrameLayout(this)
+        // BaseFrame: the keyboard decides the height; previews and panels are laid over it (see BaseFrame)
+        val frame = BaseFrame(this)
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val st = StripView(this).apply { listener = this@OmegaImeService; theme = this@OmegaImeService.theme }
-        val ct = FrameLayout(this)
+        val ct = BaseFrame(this)
         val k = KeyboardView(this).apply {
             listener = this@OmegaImeService
             theme = this@OmegaImeService.theme

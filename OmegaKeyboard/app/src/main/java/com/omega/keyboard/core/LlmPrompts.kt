@@ -24,11 +24,13 @@ object LlmPrompts {
         return sb.toString()
     }
 
-    fun replyUser(messages: List<ChatMessage>, directive: String? = null): String {
+    /** The conversation as the model reads it: consecutive messages of one side merged into one turn, newest last. */
+    private fun conversation(messages: List<ChatMessage>): String {
         val turns = ArrayList<Pair<Side, StringBuilder>>()
         for (m in messages.takeLast(24)) {
             val side = if (m.side == Side.UNKNOWN) Side.THEM else m.side
-            val t = m.text.trim().take(500)
+            val full = m.text.trim()
+            val t = if (full.length > 500) full.take(200) + " … " + full.takeLast(300) else full
             if (turns.isNotEmpty() && turns.last().first == side) turns.last().second.append('\n').append(t)
             else turns.add(side to StringBuilder(t))
         }
@@ -41,15 +43,44 @@ object LlmPrompts {
             kept.add(line); used += line.length
         }
         kept.asReversed().forEach { sb.append(it).append('\n') }
-        if (!directive.isNullOrBlank()) {
-            sb.append("\nI am telling you what to say to them (I spoke it out loud, so it may start with \"tell him\" / \"قول له\"): ")
-                .append(directive.trim()).append('\n')
-            sb.append("Write the message I should send to them right now, in my own voice (first person), that says exactly that. ")
-                .append("Keep it short and natural and add nothing I did not ask for.\n")
-        } else {
-            sb.append("\nWrite my next message.\n")
-        }
         return sb.toString()
+    }
+
+    fun replyUser(messages: List<ChatMessage>): String = conversation(messages) + "\nWrite my next message.\n"
+
+    /**
+     * An order the model has to word ("اسأله هو جاي ولا لأ"). The order is given as data and the model is told not to
+     * repeat it: small models like to echo an instruction back, and [echoes] catches the ones that still do.
+     */
+    fun composeUser(messages: List<ChatMessage>, instruction: String): String {
+        val sb = StringBuilder(conversation(messages))
+        sb.append("\nI told you out loud (in Egyptian Arabic): \"").append(instruction.trim()).append("\"\n")
+        sb.append("That is an instruction for you, not the text to send. Write the message I should send to them right now, ")
+            .append("in the first person, in the language of the chat, short and natural. ")
+            .append("Do not repeat my instruction and do not start with a command such as \"tell him\" or \"قول له\". Output only the message.\n")
+        return sb.toString()
+    }
+
+    private fun flat(s: String) = ArabicText.normalize(s).replace(Regex("[\\p{P}\\p{S}]"), " ").replace(Regex("\\s+"), " ").trim()
+
+    private val COMMAND_WORDS = setOf(
+        "قول", "قوله", "قولها", "قولهم", "قل", "اسال", "اساله", "اسالها", "اسالهم", "ابعت", "ابعتله", "اكتب", "اكتبله", "ارسل", "ارسله",
+        "tell", "say", "ask", "send", "write",
+    )
+
+    /**
+     * True when a model "reply" is really just the spoken order handed back (it would be sent as it is, command word
+     * and all). A message that merely contains the same words as the order ("هو جاي ولا لأ؟" for "اسأله هو جاي ولا لأ")
+     * is exactly what we want and is not an echo.
+     */
+    fun echoes(reply: String, instruction: String): Boolean {
+        val r = flat(reply)
+        val i = flat(instruction)
+        if (r.isEmpty() || i.isEmpty()) return false
+        if (r == i) return true
+        val first = r.substringBefore(' ')
+        if (r.contains(' ') && (first == i.substringBefore(' ') || first in COMMAND_WORDS)) return true
+        return i.length >= 8 && r.contains(i)
     }
 
     private val LABEL_PREFIX = Regex("^\\s*(?:me|reply|my reply|message|أنا|انا|الرد|رد)\\s*[:：]\\s*", RegexOption.IGNORE_CASE)

@@ -102,7 +102,7 @@ class TranslationLayer(ctx: Context) : View(ctx) {
 /**
  * The small floating control strip. Two looks:
  *  - icon buttons next to the text (screen translation: language / refresh / close)
- *  - big labelled buttons under the text (autonomous mode: speak / stop)
+ *  - big labelled buttons under the text (autonomous mode: voice on/off / wait / stop)
  * Draggable by its text.
  */
 class ControlBar(ctx: Context) : LinearLayout(ctx) {
@@ -192,10 +192,11 @@ class ControlBar(ctx: Context) : LinearLayout(ctx) {
         background = GradientDrawable().apply { setColor(a.color); cornerRadius = 22 * d }
         addView(ImageView(context).apply { setImageDrawable(tinted(a)) }, LayoutParams((22 * d).toInt(), (22 * d).toInt()))
         addView(TextView(context).apply {
-            text = a.label; setTextColor(Color.WHITE); textSize = 14f; typeface = Typeface.DEFAULT_BOLD
-            setPadding((8 * d).toInt(), 0, 0, 0)
+            text = a.label; setTextColor(Color.WHITE); textSize = 13f; typeface = Typeface.DEFAULT_BOLD
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding((6 * d).toInt(), 0, 0, 0)
         })
-        layoutParams = LayoutParams(0, (44 * d).toInt(), if (a.id == "mic") 1.35f else 1f).also {
+        layoutParams = LayoutParams(0, (44 * d).toInt(), if (a.id == "voice") 1.4f else 1f).also {
             it.leftMargin = (4 * d).toInt(); it.rightMargin = (4 * d).toInt()
         }
         setOnTouchListener { v, e ->

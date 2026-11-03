@@ -9,7 +9,8 @@ sealed class VoiceCommand {
     object StartAutopilot : VoiceCommand()
     object StopAutopilot : VoiceCommand()
     object ClearInstructions : VoiceCommand()
-    data class Instruction(val text: String) : VoiceCommand()
+    /** something to do for the autonomous mode ("قول له ...", "تابع المحادثة", "استنى") */
+    data class Auto(val order: Order) : VoiceCommand()
     data class Text(val text: String) : VoiceCommand()
 }
 
@@ -17,7 +18,8 @@ object CommandParser {
     private fun n(s: String): String = ArabicText.normalize(s).replace(Regex("[\\p{P}\\p{S}]"), " ").replace(Regex("\\s+"), " ").trim()
 
     // Patterns run on the normalised sentence (alef/ya/ta-marbuta merged, no diacritics, lower-case).
-    private val CALL = Regex("^(?:من فضلك |لو سمحت |يا |ممكن )?(?:كلمني|كلملي|كلم لي|كلم|كلمي|اتصل بي|اتصل لي|اتصل ب|اتصلي ب|اتصل|اطلب لي|اطلب|رن على|رن|call|phone|dial|ring)\\s+(.+)$")
+    // "اطلب منه ..." means "ask him ...", not "call him": the verb for calling is never followed by "منه".
+    private val CALL = Regex("^(?:من فضلك |لو سمحت |يا |ممكن )?(?:كلمني|كلملي|كلم لي|كلم|كلمي|اتصل بي|اتصل لي|اتصل ب|اتصلي ب|اتصل|اطلب لي|اطلب(?!\\s+(?:منه|منها|منهم|منو)(?:\\s|$))|رن على|رن|call|phone|dial|ring)\\s+(.+)$")
     private val OPEN = Regex("^(?:من فضلك |لو سمحت |يا )?(?:افتح لي|افتحلي|افتح|شغل لي|شغللي|شغل|روح ل|open|launch|start)\\s+(.+)$")
     private val TRANSLATE_SCREEN = Regex("^(?:من فضلك )?(?:ترجم|ترجمه|ترجملي|ترجم لي)\\s*(?:لي )?(?:ال)?(?:شاشه|صفحه|الشاشه|الصفحه)|translate (?:the |this )?(?:screen|page)")
     private val START_AUTO = Regex("(?:شغل|ابدا|ابدأ|فعل|start|enable|turn on)\\s*(?:ال)?(?:وضع الذاتي|وضع ذاتي|الوضع الذاتي|auto ?pilot|auto mode|autonomous)")
@@ -25,16 +27,22 @@ object CommandParser {
     private val CLEAR_INSTR = Regex("^(?:الغي|امسح|انسى|انسي|clear|reset)\\s*(?:ال)?(?:تعليمات|اوامر|الاوامر|instructions)")
 
     /**
-     * @param autopilotRunning while autonomous mode runs, free speech becomes an instruction for the AI instead of
-     *        text typed into a field.
+     * @param autopilotRunning while autonomous mode runs, a sentence that is no command is an [Order] for it
+     *        ("قول له ...", "تابع المحادثة") instead of text typed into a field.
+     * @param always the microphone is open all the time (autonomous mode): other people's talk may be heard, so
+     *        only clear orders count, and calls / opening apps / translation need the wake word "أوميجا".
      */
-    fun parse(spoken: String, autopilotRunning: Boolean, commandsEnabled: Boolean = true): VoiceCommand {
-        val raw = spoken.trim()
-        if (raw.isEmpty()) return VoiceCommand.Text("")
+    fun parse(spoken: String, autopilotRunning: Boolean, commandsEnabled: Boolean = true, always: Boolean = false): VoiceCommand {
+        val raw0 = spoken.trim()
+        if (raw0.isEmpty()) return VoiceCommand.Text("")
+        val (raw, addressed) = OrderParser.stripWake(raw0)
         val s = n(raw)
-        if (commandsEnabled) {
-            if (STOP_AUTO.containsMatchIn(s)) return VoiceCommand.StopAutopilot
-            if (autopilotRunning && CLEAR_INSTR.containsMatchIn(s)) return VoiceCommand.ClearInstructions
+        val general = commandsEnabled && (!always || addressed)          // calls, apps, translation, starting the mode
+
+        // the controls of autonomous mode itself work whenever it runs
+        if ((commandsEnabled || autopilotRunning) && STOP_AUTO.containsMatchIn(s)) return VoiceCommand.StopAutopilot
+        if (autopilotRunning && CLEAR_INSTR.containsMatchIn(s)) return VoiceCommand.ClearInstructions
+        if (general) {
             if (START_AUTO.containsMatchIn(s)) return VoiceCommand.StartAutopilot
             if (TRANSLATE_SCREEN.containsMatchIn(s)) return VoiceCommand.TranslateScreen
             CALL.find(s)?.let { m ->
@@ -44,26 +52,14 @@ object CommandParser {
                 val stripped = if (verb.startsWith("اتصل") && whole.length > 2 && whole.startsWith("ب")) whole.substring(1) else whole
                 return VoiceCommand.Call(stripped, whole)
             }
-            // while the AI is chatting only "call X" stays a command; other sentences are instructions for it
+            // while the AI is chatting only "call X" stays a command; other sentences are orders for it
             if (!autopilotRunning) {
                 OPEN.find(s)?.let { return VoiceCommand.OpenApp(cleanName(it.groupValues[1])) }
             }
         }
-        return if (autopilotRunning) VoiceCommand.Instruction(raw) else VoiceCommand.Text(raw)
+        if (autopilotRunning) return VoiceCommand.Auto(OrderParser.parse(raw.ifBlank { raw0 }, always, addressed))
+        return VoiceCommand.Text(raw0)
     }
-
-    private val ORDER_STARTS = listOf(
-        "قول", "قوله", "قولها", "قولو", "قولهم", "قولي", "قل", "ابعت", "ابعتله", "ابعتلها", "ابعتلهم", "ارسل", "ارسله", "ارسلها",
-        "اكتب", "اكتبله", "اكتبلها", "رد", "ردي", "ارد", "جاوب", "جاوبه", "خبره", "خبرها", "عرفه", "عرفها", "ابلغه", "بلغه", "اسأله", "اسالو", "اسألها",
-        "tell", "say", "reply", "send", "write", "answer", "ask", "let", "inform", "notify",
-    )
-    private val ORDER_SET = ORDER_STARTS.map { n(it) }.toSet()
-
-    /**
-     * "قوله إني جاي بعد ساعة" is a one-off order: send that message now. Anything else ("من دلوقتي رد بأسلوب رسمي")
-     * is a standing instruction that applies to every later reply.
-     */
-    fun isOrder(text: String): Boolean = n(text).substringBefore(' ') in ORDER_SET
 
     private fun cleanName(s: String): String =
         s.replace(Regex("^(?:ال)?(?:اسم|رقم|صاحبي|صديقي|الاستاذ|استاذ|دكتور|الدكتور|م/|ال)\\s+"), "")

@@ -55,6 +55,7 @@ class Prefs private constructor(ctx: Context) {
     var apMaxReplies by I("ap_max_replies", 100)
     var apAutoSend by B("ap_auto_send", true)
     var apSide by S("ap_side", "auto")                 // auto | left | right: which edge my chat bubbles hug
+    var apListen by B("ap_listen", true)               // the microphone stays open for orders while it runs (switch on the bar)
 
     // ---- voice
     var voiceLang by S("voice_lang", "auto")

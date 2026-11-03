@@ -18,7 +18,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        commands(); matching(); prompts(); screenFilter(); scrolling()
+        commands(); matching(); prompts(); screenFilter(); scrolling(); orders(); noise()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -292,7 +292,7 @@ object CoreTests {
         check("stop autopilot", p("وقف الوضع الذاتي") == VoiceCommand.StopAutopilot)
         check("plain stop while chatting", p("وقف", true) == VoiceCommand.StopAutopilot)
         check("dictation stays dictation", p("أنا رايح المدرسة دلوقتي") == VoiceCommand.Text("أنا رايح المدرسة دلوقتي"))
-        check("free speech is an instruction while the AI chats", p("قوله إني جاي في الطريق", true) == VoiceCommand.Instruction("قوله إني جاي في الطريق"))
+        check("free speech is an order while the AI chats", p("قوله إني جاي في الطريق", true) == VoiceCommand.Auto(Order.Say("أنا جاي في الطريق"))) { "${p("قوله إني جاي في الطريق", true)}" }
         check("clear instructions", p("امسح التعليمات", true) == VoiceCommand.ClearInstructions)
         check("commands can be disabled", CommandParser.parse("كلم أحمد", false, commandsEnabled = false) == VoiceCommand.Text("كلم أحمد"))
     }
@@ -329,7 +329,16 @@ object CoreTests {
         val msgs = listOf(ChatMessage("Hi", Side.THEM, 0, 1, 0), ChatMessage("Where are you?", Side.THEM, 2, 3, 1), ChatMessage("home", Side.ME, 4, 5, 2))
         val user = LlmPrompts.replyUser(msgs)
         check("consecutive messages are merged into one turn", user.contains("Them: Hi\nWhere are you?") && user.contains("Me: home")) { user }
-        check("directive is requested", LlmPrompts.replyUser(msgs, "say I will be late").contains("say I will be late"))
+        val compose = LlmPrompts.composeUser(msgs, "اسأله هو جاي ولا لأ")
+        check("compose prompt carries the order as data", compose.contains("اسأله هو جاي ولا لأ") && compose.contains("not the text to send")) { compose }
+        check("reply prompt asks for the next message", LlmPrompts.replyUser(msgs).trimEnd().endsWith("Write my next message."))
+        val longMsg = "سؤال " + "كلام ".repeat(200) + "هل انت جاي؟"
+        val longPrompt = LlmPrompts.replyUser(listOf(ChatMessage(longMsg, Side.THEM, 0, 1, 0)))
+        check("a long message keeps its beginning and its end", longPrompt.contains("سؤال") && longPrompt.contains("هل انت جاي؟")) { longPrompt.takeLast(120) }
+        check("echo: the order handed back", LlmPrompts.echoes("اسأله هو جاي ولا لأ", "اسأله هو جاي ولا لأ"))
+        check("echo: starts with a command word", LlmPrompts.echoes("قول له إنك جاي", "اسأله هو جاي ولا لأ"))
+        check("no echo: the wording we want", !LlmPrompts.echoes("هو جاي ولا لأ؟", "اسأله هو جاي ولا لأ"))
+        check("no echo: an ordinary reply", !LlmPrompts.echoes("أيوه جاي كمان شوية", "اسأله هو جاي ولا لأ"))
         check("translate prompt format", LlmPrompts.translateUser(listOf(1 to "a\nb", 2 to "c")) == "1|a b\n2|c")
         check("clean translation unquotes", LlmPrompts.cleanTranslation("\"Hello\"") == "Hello")
     }
@@ -384,15 +393,136 @@ object CoreTests {
         check("no order, no messages: nothing to do", !ReplyPolicy.decide(parsed, null, false).reply)
         check("order needs a composer", !ReplyPolicy.decide(ChatParser.parse(B().screen(), Align.RIGHT), null, true).reply)
 
-        // spoken orders
-        check("'قول له' is an order", CommandParser.isOrder("قول له إني جاي بعد ساعة"))
-        check("'قوله' is an order", CommandParser.isOrder("قوله اني جاي"))
-        check("'tell him' is an order", CommandParser.isOrder("tell him I'm coming"))
-        check("'ابعتله' is an order", CommandParser.isOrder("ابعتله مرحبا"))
-        check("a style rule is not an order", !CommandParser.isOrder("من دلوقتي كلمه بأسلوب رسمي"))
-        check("while chatting, 'قول له' is an instruction",
-            CommandParser.parse("قول له إني جاي بعد ساعة", true) is VoiceCommand.Instruction)
-        check("the order text reaches the model", LlmPrompts.replyUser(emptyList(), "قول له إني جاي بعد ساعة").contains("قول له إني جاي بعد ساعة"))
+        // an order's text never reaches the model as something to repeat; it is carried out
+        check("the order text is data for the model", LlmPrompts.composeUser(emptyList(), "قول له إني جاي بعد ساعة").contains("قول له إني جاي بعد ساعة"))
+    }
+
+    /** What the user says to the autonomous mode is understood and carried out, never typed as it is. */
+    private fun orders() {
+        fun o(s: String) = OrderParser.parse(s)
+        fun al(s: String) = OrderParser.parse(s, always = true)
+
+        // follow the conversation
+        check("follow: تابع المحادثة", o("تابع المحادثة") == Order.Follow) { "${o("تابع المحادثة")}" }
+        check("follow: with more words", o("تابع المحادثة ورد عليها") == Order.Follow)
+        check("follow: كمل", o("كمل") == Order.Follow)
+        check("follow: always-on mic, with a chat word", al("تابع المحادثة") == Order.Follow && al("كمل معاه") == Order.Follow)
+        check("follow: always-on mic ignores 'كمل الاكل'", al("كمل الاكل") is Order.NotAnOrder) { "${al("كمل الاكل")}" }
+        check("follow: stay with him", o("خليك معاه") == Order.Follow && o("فضل معاه") == Order.Follow && o("استمر في الرد") == Order.Follow) { "${o("خليك معاه")} ${o("فضل معاه")} ${o("استمر في الرد")}" }
+
+        // answer now
+        check("reply: رد عليه", o("رد عليه") == Order.Reply) { "${o("رد عليه")}" }
+        check("reply: جاوبه دلوقتي", o("جاوبه دلوقتي") == Order.Reply)
+        check("reply with a style", o("رد بأسلوب رسمي") == Order.Style("رد بأسلوب رسمي", replyNow = true)) { "${o("رد بأسلوب رسمي")}" }
+        check("reply with content is sent as it is", o("رد عليه إني مشغول") == Order.Say("أنا مشغول")) { "${o("رد عليه إني مشغول")}" }
+        check("reply with content, no 'عليه'", o("رد بإني مشغول") == Order.Say("أنا مشغول")) { "${o("رد بإني مشغول")}" }
+
+        // say this
+        check("say: قول له إني جاي بعد ساعة", o("قول له إني جاي بعد ساعة") == Order.Say("أنا جاي بعد ساعة")) { "${o("قول له إني جاي بعد ساعة")}" }
+        check("say: قوله", o("قوله اني جاي في الطريق") == Order.Say("أنا جاي في الطريق"))
+        check("say: colloquial قوللو", o("قوللو اهلا") == Order.Say("اهلا"))
+        check("say: other spellings", o("قل له اهلا") == Order.Say("اهلا") && o("قله اهلا") == Order.Say("اهلا") && o("قللو اهلا") == Order.Say("اهلا"))
+        check("say: the sentence from the video", o("قول له ان كلود هو ذكاء اصطناعي وممكن يعمل أخطاء") == Order.Say("كلود هو ذكاء اصطناعي وممكن يعمل أخطاء")) { "${o("قول له ان كلود هو ذكاء اصطناعي وممكن يعمل أخطاء")}" }
+        check("say keeps إن شاء الله", o("قول له إن شاء الله جاي") == Order.Say("إن شاء الله جاي")) { "${o("قول له إن شاء الله جاي")}" }
+        check("say: you-form", o("قول له إنك مش جاي") == Order.Say("إنت مش جاي")) { "${o("قول له إنك مش جاي")}" }
+        check("say: pronouns later in the sentence", o("قول له إني جاي وإنك تستناني") == Order.Say("أنا جاي وإنت تستناني")) { "${o("قول له إني جاي وإنك تستناني")}" }
+        check("say: ابعتله", o("ابعتله صباح الخير") == Order.Say("صباح الخير"))
+        check("say: bare قول", o("قول اهلا") == Order.Say("اهلا"))
+        check("say: english", o("tell him I'm on my way") == Order.Say("I'm on my way")) { "${o("tell him I'm on my way")}" }
+        check("say: english with that", o("tell her that I will be late") == Order.Say("I will be late")) { "${o("tell her that I will be late")}" }
+        check("say: numbers stay as spoken", o("قول له هوصل بعد 45 دقيقة") == Order.Say("هوصل بعد 45 دقيقة"))
+        check("say needs a message", o("قول له") is Order.Incomplete && o("قوله") is Order.Incomplete)
+        check("'tell me' is not an order to send", o("قول لي الساعة كام") !is Order.Say)
+
+        // wait
+        check("pause: استنى", o("استنى") == Order.Pause)
+        check("pause: وقف الردود", o("وقف الردود") == Order.Pause)
+        check("pause: بلاش ترد", o("بلاش ترد دلوقتي") == Order.Pause) { "${o("بلاش ترد دلوقتي")}" }
+        check("pause: always-on mic, short only", al("استنى") == Order.Pause && al("استنى يا محمد عايز اكلمك في موضوع") is Order.NotAnOrder)
+
+        // rules for every reply
+        check("style: خليك رسمي", o("خليك رسمي") == Order.Style("خليك رسمي"))
+        check("style: from now on", o("من دلوقتي كلمه بأسلوب رسمي") == Order.Style("من دلوقتي كلمه بأسلوب رسمي")) { "${o("من دلوقتي كلمه بأسلوب رسمي")}" }
+        check("style: don't mention", o("بلاش تذكر الموضوع ده") is Order.Style)
+        check("style: 'خلي بالك' is just talk", al("خلي بالك من نفسك") is Order.NotAnOrder)
+        check("style: talk in the dialect", o("اتكلم بالمصري") == Order.Style("اتكلم بالمصري"))
+
+        // the model words it
+        check("compose: اسأله", o("اسأله هو جاي ولا لأ") == Order.Compose("اسأله هو جاي ولا لأ")) { "${o("اسأله هو جاي ولا لأ")}" }
+        check("compose: اطلب منه", o("اطلب منه يجيب العربية") == Order.Compose("اطلب منه يجيب العربية"))
+        check("fallback wording: ask", OrderParser.composeFallback("اسأله هو جاي ولا لأ") == "هو جاي ولا لأ؟") { "${OrderParser.composeFallback("اسأله هو جاي ولا لأ")}" }
+        check("fallback wording: thank", OrderParser.composeFallback("اشكره") == "شكرًا ليك" && OrderParser.composeFallback("اشكره على الهدية") == "شكرًا على الهدية") { "${OrderParser.composeFallback("اشكره على الهدية")}" }
+        check("fallback wording: nothing sensible", OrderParser.composeFallback("اعمل حاجة") == null)
+
+        // wake word, polite words
+        check("wake word makes any sentence an order", al("أوميجا خليك مرح") == Order.Style("خليك مرح")) { "${al("أوميجا خليك مرح")}" }
+        check("wake word with the old chatter", al("يا أوميجا الجو حلو النهارده") == Order.Style("الجو حلو النهارده")) { "${al("يا أوميجا الجو حلو النهارده")}" }
+        check("filler words do not matter", o("طيب يلا قول له تمام") == Order.Say("تمام") && o("لو سمحت تابع المحادثة") == Order.Follow && o("من فضلك استنى") == Order.Pause)
+        check("stripWake", OrderParser.stripWake("أوميجا قول له تمام") == ("قول له تمام" to true) && OrderParser.stripWake("قول له تمام") == ("قول له تمام" to false))
+
+        // the open microphone hears other people: they never turn into messages
+        check("always: chatter is ignored", al("انا رايح السوق دلوقتي") is Order.NotAnOrder && al("تعالى كل") is Order.NotAnOrder)
+        check("always: a bare 'قول' is ignored, 'قول له' works", al("قول يا رب") is Order.NotAnOrder && al("قول له اهلا") == Order.Say("اهلا")) { "${al("قول يا رب")} ${al("قول له اهلا")}" }
+        check("always: generic 'رد' talk is ignored", al("رد عليا بسرعه") is Order.NotAnOrder) { "${al("رد عليا بسرعه")}" }
+        check("always: empty speech", al("") is Order.NotAnOrder && al("أوميجا") is Order.NotAnOrder)
+        check("push-to-talk: other talk is kept as a note", o("الجو حلو النهارده") == Order.Style("الجو حلو النهارده"))
+
+        // through the command parser while the mode runs
+        fun p(s: String, always: Boolean = false) = CommandParser.parse(s, true, true, always)
+        check("running: 'قول له' is an order", p("قول له إني جاي بعد ساعة") == VoiceCommand.Auto(Order.Say("أنا جاي بعد ساعة"))) { "${p("قول له إني جاي بعد ساعة")}" }
+        check("running: 'تابع المحادثة' is an order", p("تابع المحادثة") == VoiceCommand.Auto(Order.Follow))
+        check("running: 'اطلب منه' is an order, not a call", p("اطلب منه يجيب العربية") is VoiceCommand.Auto) { "${p("اطلب منه يجيب العربية")}" }
+        check("running, always-on: a call needs the wake word", p("كلم أحمد", always = true) is VoiceCommand.Auto && p("أوميجا كلم أحمد", always = true) == VoiceCommand.Call("احمد")) { "${p("كلم أحمد", true)} ${p("أوميجا كلم أحمد", true)}" }
+        check("running: stop works by voice", p("وقف") == VoiceCommand.StopAutopilot && p("وقف الوضع الذاتي", always = true) == VoiceCommand.StopAutopilot)
+        check("stop works even with voice commands switched off", CommandParser.parse("وقف", true, commandsEnabled = false) == VoiceCommand.StopAutopilot)
+        check("not running: an order phrase is plain dictation", CommandParser.parse("قول له إني جاي", false) == VoiceCommand.Text("قول له إني جاي"))
+        check("not running: 'اطلب منه' is dictation, not a call", CommandParser.parse("اطلب منه يجيب العربية", false) == VoiceCommand.Text("اطلب منه يجيب العربية"))
+        check("order parse is not confused by the wake word alone", p("أوميجا", always = true) == VoiceCommand.Auto(Order.NotAnOrder("أوميجا"))) { "${p("أوميجا", true)}" }
+    }
+
+    /** Small print and full-width paragraphs (AI chat apps) must not be read as somebody's message. */
+    private fun noise() {
+        check("disclaimer: Claude", Matchers.isAiDisclaimer("Claude can make mistakes. Please double-check responses."))
+        check("disclaimer: ChatGPT", Matchers.isAiDisclaimer("ChatGPT can make mistakes. Check important info."))
+        check("disclaimer: Gemini", Matchers.isAiDisclaimer("Gemini can make mistakes, so double-check it"))
+        check("disclaimer: AI is", Matchers.isAiDisclaimer("Claude is an AI and may make mistakes."))
+        check("disclaimer: arabic", Matchers.isAiDisclaimer("Claude قد يرتكب أخطاء. يرجى التحقق من الردود."))
+        check("disclaimer: second line alone", Matchers.isAiDisclaimer("Please double-check responses."))
+        check("a friend's words are still messages", !Matchers.isAiDisclaimer("I can make mistakes too lol") && !Matchers.isAiDisclaimer("ممكن يغلط") &&
+            !Matchers.isAiDisclaimer("ChatGPT wrote it for me but it can make mistakes") && !Matchers.isAiDisclaimer("الذكاء الاصطناعي ممكن يغلط"))
+        check("disclaimer is chat noise", Matchers.isChatNoise("Claude can make mistakes. Please double-check responses."))
+
+        // an AI chat screen: my bubble on the right, the answer as a full-width paragraph, the small print under it
+        val c = B(pkg = "com.anthropic.claude")
+        c.add("what is 2+2", 380, 430, 1020, 500)
+        c.add("2+2 equals 4. Let me know if you want more examples of simple arithmetic.", 48, 560, 1032, 700)
+        c.add("Claude can make mistakes. Please double-check responses.", 140, 760, 1000, 820)
+        c.add("Reply to Claude", 120, 2190, 900, 2300, id = "x:id/input", cls = "android.widget.EditText", editable = true, hint = true)
+        val r = ChatParser.parse(c.screen())
+        check("small print is dropped", r.messages.map { it.text } == listOf("what is 2+2", "2+2 equals 4. Let me know if you want more examples of simple arithmetic.")) { "${r.messages.map { it.text }}" }
+        check("my bubble is mine, the full-width answer is nobody's yet", r.messages.map { it.side } == listOf(Side.ME, Side.UNKNOWN)) { "${r.messages.map { it.side }}" }
+        val d = ReplyPolicy.decide(r, null, force = false, unknownAsThem = true)
+        check("the answer gets a reply", d.reply && d.reason == "new_incoming") { d.toString() }
+        check("without the 'unknown is theirs' rule it would stay silent", !ReplyPolicy.decide(r, null, force = false).reply)
+
+        // the prompt of an empty message box is not a draft the user wrote
+        check("hint is not a draft", Matchers.isComposerHint("") && Matchers.isComposerHint("Reply to Claude") && Matchers.isComposerHint("Message") &&
+            Matchers.isComposerHint("اكتب رسالة") && Matchers.isComposerHint("Type a message") && Matchers.isComposerHint("anything", "anything"))
+        check("a real draft is a draft", !Matchers.isComposerHint("ok see you at 5") && !Matchers.isComposerHint("Message me when you arrive, ok?") &&
+            !Matchers.isComposerHint("تمام هجيلك بعد ساعة") && !Matchers.isComposerHint("Reply to Claude was slow today because of the network"))
+
+        // geometry: a bubble hugs one edge; a paragraph that spans the width belongs to nobody
+        fun sideOf(l: Int, rr: Int): Side {
+            val b = B(); b.add("some words in a message", l, 500, rr, 560)
+            b.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/entry")
+            return ChatParser.parse(b.screen()).messages.single().side
+        }
+        check("right bubble is mine", sideOf(400, 1020) == Side.ME) { "${sideOf(400, 1020)}" }
+        check("left bubble is theirs", sideOf(60, 700) == Side.THEM) { "${sideOf(60, 700)}" }
+        check("full-width paragraph is nobody's", sideOf(48, 1032) == Side.UNKNOWN) { "${sideOf(48, 1032)}" }
+        check("centred text is nobody's", sideOf(300, 780) == Side.UNKNOWN) { "${sideOf(300, 780)}" }
+        check("a wide left bubble is still theirs", sideOf(40, 880) == Side.THEM) { "${sideOf(40, 880)}" }
+        check("a message about mistakes is kept", ChatParser.parse(B().also { it.add("ممكن يغلط", 60, 430, 400, 500); it.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/entry") }.screen()).messages.size == 1)
     }
 
     private fun screenFilter() {

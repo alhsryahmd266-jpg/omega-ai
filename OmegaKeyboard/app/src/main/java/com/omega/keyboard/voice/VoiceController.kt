@@ -22,8 +22,11 @@ class VoiceController(context: Context) {
         fun onReady()
         fun onPartial(text: String)
         fun onResult(text: String)
-        /** [needsPermission]: the microphone permission is missing */
-        fun onError(message: String, needsPermission: Boolean)
+        /**
+         * [needsPermission]: the microphone permission is missing. [code]: the recogniser's own error code
+         * (SpeechRecognizer.ERROR_*), or one of the negative codes below for problems before it even started.
+         */
+        fun onError(message: String, needsPermission: Boolean, code: Int)
     }
 
     private val app = context.applicationContext
@@ -36,6 +39,14 @@ class VoiceController(context: Context) {
         private set
 
     companion object {
+        const val CODE_FAILED = -1          // could not create / start the recogniser
+        const val CODE_NO_PERMISSION = -2
+        const val CODE_UNAVAILABLE = -3     // the phone has no speech service
+        const val CODE_STUCK = -4           // the recogniser never answered
+
+        /** Silence and "could not make out words" are normal for a microphone that stays open. */
+        fun isQuiet(code: Int) = code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || code == SpeechRecognizer.ERROR_NO_MATCH
+
         fun hasPermission(ctx: Context): Boolean =
             ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
@@ -63,9 +74,9 @@ class VoiceController(context: Context) {
 
     fun start(callback: Callback, langTag: String?, preferOffline: Boolean) {
         cancel()
-        if (!hasPermission(app)) { callback.onError("محتاج إذن الميكروفون", true); return }
+        if (!hasPermission(app)) { callback.onError("محتاج إذن الميكروفون", true, CODE_NO_PERMISSION); return }
         if (!available(app)) {
-            callback.onError("التليفون مفيهوش خدمة تعرّف على الكلام (محتاج تطبيق Google)", false)
+            callback.onError("التليفون مفيهوش خدمة تعرّف على الكلام (محتاج تطبيق Google)", false, CODE_UNAVAILABLE)
             return
         }
         cb = callback
@@ -73,7 +84,7 @@ class VoiceController(context: Context) {
             SpeechRecognizer.createSpeechRecognizer(app)
         } catch (t: Throwable) {
             AppLog.e("voice", "create failed", t)
-            fail("مقدرتش أشغّل خدمة الصوت", false)
+            fail("مقدرتش أشغّل خدمة الصوت", false, CODE_FAILED)
             return
         }
         rec = r
@@ -96,11 +107,11 @@ class VoiceController(context: Context) {
             r.startListening(i)
         } catch (t: Throwable) {
             AppLog.e("voice", "start failed", t)
-            fail("مقدرتش أبدأ التسجيل", false)
+            fail("مقدرتش أبدأ التسجيل", false, CODE_FAILED)
             return
         }
         // if the recogniser never answers (some phones), do not stay "listening" forever
-        val g = Runnable { if (listening) { stopInternal(); cb?.let { c -> cb = null; c.onError("خدمة الصوت ما ردتش", false) } } }
+        val g = Runnable { if (listening) { stopInternal(); cb?.let { c -> cb = null; c.onError("خدمة الصوت ما ردتش", false, CODE_STUCK) } } }
         guard = g
         main.postDelayed(g, 30_000)
     }
@@ -129,11 +140,11 @@ class VoiceController(context: Context) {
         }
     }
 
-    private fun fail(msg: String, perm: Boolean) {
+    private fun fail(msg: String, perm: Boolean, code: Int) {
         val c = cb
         cb = null
         stopInternal()
-        c?.onError(msg, perm)
+        c?.onError(msg, perm, code)
     }
 
     private val listener = object : RecognitionListener {
@@ -154,12 +165,12 @@ class VoiceController(context: Context) {
             val c = cb
             cb = null
             stopInternal()
-            if (t == null) c?.onError(errorText(7), false) else c?.onResult(t.trim())
+            if (t == null) c?.onError(errorText(SpeechRecognizer.ERROR_NO_MATCH), false, SpeechRecognizer.ERROR_NO_MATCH) else c?.onResult(t.trim())
         }
 
         override fun onError(error: Int) {
             AppLog.d("voice", "recognizer error $error")
-            fail(errorText(error), error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+            fail(errorText(error), error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS, error)
         }
     }
 }

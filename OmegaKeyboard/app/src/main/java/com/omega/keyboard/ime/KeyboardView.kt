@@ -490,6 +490,12 @@ class PopupOverlay(ctx: Context) : View(ctx) {
 
     init { isClickable = false; isFocusable = false }
 
+    /** Never asks for room of its own: it only covers whatever its parent already is. */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val exact = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), if (exact) MeasureSpec.getSize(heightMeasureSpec) else 0)
+    }
+
     fun show(p: KeyboardView.PreviewSpec?, a: KeyboardView.AltSpec?, dx: Float, dy: Float, t: KbTheme) {
         preview = p; alt = a; this.dx = dx; this.dy = dy; theme = t
         invalidate()
