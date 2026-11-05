@@ -2,6 +2,8 @@ package com.omega.keyboard.voice
 
 import android.Manifest
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.omega.keyboard.AppLog
 import com.omega.keyboard.Prefs
 
@@ -21,6 +23,10 @@ object VoiceSession {
         private set
     private var controller: VoiceController? = null
     private var sink: Sink? = null
+    private var lastPartial = ""
+    private var stopping = false
+    private val main = Handler(Looper.getMainLooper())
+    private val forceStop = Runnable { finishNow() }
 
     /** Tap on the keyboard's microphone: starts listening, or (when already listening) finishes and uses what was said. */
     fun listenForKeyboard(ctx: Context, sink: Sink, langHint: String) {
@@ -29,17 +35,47 @@ object VoiceSession {
         begin(ctx, langHint)
     }
 
-    /** The user finished speaking: deliver what was heard. */
-    fun stopListening() { controller?.stop() }
+    /**
+     * The user pressed "stop". The recogniser is asked to finish so the last words are kept, but we never wait for it: after
+     * a short grace period (or on a second press) the microphone is closed for good and what was heard so far is typed.
+     */
+    fun stopListening() {
+        if (!active) return
+        if (stopping) { finishNow(); return }
+        stopping = true
+        controller?.stop()
+        main.removeCallbacks(forceStop)
+        main.postDelayed(forceStop, 700)
+    }
+
+    /** Close the microphone now and type what was heard so far. */
+    private fun finishNow() {
+        main.removeCallbacks(forceStop)
+        if (!active) return
+        val heard = lastPartial.trim()
+        val c = controller
+        reset()
+        c?.cancel()
+        val s = sink
+        s?.onVoiceState(false, "", false)
+        if (heard.isNotEmpty()) s?.onDictation(heard)
+    }
+
+    private fun reset() {
+        active = false
+        stopping = false
+        lastPartial = ""
+        controller = null
+    }
 
     /** Abort without using anything. */
     fun cancel() {
-        controller?.cancel()
-        controller = null
-        if (active) {
-            active = false
-            sink?.onVoiceState(false, "", false)
-        }
+        main.removeCallbacks(forceStop)
+        val c = controller
+        val wasActive = active
+        reset()
+        c?.cancel()
+        if (wasActive) sink?.onVoiceState(false, "", false)
     }
 
     fun detach(s: Sink) { if (sink === s) { sink = null } }
@@ -57,26 +93,41 @@ object VoiceSession {
         val c = VoiceController(app)
         controller = c
         active = true
+        stopping = false
+        lastPartial = ""
         sink?.onVoiceState(true, "بسمعك...", false)
         c.start(object : VoiceController.Callback {
-            override fun onReady() { if (active) sink?.onVoiceState(true, "اتكلم دلوقتي...", false) }
-            override fun onPartial(text: String) { if (active) sink?.onVoiceState(true, text, false) }
+            override fun onReady() { if (active && !stopping) sink?.onVoiceState(true, "اتكلم دلوقتي...", false) }
+            override fun onPartial(text: String) {
+                if (!active) return
+                lastPartial = text
+                if (!stopping) sink?.onVoiceState(true, text, false)
+            }
             override fun onResult(text: String) {
-                active = false
-                controller = null
+                if (!active) return
+                main.removeCallbacks(forceStop)
+                reset()
                 AppLog.d("voice", "heard: $text")
                 val said = text.trim()
                 val s = sink
-                when {
-                    said.isEmpty() -> s?.onVoiceState(false, "ما سمعتش كلام", true)
-                    s != null -> s.onDictation(said)
-                    else -> {}
-                }
+                // leave the "listening" state first: the strip used to keep its stop button after a successful result
+                s?.onVoiceState(false, "", false)
+                if (said.isEmpty()) s?.onVoiceState(false, "ما سمعتش كلام", true) else s?.onDictation(said)
             }
             override fun onError(message: String, needsPermission: Boolean, code: Int) {
-                active = false
-                controller = null
-                sink?.onVoiceState(false, message, true)
+                if (!active) return
+                main.removeCallbacks(forceStop)
+                val heard = lastPartial.trim()
+                val wasStopping = stopping
+                reset()
+                val s = sink
+                if (wasStopping && heard.isNotEmpty()) {
+                    // the user pressed stop and the recogniser had nothing final to say: type what was heard
+                    s?.onVoiceState(false, "", false)
+                    s?.onDictation(heard)
+                    return
+                }
+                s?.onVoiceState(false, if (wasStopping) "" else message, !wasStopping)
                 if (needsPermission) ActionActivity.requestPermissions(app, arrayOf(Manifest.permission.RECORD_AUDIO))
             }
         }, resolveLang(prefs.voiceLang, langHint), prefs.voiceOffline)

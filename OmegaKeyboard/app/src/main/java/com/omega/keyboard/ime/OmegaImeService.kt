@@ -767,14 +767,15 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     // ------------------------------------------------------------------ strip
 
+    /** Same slots as Gboard's tool row (mic, themes, translate, settings, GIF, stickers, more), filled with our own tools. */
     private fun buildTools(): List<StripView.Tool> = listOf(
-        StripView.Tool("auto", "smart_toy", "ذاتي", AutoPilot.running),
+        StripView.Tool("voice", "mic", "صوت", voiceActive),
         StripView.Tool("screen", "g_translate", "الشاشة", ScreenTranslateController.active),
         StripView.Tool("typed", "translate", "ترجم", translateBar),
-        StripView.Tool("voice", "mic", "صوت", voiceActive),
+        StripView.Tool("settings", "settings", "إعدادات"),
+        StripView.Tool("auto", "smart_toy", "ذاتي", AutoPilot.running),
         StripView.Tool("ai", "auto_awesome", "تحسين"),
         StripView.Tool("clip", "content_paste", "الحافظة"),
-        StripView.Tool("settings", "settings", "إعدادات"),
     )
 
     private fun refreshStrip() {
@@ -881,7 +882,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     }
 
     override fun onDictation(text: String) {
-        val ic = currentInputConnection ?: return
+        voiceActive = false
+        voiceText = ""
+        val ic = currentInputConnection
+        if (ic == null) { refreshStrip(); return }
         ic.commitText("$text ", 1)
         undoCorrection = null
         spaceAfterSuggestion = false

@@ -91,7 +91,16 @@ object CoreTests {
         val ar = Layouts.arabic(false, false)
         check("arabic row1 starts with ض", ar.rows[0].keys.first().text == "ض")
         check("arabic has 4 rows", ar.rows.size == 4)
-        check("arabic first row has 12 keys", ar.rows[0].keys.size == 12)
+        check("arabic first row has 11 keys like Gboard", ar.rows[0].keys.size == 11)
+        fun letters(r: Int) = ar.rows[r].keys.filter { it.kind == KeyKind.CHAR }.joinToString("") { it.text }
+        check("arabic row 1 reads from the left like Gboard", letters(0) == "ضصثقفغعهخحج") { letters(0) }
+        check("arabic row 2 reads from the left like Gboard", letters(1) == "شسيبلاتنمكط") { letters(1) }
+        check("arabic row 3 reads from the left like Gboard", letters(2) == "ذءؤرىةوزظد") { letters(2) }
+        check("arabic keys are not mirrored", !ar.rtl && !Layouts.arabicAlt().rtl)
+        check("function keys keep their usual sides", ar.rows[3].keys.first().kind == KeyKind.SYMBOLS &&
+            ar.rows[3].keys.last().kind == KeyKind.ENTER && ar.rows[2].keys.last().kind == KeyKind.BACKSPACE)
+        check("lam-alef and hamza-on-ya are one long-press away",
+            ar.rows[1].keys.first { it.text == "ل" }.popups.contains("لا") && ar.rows[1].keys.first { it.text == "ي" }.popups.contains("ئ"))
         check("arabic alef has hamza popups", ar.rows[1].keys.first { it.text == "ا" }.popups.containsAll(listOf("أ", "إ", "آ")))
         check("number row adds a row", Layouts.english(true).rows.size == 5 && Layouts.english(false).rows.size == 4)
         check("indic digits on arabic number row", Layouts.arabic(true, true).rows[0].keys[0].text == "١")

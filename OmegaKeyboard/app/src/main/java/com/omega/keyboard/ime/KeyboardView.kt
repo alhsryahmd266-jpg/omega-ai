@@ -146,17 +146,20 @@ class KeyboardView(ctx: Context) : View(ctx) {
         c.drawColor(t.bg)
         val insetX = dp(2.5f)
         val insetY = dp(4f)
-        val radius = dp(9f)
         for (kr in keys) {
             val k = kr.key
             rf.set(kr.cell.left + insetX, kr.cell.top + insetY, kr.cell.right - insetX, kr.cell.bottom - insetY)
             val isPressed = pressed.contains(kr)
             val base = when (k.kind) {
-                KeyKind.CHAR, KeyKind.SPACE -> t.key
+                KeyKind.CHAR -> if (k.fn) t.keyFn else t.key
+                KeyKind.SPACE, KeyKind.LANG -> t.key
                 KeyKind.ENTER -> t.accent
                 KeyKind.SHIFT -> if (shiftState == 2) t.accent else t.keyFn
                 else -> t.keyFn
             }
+            // Gboard look: the enter key and the page switchers are pills, every other key is a rounded square
+            val pill = k.kind == KeyKind.ENTER || k.kind == KeyKind.SYMBOLS || k.kind == KeyKind.SYMBOLS2 || k.kind == KeyKind.LETTERS
+            val radius = if (pill) rf.height() / 2f else dp(10f)
             // soft shadow under the key
             fill.color = t.shadow
             c.drawRoundRect(rf.left, rf.top + dp(1f), rf.right, rf.bottom + dp(1f), radius, radius, fill)
@@ -179,16 +182,20 @@ class KeyboardView(ctx: Context) : View(ctx) {
         val cy = r.centerY()
         when (k.kind) {
             KeyKind.CHAR -> {
+                val arabic = layout?.lang == "ar"
                 textPaint.color = t.text
                 textPaint.isFakeBoldText = false
-                textPaint.textSize = min(rowHeight * 0.42f, dp(24f))
+                // Arabic letters are drawn bigger (as Gboard does): at the English size they are hard to read
+                textPaint.textSize = if (arabic) min(rowHeight * 0.50f, dp(27f)) else min(rowHeight * 0.42f, dp(24f))
                 val lab = labelOf(k)
                 if (lab.length > 2) textPaint.textSize = min(textPaint.textSize, dp(19f))
                 drawCentered(c, lab, cx, cy)
                 if (k.hint.isNotEmpty()) {
                     hintPaint.color = t.textSub
                     hintPaint.textSize = dp(10f)
-                    c.drawText(k.hint, r.right - dp(7f), r.top + dp(13f), hintPaint)
+                    // Gboard puts the number hints of an Arabic key in its top-left corner
+                    val hx = if (arabic) r.left + dp(7f) else r.right - dp(7f)
+                    c.drawText(k.hint, hx, r.top + dp(13f), hintPaint)
                 }
             }
             KeyKind.SPACE -> {

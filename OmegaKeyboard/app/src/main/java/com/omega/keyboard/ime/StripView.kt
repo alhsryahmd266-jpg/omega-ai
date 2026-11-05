@@ -142,15 +142,19 @@ class StripView(ctx: Context) : View(ctx) {
                 drawIcon(c, "chevron_left", r.centerX(), cy, dp(24f), t.textSub)
                 val left = dp(48f)
                 val slot = (w - left - dp(4f)) / maxOf(1, tools.size)
+                val pw = minOf(dp(44f), slot - dp(2f))
+                val ph = dp(34f)
                 for ((i, tool) in tools.withIndex()) {
                     val l = left + i * slot
                     val rect = addHit(l, 0f, l + slot, h, "t:${tool.id}")
-                    pressBg(c, RectF(rect.left + dp(2f), dp(3f), rect.right - dp(2f), h - dp(3f)), "t:${tool.id}", dp(10f))
-                    val col = if (tool.active) t.accent else t.text
-                    drawIcon(c, tool.icon, rect.centerX(), cy - dp(6f), dp(21f), col)
-                    tp.color = if (tool.active) t.accent else t.textSub
-                    tp.textSize = dp(9.5f)
-                    drawText(c, tool.label, rect.centerX(), cy + dp(14f), slot - dp(2f))
+                    val pill = RectF(rect.centerX() - pw / 2, cy - ph / 2, rect.centerX() + pw / 2, cy + ph / 2)
+                    // Gboard look: icons only. The microphone sits in a round bubble, a running tool in a filled pill.
+                    when {
+                        tool.active -> { fill.color = t.accent; c.drawRoundRect(pill, ph / 2, ph / 2, fill) }
+                        pressedTag == "t:${tool.id}" -> { fill.color = t.keyFn; c.drawRoundRect(pill, ph / 2, ph / 2, fill) }
+                        tool.id == "voice" -> { fill.color = t.key; c.drawCircle(pill.centerX(), cy, ph / 2, fill) }
+                    }
+                    drawIcon(c, tool.icon, rect.centerX(), cy, dp(22f), if (tool.active) t.onAccent else t.text)
                 }
             }
             Mode.TRANSLATE -> {
