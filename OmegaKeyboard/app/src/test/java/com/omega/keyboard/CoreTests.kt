@@ -18,7 +18,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        commands(); matching(); prompts(); screenFilter(); scrolling(); orders(); noise()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -278,35 +278,6 @@ object CoreTests {
         check("no composer and no message -> not sent", !SendVerifier.isSent(nothing, typed))
     }
 
-    private fun commands() {
-        fun p(s: String, auto: Boolean = false) = CommandParser.parse(s, auto)
-        check("call colloquial", p("كلملي أحمد") == VoiceCommand.Call("احمد")) { "${p("كلملي أحمد")}" }
-        check("call with 'كلم'", p("كلم ماما") == VoiceCommand.Call("ماما"))
-        check("call with preposition glued", (p("اتصل بمحمد علي") as VoiceCommand.Call).name == "محمد علي") { "${p("اتصل بمحمد علي")}" }
-        check("call keeps the untouched alternative", (p("اتصل بباسل") as VoiceCommand.Call).alt == "بباسل" && (p("اتصل بباسل") as VoiceCommand.Call).name == "باسل")
-        check("call in english", p("call John Smith") == VoiceCommand.Call("john smith"))
-        check("open app", p("افتح واتساب") == VoiceCommand.OpenApp("واتساب"))
-        check("translate screen", p("ترجم الشاشة") == VoiceCommand.TranslateScreen)
-        check("translate screen 2", p("ترجملي الشاشة دي") == VoiceCommand.TranslateScreen)
-        check("start autopilot", p("شغل الوضع الذاتي") == VoiceCommand.StartAutopilot)
-        check("stop autopilot", p("وقف الوضع الذاتي") == VoiceCommand.StopAutopilot)
-        check("plain stop while chatting", p("وقف", true) == VoiceCommand.StopAutopilot)
-        check("dictation stays dictation", p("أنا رايح المدرسة دلوقتي") == VoiceCommand.Text("أنا رايح المدرسة دلوقتي"))
-        check("free speech is an order while the AI chats", p("قوله إني جاي في الطريق", true) == VoiceCommand.Auto(Order.Say("أنا جاي في الطريق"))) { "${p("قوله إني جاي في الطريق", true)}" }
-        check("clear instructions", p("امسح التعليمات", true) == VoiceCommand.ClearInstructions)
-        check("commands can be disabled", CommandParser.parse("كلم أحمد", false, commandsEnabled = false) == VoiceCommand.Text("كلم أحمد"))
-    }
-
-    private fun matching() {
-        check("name match with hamza", NameMatcher.score("احمد", "أحمد علي") >= 80)
-        check("name match tolerant", NameMatcher.score("محمد", "Mohamed") < 55 && NameMatcher.score("محمد", "محمد حسن") >= 80)
-        check("app alias", NameMatcher.best("واتساب", listOf("Telegram", "WhatsApp", "Chrome"), { it }) == "WhatsApp")
-        check("app alias 2", NameMatcher.best("كروم", listOf("Telegram", "WhatsApp", "Chrome"), { it }) == "Chrome")
-        check("no match below threshold", NameMatcher.best("زززز", listOf("Telegram", "WhatsApp"), { it }) == null)
-        val contacts = listOf("ماما", "أحمد السيد", "أحمد علي", "بابا")
-        check("contact best", NameMatcher.best("احمد علي", contacts, { it }) == "أحمد علي")
-    }
-
     private fun prompts() {
         check("clean: label prefix", LlmPrompts.cleanReply("Me: تمام يا صاحبي") == "تمام يا صاحبي")
         check("clean: quotes and hallucinated next turn", LlmPrompts.cleanReply("\"أيوه جاي\"\nThem: طيب") == "أيوه جاي") { "${LlmPrompts.cleanReply("\"أيوه جاي\"\nThem: طيب")}" }
@@ -324,22 +295,24 @@ object CoreTests {
         val batches = LlmPrompts.batches((1..25).map { it to "x".repeat(100) }, { it.second.length }, maxChars = 800, maxItems = 10)
         check("batches respect limits", batches.all { it.size <= 8 } && batches.sumOf { it.size } == 25) { batches.map { it.size }.toString() }
 
-        val sys = LlmPrompts.replySystem("", listOf("اعتذر عن الموعد"))
-        check("system prompt carries instructions", sys.contains("اعتذر عن الموعد") && sys.contains(LlmPrompts.NO_REPLY))
+        val sys = LlmPrompts.replySystem("عفوي ومختصر")
+        check("system prompt carries my style", sys.contains("عفوي ومختصر"))
+        check("system prompt: I am the owner and every message gets an answer",
+            sys.contains("You are me") && sys.contains("Always answer the latest message") && !sys.contains(LlmPrompts.NO_REPLY)) { sys }
         val msgs = listOf(ChatMessage("Hi", Side.THEM, 0, 1, 0), ChatMessage("Where are you?", Side.THEM, 2, 3, 1), ChatMessage("home", Side.ME, 4, 5, 2))
         val user = LlmPrompts.replyUser(msgs)
         check("consecutive messages are merged into one turn", user.contains("Them: Hi\nWhere are you?") && user.contains("Me: home")) { user }
-        val compose = LlmPrompts.composeUser(msgs, "اسأله هو جاي ولا لأ")
-        check("compose prompt carries the order as data", compose.contains("اسأله هو جاي ولا لأ") && compose.contains("not the text to send")) { compose }
         check("reply prompt asks for the next message", LlmPrompts.replyUser(msgs).trimEnd().endsWith("Write my next message."))
         val longMsg = "سؤال " + "كلام ".repeat(200) + "هل انت جاي؟"
         val longPrompt = LlmPrompts.replyUser(listOf(ChatMessage(longMsg, Side.THEM, 0, 1, 0)))
         check("a long message keeps its beginning and its end", longPrompt.contains("سؤال") && longPrompt.contains("هل انت جاي؟")) { longPrompt.takeLast(120) }
-        check("echo: the order handed back", LlmPrompts.echoes("اسأله هو جاي ولا لأ", "اسأله هو جاي ولا لأ"))
-        check("echo: starts with a command word", LlmPrompts.echoes("قول له إنك جاي", "اسأله هو جاي ولا لأ"))
-        check("no echo: the wording we want", !LlmPrompts.echoes("هو جاي ولا لأ؟", "اسأله هو جاي ولا لأ"))
-        check("no echo: an ordinary reply", !LlmPrompts.echoes("أيوه جاي كمان شوية", "اسأله هو جاي ولا لأ"))
         check("translate prompt format", LlmPrompts.translateUser(listOf(1 to "a\nb", 2 to "c")) == "1|a b\n2|c")
+        val ts = LlmPrompts.translateSystem("Arabic", "English")
+        check("translation prompt: data, not instructions, source and target named",
+            ts.contains("from English into Arabic") && ts.contains("DATA to translate") && ts.contains("never answer them")) { ts }
+        check("typed translation prompt: literal engine", LlmPrompts.typedTranslateSystem("English", "Arabic").contains("from Arabic into English"))
+        val small = LlmPrompts.batches((1..20).map { it to "x".repeat(80) }, { it.second.length })
+        check("model batches are small", small.all { it.size <= 6 && it.sumOf { p -> p.second.length + 6 } <= 500 + 86 } && small.sumOf { it.size } == 20) { small.map { it.size }.toString() }
         check("clean translation unquotes", LlmPrompts.cleanTranslation("\"Hello\"") == "Hello")
     }
 
@@ -385,99 +358,13 @@ object CoreTests {
         moved.add("Hi", 60, 330, 520, 400)                                          // same text, other place
         check("signature notices a scroll", ScrollLogic.signature(moved.screen(), list) != sigA)
 
-        // an order works in a brand-new, empty chat; without one there is nothing to answer
+        // a forced reply works in a brand-new, empty chat; without it there is nothing to answer
         val empty = B()
         empty.add("Message", 100, 2150, 900, 2300, id = "com.whatsapp:id/entry", cls = "android.widget.EditText", editable = true, hint = true)
         val parsed = ChatParser.parse(empty.screen(), Align.RIGHT)
-        check("order in an empty chat is carried out", ReplyPolicy.decide(parsed, null, true).reply)
-        check("no order, no messages: nothing to do", !ReplyPolicy.decide(parsed, null, false).reply)
-        check("order needs a composer", !ReplyPolicy.decide(ChatParser.parse(B().screen(), Align.RIGHT), null, true).reply)
-
-        // an order's text never reaches the model as something to repeat; it is carried out
-        check("the order text is data for the model", LlmPrompts.composeUser(emptyList(), "قول له إني جاي بعد ساعة").contains("قول له إني جاي بعد ساعة"))
-    }
-
-    /** What the user says to the autonomous mode is understood and carried out, never typed as it is. */
-    private fun orders() {
-        fun o(s: String) = OrderParser.parse(s)
-        fun al(s: String) = OrderParser.parse(s, always = true)
-
-        // follow the conversation
-        check("follow: تابع المحادثة", o("تابع المحادثة") == Order.Follow) { "${o("تابع المحادثة")}" }
-        check("follow: with more words", o("تابع المحادثة ورد عليها") == Order.Follow)
-        check("follow: كمل", o("كمل") == Order.Follow)
-        check("follow: always-on mic, with a chat word", al("تابع المحادثة") == Order.Follow && al("كمل معاه") == Order.Follow)
-        check("follow: always-on mic ignores 'كمل الاكل'", al("كمل الاكل") is Order.NotAnOrder) { "${al("كمل الاكل")}" }
-        check("follow: stay with him", o("خليك معاه") == Order.Follow && o("فضل معاه") == Order.Follow && o("استمر في الرد") == Order.Follow) { "${o("خليك معاه")} ${o("فضل معاه")} ${o("استمر في الرد")}" }
-
-        // answer now
-        check("reply: رد عليه", o("رد عليه") == Order.Reply) { "${o("رد عليه")}" }
-        check("reply: جاوبه دلوقتي", o("جاوبه دلوقتي") == Order.Reply)
-        check("reply with a style", o("رد بأسلوب رسمي") == Order.Style("رد بأسلوب رسمي", replyNow = true)) { "${o("رد بأسلوب رسمي")}" }
-        check("reply with content is sent as it is", o("رد عليه إني مشغول") == Order.Say("أنا مشغول")) { "${o("رد عليه إني مشغول")}" }
-        check("reply with content, no 'عليه'", o("رد بإني مشغول") == Order.Say("أنا مشغول")) { "${o("رد بإني مشغول")}" }
-
-        // say this
-        check("say: قول له إني جاي بعد ساعة", o("قول له إني جاي بعد ساعة") == Order.Say("أنا جاي بعد ساعة")) { "${o("قول له إني جاي بعد ساعة")}" }
-        check("say: قوله", o("قوله اني جاي في الطريق") == Order.Say("أنا جاي في الطريق"))
-        check("say: colloquial قوللو", o("قوللو اهلا") == Order.Say("اهلا"))
-        check("say: other spellings", o("قل له اهلا") == Order.Say("اهلا") && o("قله اهلا") == Order.Say("اهلا") && o("قللو اهلا") == Order.Say("اهلا"))
-        check("say: the sentence from the video", o("قول له ان كلود هو ذكاء اصطناعي وممكن يعمل أخطاء") == Order.Say("كلود هو ذكاء اصطناعي وممكن يعمل أخطاء")) { "${o("قول له ان كلود هو ذكاء اصطناعي وممكن يعمل أخطاء")}" }
-        check("say keeps إن شاء الله", o("قول له إن شاء الله جاي") == Order.Say("إن شاء الله جاي")) { "${o("قول له إن شاء الله جاي")}" }
-        check("say: you-form", o("قول له إنك مش جاي") == Order.Say("إنت مش جاي")) { "${o("قول له إنك مش جاي")}" }
-        check("say: pronouns later in the sentence", o("قول له إني جاي وإنك تستناني") == Order.Say("أنا جاي وإنت تستناني")) { "${o("قول له إني جاي وإنك تستناني")}" }
-        check("say: ابعتله", o("ابعتله صباح الخير") == Order.Say("صباح الخير"))
-        check("say: bare قول", o("قول اهلا") == Order.Say("اهلا"))
-        check("say: english", o("tell him I'm on my way") == Order.Say("I'm on my way")) { "${o("tell him I'm on my way")}" }
-        check("say: english with that", o("tell her that I will be late") == Order.Say("I will be late")) { "${o("tell her that I will be late")}" }
-        check("say: numbers stay as spoken", o("قول له هوصل بعد 45 دقيقة") == Order.Say("هوصل بعد 45 دقيقة"))
-        check("say needs a message", o("قول له") is Order.Incomplete && o("قوله") is Order.Incomplete)
-        check("'tell me' is not an order to send", o("قول لي الساعة كام") !is Order.Say)
-
-        // wait
-        check("pause: استنى", o("استنى") == Order.Pause)
-        check("pause: وقف الردود", o("وقف الردود") == Order.Pause)
-        check("pause: بلاش ترد", o("بلاش ترد دلوقتي") == Order.Pause) { "${o("بلاش ترد دلوقتي")}" }
-        check("pause: always-on mic, short only", al("استنى") == Order.Pause && al("استنى يا محمد عايز اكلمك في موضوع") is Order.NotAnOrder)
-
-        // rules for every reply
-        check("style: خليك رسمي", o("خليك رسمي") == Order.Style("خليك رسمي"))
-        check("style: from now on", o("من دلوقتي كلمه بأسلوب رسمي") == Order.Style("من دلوقتي كلمه بأسلوب رسمي")) { "${o("من دلوقتي كلمه بأسلوب رسمي")}" }
-        check("style: don't mention", o("بلاش تذكر الموضوع ده") is Order.Style)
-        check("style: 'خلي بالك' is just talk", al("خلي بالك من نفسك") is Order.NotAnOrder)
-        check("style: talk in the dialect", o("اتكلم بالمصري") == Order.Style("اتكلم بالمصري"))
-
-        // the model words it
-        check("compose: اسأله", o("اسأله هو جاي ولا لأ") == Order.Compose("اسأله هو جاي ولا لأ")) { "${o("اسأله هو جاي ولا لأ")}" }
-        check("compose: اطلب منه", o("اطلب منه يجيب العربية") == Order.Compose("اطلب منه يجيب العربية"))
-        check("fallback wording: ask", OrderParser.composeFallback("اسأله هو جاي ولا لأ") == "هو جاي ولا لأ؟") { "${OrderParser.composeFallback("اسأله هو جاي ولا لأ")}" }
-        check("fallback wording: thank", OrderParser.composeFallback("اشكره") == "شكرًا ليك" && OrderParser.composeFallback("اشكره على الهدية") == "شكرًا على الهدية") { "${OrderParser.composeFallback("اشكره على الهدية")}" }
-        check("fallback wording: nothing sensible", OrderParser.composeFallback("اعمل حاجة") == null)
-
-        // wake word, polite words
-        check("wake word makes any sentence an order", al("أوميجا خليك مرح") == Order.Style("خليك مرح")) { "${al("أوميجا خليك مرح")}" }
-        check("wake word with the old chatter", al("يا أوميجا الجو حلو النهارده") == Order.Style("الجو حلو النهارده")) { "${al("يا أوميجا الجو حلو النهارده")}" }
-        check("filler words do not matter", o("طيب يلا قول له تمام") == Order.Say("تمام") && o("لو سمحت تابع المحادثة") == Order.Follow && o("من فضلك استنى") == Order.Pause)
-        check("stripWake", OrderParser.stripWake("أوميجا قول له تمام") == ("قول له تمام" to true) && OrderParser.stripWake("قول له تمام") == ("قول له تمام" to false))
-
-        // the open microphone hears other people: they never turn into messages
-        check("always: chatter is ignored", al("انا رايح السوق دلوقتي") is Order.NotAnOrder && al("تعالى كل") is Order.NotAnOrder)
-        check("always: a bare 'قول' is ignored, 'قول له' works", al("قول يا رب") is Order.NotAnOrder && al("قول له اهلا") == Order.Say("اهلا")) { "${al("قول يا رب")} ${al("قول له اهلا")}" }
-        check("always: generic 'رد' talk is ignored", al("رد عليا بسرعه") is Order.NotAnOrder) { "${al("رد عليا بسرعه")}" }
-        check("always: empty speech", al("") is Order.NotAnOrder && al("أوميجا") is Order.NotAnOrder)
-        check("push-to-talk: other talk is kept as a note", o("الجو حلو النهارده") == Order.Style("الجو حلو النهارده"))
-
-        // through the command parser while the mode runs
-        fun p(s: String, always: Boolean = false) = CommandParser.parse(s, true, true, always)
-        check("running: 'قول له' is an order", p("قول له إني جاي بعد ساعة") == VoiceCommand.Auto(Order.Say("أنا جاي بعد ساعة"))) { "${p("قول له إني جاي بعد ساعة")}" }
-        check("running: 'تابع المحادثة' is an order", p("تابع المحادثة") == VoiceCommand.Auto(Order.Follow))
-        check("running: 'اطلب منه' is an order, not a call", p("اطلب منه يجيب العربية") is VoiceCommand.Auto) { "${p("اطلب منه يجيب العربية")}" }
-        check("running, always-on: a call needs the wake word", p("كلم أحمد", always = true) is VoiceCommand.Auto && p("أوميجا كلم أحمد", always = true) == VoiceCommand.Call("احمد")) { "${p("كلم أحمد", true)} ${p("أوميجا كلم أحمد", true)}" }
-        check("running: stop works by voice", p("وقف") == VoiceCommand.StopAutopilot && p("وقف الوضع الذاتي", always = true) == VoiceCommand.StopAutopilot)
-        check("stop works even with voice commands switched off", CommandParser.parse("وقف", true, commandsEnabled = false) == VoiceCommand.StopAutopilot)
-        check("not running: an order phrase is plain dictation", CommandParser.parse("قول له إني جاي", false) == VoiceCommand.Text("قول له إني جاي"))
-        check("not running: 'اطلب منه' is dictation, not a call", CommandParser.parse("اطلب منه يجيب العربية", false) == VoiceCommand.Text("اطلب منه يجيب العربية"))
-        check("order parse is not confused by the wake word alone", p("أوميجا", always = true) == VoiceCommand.Auto(Order.NotAnOrder("أوميجا"))) { "${p("أوميجا", true)}" }
+        check("forced reply in an empty chat is carried out", ReplyPolicy.decide(parsed, null, true).reply)
+        check("not forced, no messages: nothing to do", !ReplyPolicy.decide(parsed, null, false).reply)
+        check("forced reply needs a composer", !ReplyPolicy.decide(ChatParser.parse(B().screen(), Align.RIGHT), null, true).reply)
     }
 
     /** Small print and full-width paragraphs (AI chat apps) must not be read as somebody's message. */
@@ -542,5 +429,95 @@ object CoreTests {
         check("deepest duplicate wins", items.last().node.depth == 3 && parent == 6)
         val toEn = ScreenFilter.translatable(b.screen(), "en").map { it.text }
         check("arabic is translatable when the target is English", toEn.contains("إعدادات"))
+
+        // a container that shows merged text and also holds the texts: the children are translated, the container is not
+        val c = B(pkg = "com.example.app")
+        c.add("Title Subtitle 3 min", 60, 300, 1000, 500, depth = 2, childCount = 2)
+        c.add("Title", 70, 310, 500, 360, depth = 3)
+        c.add("Subtitle", 70, 400, 500, 450, depth = 3)
+        val ct = ScreenFilter.translatable(c.screen(), "ar").map { it.text }
+        check("a container's merged text is dropped in favour of its children", ct == listOf("Title", "Subtitle")) { "$ct" }
+
+        // the content description only counts for a small plain label: never a big container or a picture
+        val d = B(pkg = "com.example.app")
+        d.add("", 60, 300, 1000, 1500, desc = "Conversation with John", childCount = 5)
+        d.add("", 60, 1600, 300, 1680, desc = "Profile photo", cls = "android.widget.ImageView")
+        d.add("", 60, 1700, 500, 1760, desc = "Add to cart")
+        val dt = ScreenFilter.translatable(d.screen(), "ar").map { it.text }
+        check("only a small plain label is translated through its description", dt == listOf("Add to cart")) { "$dt" }
+    }
+
+    /** Which language a text is in, and whether an answer can be believed: the two things that decide if a translation looks right. */
+    private fun translation() {
+        fun src(t: String, d: String?, dom: String = "en") = TranslateRules.sourceLanguage(t, d, dom)
+        check("script: chinese / japanese / korean / hebrew / arabic",
+            src("你好，今天怎么样", null) == "zh" && src("こんにちは、元気ですか", null) == "ja" && src("안녕하세요", null) == "ko" &&
+                src("שלום מה שלומך", null) == "he" && src("مرحبا كيف حالك", null) == "ar")
+        check("arabic script: persian and urdu letters are told apart", src("چطور هستید؟ گفتگو", null) == "fa" && src("آپ کیسے ہیں", null) == "ur") {
+            "${src("چطور هستید؟ گفتگو", null)} ${src("آپ کیسے ہیں", null)}"
+        }
+        check("cyrillic: ukrainian only when it is long enough to be sure", src("Привіт, як справи в тебе сьогодні?", "uk") == "uk" && src("Привет", "uk") == "ru")
+        check("a short interface word is English wherever it is", src("OK", "fr", "es") == "en" && src("Settings", "de", "fr") == "en")
+        check("a short unknown word takes the language of the screen", src("Hola", null, "es") == "es" && src("Hola", "und", "es") == "es")
+        check("a long text is recognised on its own", src("Gracias por todo, nos vemos mañana por la tarde", "es", "en") == "es")
+        check("a short text is never trusted to the recogniser", src("Ver más", "pt", "es") == "es")
+        check("transliterated text is not a language any engine knows", TranslateRules.normalizeCode("ar-Latn") == null && src("ezayak ya basha", "ar-Latn", "en") == "en")
+        check("language codes are normalised", TranslateRules.normalizeCode("fil") == "tl" && TranslateRules.normalizeCode("iw") == "he" &&
+            TranslateRules.normalizeCode("zh-CN") == "zh" && TranslateRules.normalizeCode("pt-BR") == "pt" && TranslateRules.normalizeCode("und") == null &&
+            TranslateRules.normalizeCode(null) == null)
+
+        val texts = listOf("Bonjour tout le monde, comment ça va aujourd'hui", "Merci beaucoup pour votre aide", "OK", "Menu")
+        check("the screen's language is what its long texts say", TranslateRules.latinDominant(texts, listOf("fr", "fr", null, null)) == "fr")
+        check("nothing to go on: English", TranslateRules.latinDominant(listOf("OK", "Menu"), listOf(null, null)) == "en")
+
+        fun v(s: String, o: String, t: String = "ar") = TranslateRules.check(s, o, t)
+        val ok = TranslateRules.Verdict.OK
+        val bad = TranslateRules.Verdict.BAD
+        val same = TranslateRules.Verdict.UNCHANGED
+        check("a real translation passes", v("Hello world, how are you today?", "مرحبا بالعالم، كيف حالك اليوم؟") == ok && v("Home", "الرئيسية") == ok && v("John", "جون") == ok)
+        check("an unchanged text is nothing to paint", v("iPhone 15", "iPhone 15") == same && v("Hello!", "hello") == same)
+        check("an empty answer is rejected", v("Hello", "  ") == bad)
+        check("prompt leftovers are rejected", v("Good morning", "Translation: صباح الخير") == bad && v("Good morning", "1|صباح الخير") == bad)
+        check("an answer in the wrong script is rejected", v("Good morning my friend", "Buenos dias mi amigo") == bad)
+        check("an invented, much longer answer is rejected", v("Hi", "مرحبا ".repeat(40)) == bad)
+        check("a one-word answer to a long text is rejected", v("This is a fairly long sentence that needs a long translation", "نعم") == bad)
+        check("only Arabic targets need Arabic letters", v("Bonjour", "Hello", "en") == ok)
+        check("mixed text that is mostly Arabic is left alone", v("اهلا Hello", "اهلا Hello") == same)
+    }
+
+    /** The decisions behind "press once, it replies and sends": the box's prompt is not a draft, the send button is found, the prompt is "me". */
+    private fun autopilotRules() {
+        check("WhatsApp's prompt is not a draft", !Matchers.isDraft("مراسلة", false) && !Matchers.isDraft("\u200Fمراسلة", false, hint = "مراسلة") &&
+            !Matchers.isDraft("Message", false, hint = "Message") && !Matchers.isDraft("", false))
+        check("a real draft is a draft", Matchers.isDraft("هجيلك بعد شوية", false) && Matchers.isDraft("ok see you", false) && Matchers.isDraft("العميل محتاج مراسلة ضرورية جدا", false))
+        check("while the prompt is showing nothing is a draft", !Matchers.isDraft("anything", true))
+
+        // first press, WhatsApp with its prompt handed over as text: it must reply at once
+        val w = B()
+        w.add("Hi how are you?", 60, 430, 520, 500)
+        w.nodes.add(UiNode(w.nodes.size, -1, 2, "مراسلة", "", "com.whatsapp:id/entry", "android.widget.EditText", "com.whatsapp", 150, 2190, 880, 2300,
+            editable = true, clickable = true, actionable = true, hint = "مراسلة"))
+        val wp = ChatParser.parse(w.screen())
+        val wd = ReplyPolicy.decide(wp, null, force = false, unknownAsThem = true)
+        val inp = wp.input!!
+        check("the first press replies although the box shows its prompt as text", wd.reply && !Matchers.isDraft(inp.text, inp.showingHint, inp.desc, inp.hint)) { wd.toString() }
+
+        // a button that changes once there is text in the box is the send button, whatever it is called
+        val before = B(pkg = "com.example.chat")
+        before.add("", 120, 2190, 880, 2300, cls = "android.widget.EditText", editable = true, hint = true)
+        before.add("", 930, 2200, 1040, 2290, desc = "Voice message", clickable = true)
+        val after = B(pkg = "com.example.chat")
+        after.add("see you", 120, 2190, 880, 2300, cls = "android.widget.EditText", editable = true)
+        after.add("", 930, 2200, 1040, 2290, desc = "Ok", clickable = true)
+        val aIn = ChatParser.findInput(after.screen())!!
+        check("without the before-picture an odd button name is not recognised", SendFinder.candidates(after.screen(), aIn).isEmpty())
+        val ch = SendFinder.candidates(after.screen(), aIn, before.screen())
+        check("the button that changed is the send button", ch.firstOrNull()?.node?.desc == "Ok" && ch.first().why.contains("changed")) { ch.toString() }
+
+        // a button that was there before and did not change is not "changed" (the attach button stays what it was)
+        val keep = B(pkg = "com.example.chat")
+        keep.add("", 120, 2190, 880, 2300, cls = "android.widget.EditText", editable = true, hint = true)
+        keep.add("", 930, 2200, 1040, 2290, desc = "Ok", clickable = true)
+        check("an unchanged button is not promoted", SendFinder.candidates(after.screen(), aIn, keep.screen()).isEmpty())
     }
 }

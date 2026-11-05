@@ -66,6 +66,15 @@ object MlKit {
         )
     }
 
+    /** The packs this pair still has to download (English is the pivot of every pair that does not include it). */
+    fun missingPacks(src: String, dst: String): List<String> {
+        val have = downloaded()
+        val need = LinkedHashSet<String>()
+        need.add(src.lowercase()); need.add(dst.lowercase())
+        if (!src.equals("en", true) && !dst.equals("en", true)) need.add("en")
+        return need.filter { TranslateLanguage.fromLanguageTag(it) != null && it !in have }
+    }
+
     /** Downloads the language packs for this pair if they are not on the phone yet (needs internet once). */
     fun prepare(src: String, dst: String, wifiOnly: Boolean = false, timeoutSec: Long = 240) {
         val s = TranslateLanguage.fromLanguageTag(src) ?: throw IllegalArgumentException("لغة مش مدعومة: $src")

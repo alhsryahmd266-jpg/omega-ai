@@ -34,9 +34,10 @@ object SendAction {
     private fun nap(ms: Long) { try { Thread.sleep(ms) } catch (_: InterruptedException) {} }
 
     fun sendText(svc: ScreenAgentService, text: String, allowBlind: Boolean = true): Result {
-        // 1) the composer
+        // 1) the composer (and a picture of the screen before there is any text in it: the send button is the one that changes)
         var snap = ScreenReader.read(svc) ?: return fail("مش قادر أقرا الشاشة")
-        val input0 = ChatParser.findInput(snap.screen)
+        val before = snap.screen
+        val input0 = ChatParser.findInput(before)
         if (input0 == null) { snap.release(); return fail("مش لاقي خانة الكتابة") }
         val node = snap.node(input0.id)
         if (node == null) { snap.release(); return fail("خانة الكتابة اختفت") }
@@ -48,7 +49,7 @@ object SendAction {
         log("text placed via $placed")
         nap(420)  // the app swaps the microphone for the send button
 
-        // 3) send
+        // 3) send, by every way there is
         var lastDetail = "مفيش زر إرسال ظاهر"
         for (attempt in 1..3) {
             snap = ScreenReader.read(svc) ?: return fail("الشاشة اختفت قبل الإرسال")
@@ -58,31 +59,39 @@ object SendAction {
             if (attempt > 1 && SendVerifier.isSent(screen, text)) { snap.release(); return Result(true, "already-sent", "") }
             if (SendVerifier.fieldState(screen, text) == SendState.CLEARED && attempt > 1) { snap.release(); return Result(true, "cleared", "") }
 
-            val cands = SendFinder.candidates(screen, input)
+            // (a) the buttons that look like "send", best first
+            val cands = SendFinder.candidates(screen, input, before)
             log("attempt $attempt candidates=" + cands.joinToString { "${it.node.shortId.ifEmpty { it.node.label }}:${it.score}:${it.why}" })
-
-            for (c in cands.take(2)) {
+            for (c in cands.take(3)) {
                 val how = tap(svc, snap, c.node)
                 log("tap ${c.why} -> $how")
                 if (how != null && waitSent(svc, text)) { snap.release(); return Result(true, "$how(${c.why})", "") }
                 lastDetail = "ضغطت على زر الإرسال والرسالة ما اتبعتتش"
             }
+            if (cands.isEmpty()) lastDetail = "مش لاقي زر الإرسال في التطبيق ده"
 
-            // no usable button: try the keyboard's Enter action, then a touch where the button usually is
-            if (cands.isEmpty()) {
-                val inputNode = snap.node(input.id)
-                if (Build.VERSION.SDK_INT >= 30 && inputNode != null) {
-                    val enter = inputNode.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
-                    log("ime-enter -> $enter")
-                    if (enter && waitSent(svc, text)) { snap.release(); return Result(true, "ime-enter", "") }
-                }
-                val x = if (screen.rtl) input.left - screen.dp(24) else input.right + screen.dp(24)
-                if (allowBlind && x in 1 until screen.width) {
-                    val g = gesture(svc, x, input.centerY)
-                    log("blind tap at $x,${input.centerY} -> $g")
+            // (b) the "send" key of the box (accessibility Enter, then our own keyboard's send action)
+            val inputNode = snap.node(input.id)
+            if (Build.VERSION.SDK_INT >= 30 && inputNode != null) {
+                val enter = inputNode.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                log("ime-enter -> $enter")
+                if (enter && waitSent(svc, text)) { snap.release(); return Result(true, "ime-enter", "") }
+            }
+            val kb = try { OmegaImeService.instance?.pressSend() == true } catch (t: Throwable) { false }
+            log("keyboard send -> $kb")
+            if (kb && waitSent(svc, text)) { snap.release(); return Result(true, "keyboard-send", "") }
+
+            // (c) a touch where the button usually is: the end of the box's row, then the end of the row under it
+            if (allowBlind) {
+                val spots = ArrayList<Pair<Int, Int>>()
+                spots.add((if (screen.rtl) input.left - screen.dp(24) else input.right + screen.dp(24)) to input.centerY)
+                spots.add((if (screen.rtl) screen.dp(36) else screen.width - screen.dp(36)) to (input.bottom + screen.dp(36)))
+                for ((x, y) in spots) {
+                    if (x !in 1 until screen.width || y !in 1 until screen.height) continue
+                    val g = gesture(svc, x, y)
+                    log("blind tap at $x,$y -> $g")
                     if (g && waitSent(svc, text)) { snap.release(); return Result(true, "blind-tap", "") }
                 }
-                lastDetail = "مش لاقي زر الإرسال في التطبيق ده"
             }
             snap.release()
             nap(500)

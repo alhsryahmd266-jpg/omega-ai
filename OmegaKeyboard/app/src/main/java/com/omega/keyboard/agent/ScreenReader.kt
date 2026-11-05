@@ -92,6 +92,7 @@ object ScreenReader {
                         childCount = n.childCount,
                         scrollDown = dir and SCROLL_DOWN != 0,
                         scrollUp = dir and SCROLL_UP != 0,
+                        hint = hintOf(n),
                     )
                 )
                 live.add(n)
@@ -109,6 +110,13 @@ object ScreenReader {
         val rtl = service.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
         val screen = Screen(activePkg.ifEmpty { out.first().pkg }, dm.widthPixels, dm.heightPixels, dm.density, out, rtl)
         return Snapshot(screen, live)
+    }
+
+    /** The prompt of a text box ("Message"), only asked of editable nodes (Android 8+). */
+    private fun hintOf(n: AccessibilityNodeInfo): String = try {
+        if (Build.VERSION.SDK_INT >= 26 && n.isEditable) n.hintText?.toString().orEmpty() else ""
+    } catch (_: Throwable) {
+        ""
     }
 
     private const val SCROLL_DOWN = 1

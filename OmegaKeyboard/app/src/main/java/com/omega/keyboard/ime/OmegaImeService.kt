@@ -930,6 +930,27 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         return ok
     }
 
+    /**
+     * Presses the "send" action of the focused box (the framework turns it into an Enter key when the app has no send
+     * action of its own). True when it was delivered; whether the app sent anything is for the caller to check.
+     */
+    fun pressSend(): Boolean {
+        if (Looper.myLooper() == Looper.getMainLooper()) return sendNow()
+        val latch = CountDownLatch(1)
+        var ok = false
+        main.post {
+            ok = try { sendNow() } catch (t: Throwable) { AppLog.e("ime", "send failed", t); false }
+            latch.countDown()
+        }
+        latch.await(3, TimeUnit.SECONDS)
+        return ok
+    }
+
+    private fun sendNow(): Boolean {
+        val ic = currentInputConnection ?: return false
+        return ic.performEditorAction(EditorInfo.IME_ACTION_SEND)
+    }
+
     private fun applyReplacement(original: String, result: String, wasSelection: Boolean) {
         val ic = currentInputConnection ?: return
         if (wasSelection) ic.commitText(result, 1) else replaceNow(result)

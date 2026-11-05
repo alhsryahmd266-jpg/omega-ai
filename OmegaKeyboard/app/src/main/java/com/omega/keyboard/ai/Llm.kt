@@ -52,6 +52,8 @@ object Llm {
         private set
     @Volatile var lastLoadMs = 0L
         private set
+    /** set while the autonomous mode runs: the model then stays in memory, however long nobody wrote to it */
+    @Volatile var keepLoaded = false
 
     @Volatile private var lastUsed = 0L
     @Volatile private var loadedKey = ""
@@ -93,7 +95,7 @@ object Llm {
             val a = app ?: return
             if (!loaded) return
             val minutes = Prefs.get(a).idleMinutes
-            if (minutes > 0 && pending.isEmpty() && SystemClock.elapsedRealtime() - lastUsed > minutes * 60_000L) {
+            if (!keepLoaded && minutes > 0 && pending.isEmpty() && SystemClock.elapsedRealtime() - lastUsed > minutes * 60_000L) {
                 Thread { unload() }.start()
             } else {
                 main.postDelayed(this, 30_000)

@@ -20,7 +20,8 @@ object SendFinder {
         "voice", "record", "microphone", "mic ", "audio", "صوت", "تسجيل", "ميكروفون", "hold to", "اضغط مع الاستمرار",
         "attach", "إرفاق", "ارفاق", "camera", "كاميرا", "emoji", "إيموجي", "ايموجي", "sticker", "ملصق", "gif",
         "gallery", "معرض", "photo", "صورة", "video", "فيديو", "location", "الموقع", "contact", "جهة اتصال", "gift",
-        "more", "المزيد", "menu", "قائمة", "keyboard", "لوحة المفاتيح", "call", "اتصال", "add", "إضافة", "plus"
+        "more", "المزيد", "menu", "قائمة", "keyboard", "لوحة المفاتيح", "call", "اتصال", "add", "إضافة", "plus",
+        "clear", "مسح", "delete", "حذف", "cancel", "إلغاء", "الغاء", "close", "إغلاق", "اغلاق", "dismiss", "discard", "format", "تنسيق", "translate", "ترجم"
     )
     private val NEGATIVE_IDS = listOf(
         "voice", "record", "mic", "audio", "attach", "camera", "emoji", "sticker", "gif", "gallery", "entry", "plus", "add_", "more"
@@ -28,10 +29,25 @@ object SendFinder {
 
     private fun norm(s: String) = s.lowercase()
 
-    fun candidates(screen: Screen, input: UiNode): List<Candidate> {
+    /** what a button is, not where it is (the composer may grow a line and push everything up) */
+    private fun sig(n: UiNode): String =
+        if (n.label.isBlank() && n.shortId.isBlank()) "pos:${n.cls}:${n.centerX / 12},${n.centerY / 12}"
+        else "${n.shortId}|${norm(n.label)}|${n.enabled}"
+
+    /**
+     * The buttons that could be "send", best first.
+     * [before]: the same screen before the reply was typed. A button that appeared or changed once there was text in the
+     * box (the microphone turning into an arrow, a greyed arrow lighting up) is the send button whatever it is called
+     * and whatever language the app speaks.
+     */
+    fun candidates(screen: Screen, input: UiNode, before: Screen? = null): List<Candidate> {
         val out = ArrayList<Candidate>()
         val band = maxOf(input.height, screen.dp(44))
         val endsRight = !screen.rtl
+        // the row of the text box, and the rows right under it (a multi-line composer keeps its buttons below the text)
+        val zoneTop = input.top - screen.dp(28)
+        val zoneBottom = minOf(screen.height, input.bottom + screen.dp(150))
+        val known: Set<String>? = before?.nodes?.filter { it.visible && it.actionable }?.map { sig(it) }?.toSet()
         val unlabeled = ArrayList<UiNode>()
 
         for (n in screen.nodes) {
@@ -39,7 +55,8 @@ object SendFinder {
             if (input.contains(n) && n.id != input.id && n.width >= input.width * 0.8) continue   // the field's own wrapper
             if (n.width < screen.dp(20) || n.height < screen.dp(20)) continue
             if (n.width > screen.dp(160) || n.height > screen.dp(160)) continue
-            if (abs(n.centerY - input.centerY) > band * 1.2 + screen.dp(24)) continue
+            val inRow = abs(n.centerY - input.centerY) <= band * 1.2 + screen.dp(24)
+            if (!inRow && n.centerY !in zoneTop..zoneBottom) continue
 
             val label = norm(n.label)
             val id = n.shortId
@@ -47,15 +64,17 @@ object SendFinder {
 
             val idHit = id.contains("send") && !id.contains("sending")
             val labelHit = SEND_WORDS.any { label == it || label.startsWith(it) || label.contains(" $it") || label.contains("$it ") || (it.length > 3 && label.contains(it)) }
+            val changed = known != null && n.actionable && sig(n) !in known
 
-            if (!idHit && !labelHit) {
-                if (label.isBlank() && n.actionable && n.width in screen.dp(26)..screen.dp(110)) unlabeled.add(n)
+            if (!idHit && !labelHit && !changed) {
+                if (inRow && label.isBlank() && n.actionable && n.width in screen.dp(26)..screen.dp(110)) unlabeled.add(n)
                 continue
             }
             var s = 0
             val why = ArrayList<String>()
             if (idHit) { s += 90; why.add("id") }
             if (labelHit) { s += 80; why.add("label") }
+            if (changed) { s += if (idHit || labelHit) 15 else 60; why.add("changed") }
             if (n.actionable) s += 10 else s -= 25
             val gap = when {
                 n.left >= input.right -> n.left - input.right
@@ -64,13 +83,15 @@ object SendFinder {
             }
             if (gap <= screen.dp(96)) { s += 15; why.add("adjacent") }
             if (n.width in screen.dp(28)..screen.dp(110)) s += 5
+            // the send button sits at the end of the row (right, or left in a right-to-left app)
+            if (if (endsRight) n.centerX >= screen.width * 0.55 else n.centerX <= screen.width * 0.45) s += 5
             out.add(Candidate(n, s, why.joinToString("+")))
         }
 
         // last resort: an unlabeled button on the far side of the input (icon-only send buttons)
         val endSide = unlabeled.filter { if (endsRight) it.centerX >= input.right - screen.dp(8) else it.centerX <= input.left + screen.dp(8) }
         val pick = if (endsRight) endSide.maxByOrNull { it.centerX } else endSide.minByOrNull { it.centerX }
-        if (pick != null) out.add(Candidate(pick, 55, "unlabeled-end"))
+        if (pick != null && out.none { it.node.id == pick.id }) out.add(Candidate(pick, 55, "unlabeled-end"))
 
         return out.filter { it.score >= 40 }.sortedByDescending { it.score }
     }

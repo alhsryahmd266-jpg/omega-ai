@@ -151,9 +151,7 @@ class SettingsActivity : BaseActivity() {
                 prefs.apDelayMaxSec = it
                 if (prefs.apDelayMinSec > it) prefs.apDelayMinSec = it
             },
-            UiKit.seekRow(this, p, "أقصى عدد ردود في الجلسة", 1, 500, prefs.apMaxReplies, { "$it" }) { prefs.apMaxReplies = it },
             sw("إرسال تلقائي", "لو مقفول: النموذج بيكتب الرد في الخانة وإنت اللي تبعته", prefs.apAutoSend) { prefs.apAutoSend = it },
-            sw("سماع الأوامر الصوتية", "الميكروفون يفضل سامعك وإنت في الوضع الذاتي: \"قول له إني جاي\"، \"تابع المحادثة\"، \"استنى\"، \"رد عليه\"، \"خليك رسمي\". تقدر تقفله وتفتحه من زرار الصوت على الشريط.", prefs.apListen) { prefs.apListen = it },
             UiKit.valueRow(this, p, "رسايلي بتظهر على", sides.firstOrNull { it.first == prefs.apSide }?.second ?: "تلقائي",
                 "سيبها تلقائي. غيّرها بس لو بيرد على رسايلك إنت أو مش بيرد خالص") {
                 choose("رسايلي بتظهر على", sides, prefs.apSide) { prefs.apSide = it }
@@ -172,7 +170,6 @@ class SettingsActivity : BaseActivity() {
             UiKit.valueRow(this, p, "لغة الكلام", voiceLangs.firstOrNull { it.first == prefs.voiceLang }?.second ?: prefs.voiceLang) {
                 choose("لغة الكلام", voiceLangs, prefs.voiceLang) { prefs.voiceLang = it }
             },
-            sw("أوامر الصوت", "\"كلملي فلان\"، \"افتح واتساب\"، \"ترجم الشاشة\"، \"شغّل الوضع الذاتي\"", prefs.voiceCommands) { prefs.voiceCommands = it },
             sw("تعرّف على الكلام بدون نت", "محتاج تحمّل لغة الكلام من إعدادات جوجل", prefs.voiceOffline) { prefs.voiceOffline = it },
         ))
 

@@ -59,10 +59,10 @@ class MainActivity : BaseActivity() {
             how.addView(UiKit.label(this, title, 15f, p.text, true).apply { setPadding(0, dp(8), 0, 0) })
             how.addView(UiKit.label(this, body, 13.5f, p.sub).apply { setPadding(0, dp(2), 0, 0) })
         }
-        tip("الوضع الذاتي", "افتح محادثة (واتساب مثلًا) واضغط \"ذاتي\" في شريط الأدوات فوق الكيبورد. الكيبورد بيختفي، والنموذج المحلي بيقرا المحادثة، يكتب الرد ويبعته، ويكمّل لحد ما تضغط \"إيقاف\".")
-        tip("ترجمة الشاشة", "زر \"الشاشة\" بيخفي الكيبورد ويترجم كل نص على الشاشة (من أي لغة للعربي أو أي لغة تختارها) ويكمّل وإنت بتمرّر.")
+        tip("الوضع الذاتي", "افتح محادثة (واتساب مثلًا) واضغط \"ذاتي\" في شريط الأدوات فوق الكيبورد مرة واحدة. الكيبورد بيختفي، والنموذج المحلي بيقرا المحادثة، يكتب الرد باسمك ويبعته، ويفضل يرد على كل رسالة جديدة طول اليوم من غير حد أقصى ومن غير ما يوقف لوحده، لحد ما تضغط \"إيقاف\". (الشاشة بتفضل صاحية وهو شغال.)")
+        tip("ترجمة الشاشة", "زر \"الشاشة\" بيخفي الكيبورد ويترجم كل نص على الشاشة من أي لغة للعربي (أو أي لغة تختارها من الإعدادات). يدوي: دوس مرة وهيترجم اللي ظاهر، ولو مرّرت لحاجة جديدة دوس \"ترجم\" على الشريط الصغير تاني.")
         tip("ترجمة اللي بتكتبه", "زر \"ترجم\": اكتب بالعربي واضغط \"ترجم\" والنص يتحوّل للغة اللي تختارها. فيه زر تراجع.")
-        tip("الصوت", "الميكروفون بيكتب اللي بتقوله. وقول \"كلملي أحمد\" أو \"افتح واتساب\" أو \"ترجم الشاشة\". وإنت في الوضع الذاتي الميكروفون بيفضل سامعك (وتقدر تقفله بزرار الصوت): قول \"قول له إني جاي بعد ساعة\" أو \"تابع المحادثة\" أو \"استنى\" أو \"رد عليه\" أو \"خليك رسمي\".")
+        tip("الصوت", "زر الميكروفون على الكيبورد بيكتب اللي بتقوله (إملاء). مفيش أوامر صوتية.")
         col.addView(how)
 
         col.addView(UiKit.group(
@@ -113,7 +113,7 @@ class MainActivity : BaseActivity() {
         return s.split(':').any { it.startsWith("$packageName/") && it.endsWith("ScreenAgentService") }
     }
 
-    private val wanted = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE)
+    private val wanted = arrayOf(Manifest.permission.RECORD_AUDIO)
 
     private fun permsGranted(): Boolean = wanted.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
@@ -130,7 +130,7 @@ class MainActivity : BaseActivity() {
         hero.addView(UiKit.label(this, if (ready) "الكيبورد شغال ✓" else "خلّينا نجهّز الكيبورد", 22f, p.text, true))
         hero.addView(UiKit.label(
             this,
-            if (ready && a11y && model) "كل حاجة جاهزة: الوضع الذاتي وترجمة الشاشة والصوت."
+            if (ready && a11y && model) "كل حاجة جاهزة: الوضع الذاتي وترجمة الشاشة والكتابة بالصوت."
             else if (ready) "الكتابة جاهزة. كمّل الخطوات اللي تحت عشان الوضع الذاتي وترجمة الشاشة."
             else "٣ خطوات بسيطة وتبدأ تكتب. الباقي اختياري.", 14f, p.sub
         ).apply { setPadding(0, dp(6), 0, 0) })
@@ -164,8 +164,8 @@ class MainActivity : BaseActivity() {
             } else null
         ))
         steps.addView(step(
-            if (perms) 1 else 0, "٤) الأذونات (الصوت والاتصال)",
-            if (perms) "تمام" else "الميكروفون للكتابة بالصوت، وجهات الاتصال والاتصال لأمر \"كلملي فلان\".",
+            if (perms) 1 else 0, "٤) إذن الميكروفون (للكتابة بالصوت)",
+            if (perms) "تمام" else "الميكروفون بس، عشان تكتب بصوتك. اختياري.",
             if (perms) null else "السماح" to { requestPermissions(wanted, 11) }
         ))
         steps.addView(step(

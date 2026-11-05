@@ -11,6 +11,14 @@ import kotlin.reflect.KProperty
 class Prefs private constructor(ctx: Context) {
     val sp: SharedPreferences = ctx.applicationContext.getSharedPreferences("omega", Context.MODE_PRIVATE)
 
+    init {
+        // 1.0.7: the language button of the screen-translation bar used to save its choice, which could leave screen translation
+        // on English or French for good. It is Arabic again, and the bar's button now only changes the current session.
+        if (!sp.getBoolean("screen_target_reset_107", false)) {
+            sp.edit().putString("screen_target", "ar").putBoolean("screen_target_reset_107", true).apply()
+        }
+    }
+
     private inner class S(val k: String, val d: String) : ReadWriteProperty<Any?, String> {
         override fun getValue(thisRef: Any?, property: KProperty<*>): String = sp.getString(k, d) ?: d
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: String) { sp.edit().putString(k, value).apply() }
@@ -52,14 +60,11 @@ class Prefs private constructor(ctx: Context) {
     var apPersona by S("ap_persona", LlmPrompts.DEFAULT_PERSONA)
     var apDelayMinSec by I("ap_delay_min", 2)
     var apDelayMaxSec by I("ap_delay_max", 6)
-    var apMaxReplies by I("ap_max_replies", 100)
     var apAutoSend by B("ap_auto_send", true)
     var apSide by S("ap_side", "auto")                 // auto | left | right: which edge my chat bubbles hug
-    var apListen by B("ap_listen", true)               // the microphone stays open for orders while it runs (switch on the bar)
 
     // ---- voice
     var voiceLang by S("voice_lang", "auto")
-    var voiceCommands by B("voice_commands", true)
     var voiceOffline by B("voice_offline", false)
 
     // ---- local model
