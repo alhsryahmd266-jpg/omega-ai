@@ -16,8 +16,15 @@ adb wait-for-device
 say "device: $(adb shell getprop ro.product.model | tr -d '\r') api $(adb shell getprop ro.build.version.sdk | tr -d '\r') $(adb shell wm size | tr -d '\r' | tail -1) $(adb shell wm density | tr -d '\r' | tail -1)"
 adb install -r -t "$APK" 2>&1 | tee -a "$LOG"
 adb shell settings put secure show_ime_with_hard_keyboard 1
+# the system learns about a freshly installed keyboard a little later than the install finishes
+for i in $(seq 1 30); do
+  if adb shell ime list -a -s | tr -d '\r' | grep -qx "$IME"; then say "keyboard known to the system after $i tries"; break; fi
+  sleep 2
+done
+adb shell ime list -a -s 2>&1 | tr -d '\r' >> "$LOG"
 adb shell ime enable "$IME" 2>&1 | tee -a "$LOG"
 adb shell ime set "$IME" 2>&1 | tee -a "$LOG"
+say "default keyboard: $(adb shell settings get secure default_input_method | tr -d '\r')"
 adb shell pm grant $PKG android.permission.RECORD_AUDIO 2>&1 | tee -a "$LOG"
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell input keyevent KEYCODE_HOME
@@ -54,8 +61,8 @@ typed() {
 # --- the app's own screens
 scenario app-main s:theme=light
 shot app-main
-adb shell am start -W -n $PKG/.ui.ModelActivity > /dev/null; sleep 2.5; shot app-model
-adb shell am start -W -n $PKG/.ui.SettingsActivity > /dev/null; sleep 2.5; shot app-settings
+adb shell am start -W -n $PKG/.ui.ModelActivity 2>&1 | tail -3 >> "$LOG"; sleep 2.5; shot app-model
+adb shell am start -W -n $PKG/.ui.SettingsActivity 2>&1 | tail -3 >> "$LOG"; sleep 2.5; shot app-settings
 
 # --- the key grid, Arabic and English
 look kb-ar-light     s:theme=light s:last_lang=ar
