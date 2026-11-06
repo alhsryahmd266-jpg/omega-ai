@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import android.text.TextUtils
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 
@@ -214,6 +215,15 @@ class StripView(ctx: Context) : View(ctx) {
                 drawText(c, statusText, (left + right) / 2f, cy, right - left)
             }
         }
+    }
+
+    /** Preview builds only: logs the centre of every button of the strip, so the emulator test can tap them by name. */
+    fun dumpHits() {
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val sb = StringBuilder()
+        for ((r, tag) in hits) sb.append(tag).append('=').append((loc[0] + r.centerX()).toInt()).append(',').append((loc[1] + r.centerY()).toInt()).append(';')
+        Log.d("OmegaStrip", sb.toString())
     }
 
     private fun hitAt(x: Float, y: Float): String? {

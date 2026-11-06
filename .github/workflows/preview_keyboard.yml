@@ -1,0 +1,92 @@
+name: Preview Omega Keyboard
+
+# Runs the keyboard on a real Android emulator and takes screenshots of it (themes, typed colours, the appearance sheet,
+# the neon picture). Only for pushes whose head commit message contains [preview]. The screenshots are published on the
+# branch omega-keyboard-preview. The release APK is built by build_keyboard.yml, never by this workflow.
+
+on:
+  push:
+    branches: [omega-keyboard]
+    paths:
+      - 'OmegaKeyboard/**'
+      - '.github/workflows/preview_keyboard.yml'
+      - '.github/preview/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: omega-keyboard-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    if: contains(github.event.head_commit.message, '[preview]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK packages
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Build the debug APK (x86_64, for the emulator)
+        working-directory: OmegaKeyboard
+        run: gradle :app:assembleDebug -Pabis=x86_64 --stacktrace --no-daemon
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the keyboard on an emulator and take screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          APK: OmegaKeyboard/app/build/outputs/apk/debug/app-debug.apk
+          OUT: preview-out
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 3072M
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash .github/preview/preview.sh
+
+      - name: Publish the screenshots
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p preview-out
+          D="$RUNNER_TEMP/preview-branch"
+          rm -rf "$D" && mkdir -p "$D"
+          cp -r preview-out/. "$D/" || true
+          printf 'Screenshots of source commit %s\n' "${{ github.sha }}" > "$D/README.txt"
+          cd "$D"
+          git init -q -b omega-keyboard-preview
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "preview of ${{ github.sha }}"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $AUTH" push -f "https://github.com/${{ github.repository }}.git" omega-keyboard-preview
+          echo "::notice title=preview::screenshots are on the branch omega-keyboard-preview"

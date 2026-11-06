@@ -19,7 +19,8 @@ android {
         versionCode = ((findProperty("appVersionCode") as String?) ?: "1").toInt()
         versionName = (findProperty("appVersionName") as String?) ?: "1.0.0"
         // 64-bit is where the local model runs; 32-bit is kept so the keyboard still installs on old phones.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // -Pabis=x86_64 builds the emulator preview
+        ndk { abiFilters += ((findProperty("abis") as String?) ?: "arm64-v8a,armeabi-v7a").split(',') }
     }
 
     signingConfigs {

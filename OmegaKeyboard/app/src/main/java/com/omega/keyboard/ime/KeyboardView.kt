@@ -13,6 +13,7 @@ import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.util.SparseArray
 import android.view.MotionEvent
 import android.view.View
@@ -574,6 +575,18 @@ class KeyboardView(ctx: Context) : View(ctx) {
     }
 
     private fun casedAlt(s: String) = if (upper() && s.length <= 2) s.uppercase() else s
+
+    /** Preview builds only: logs where every key is on the screen, so the emulator test can tap them by name. */
+    fun dumpKeys() {
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val sb = StringBuilder()
+        for (kr in keys) {
+            val id = if (kr.key.kind == KeyKind.CHAR) kr.key.label else kr.key.kind.name
+            sb.append(id).append('=').append((loc[0] + kr.cell.centerX()).toInt()).append(',').append((loc[1] + kr.cell.centerY()).toInt()).append(';')
+        }
+        Log.d("OmegaKeys", sb.toString())
+    }
 
     fun cancelAll() {
         for (i in 0 until ptrs.size()) cancelRunnable(ptrs.valueAt(i))

@@ -2,9 +2,12 @@ package com.omega.keyboard.ime
 
 import android.content.ClipData
 import android.content.ClipDescription
+import android.content.BroadcastReceiver
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -152,9 +155,30 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         loadDictionaries()
         registerClipboard()
         AutoPilot.addListener(apListener)
+        registerDebugDump()
+    }
+
+    private var debugDump: BroadcastReceiver? = null
+
+    /** Preview builds only (never in the release APK): lets the emulator test ask where the keys are. */
+    private fun registerDebugDump() {
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0) return
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                kbd?.dumpKeys()
+                strip?.dumpHits()
+            }
+        }
+        val f = IntentFilter("com.omega.keyboard.DEBUG_DUMP")
+        try {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED) else registerReceiver(r, f)
+            debugDump = r
+        } catch (_: Throwable) {
+        }
     }
 
     override fun onDestroy() {
+        debugDump?.let { try { unregisterReceiver(it) } catch (_: Throwable) {} }
         persistUserWords()
         AutoPilot.removeListener(apListener)
         VoiceSession.detach(this)
