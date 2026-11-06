@@ -260,8 +260,8 @@ class ColorPreview(ctx: Context) : View(ctx) {
 }
 
 /** One theme of the picker: a tiny keyboard drawn in that theme's colours with its name below. */
-class ThemeCard(ctx: Context, val id: String, private val name: String, private val t: KbTheme) : View(ctx) {
-    var selected = false
+class ThemeCard(ctx: Context, val themeId: String, private val name: String, private val t: KbTheme) : View(ctx) {
+    var picked = false
         set(v) { if (field != v) { field = v; invalidate() } }
     var ringColor = 0xFF2979FF.toInt()
     var labelColor = 0xFF000000.toInt()
@@ -317,7 +317,7 @@ class ThemeCard(ctx: Context, val id: String, private val name: String, private 
                 drawKey(c, box.left + padX + spaceW + gap, top, box.right - padX, top + kh, t.accent, false)
             }
         }
-        if (selected) {
+        if (picked) {
             stroke.strokeWidth = dp(2.5f); stroke.color = ringColor
             c.drawRoundRect(box.left - dp(2f), box.top - dp(2f), box.right + dp(2f), box.bottom + dp(2f), rad + dp(2f), rad + dp(2f), stroke)
         } else {
@@ -701,7 +701,7 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
     }
 
     private fun refreshCards() {
-        for (c in cards) c.selected = c.id == prefs.theme
+        for (c in cards) c.picked = c.themeId == prefs.theme
     }
 
     private fun pickTheme(id: String) {
