@@ -104,7 +104,7 @@ class StripView(ctx: Context) : View(ctx) {
 
     override fun onDraw(c: Canvas) {
         val t = theme
-        c.drawColor(t.bg)
+        if (t.bgStyle == 0) c.drawColor(t.bg)       // gradient and aurora looks are painted behind the whole keyboard
         hits.clear()
         val w = width.toFloat()
         val h = height.toFloat()
@@ -114,10 +114,10 @@ class StripView(ctx: Context) : View(ctx) {
             Mode.SUGGEST -> {
                 val r = addHit(dp(4f), cy - btn / 2, dp(4f) + btn, cy + btn / 2, "toggle")
                 pressBg(c, r, "toggle", btn / 2)
-                drawIcon(c, "chevron_right", r.centerX(), cy, dp(24f), t.textSub)
+                drawIcon(c, "chevron_right", r.centerX(), cy, dp(24f), t.onBgSub)
                 val mr = addHit(w - dp(4f) - btn, cy - btn / 2, w - dp(4f), cy + btn / 2, "mic")
                 pressBg(c, mr, "mic", btn / 2)
-                drawIcon(c, "mic", mr.centerX(), cy, dp(22f), t.textSub)
+                drawIcon(c, "mic", mr.centerX(), cy, dp(22f), t.onBgSub)
                 val left = dp(48f)
                 val right = w - dp(48f)
                 val slot = (right - left) / 3f
@@ -128,7 +128,7 @@ class StripView(ctx: Context) : View(ctx) {
                     val l = left + pos * slot
                     val rect = addHit(l, 0f, l + slot, h, "s$idx")
                     pressBg(c, RectF(rect.left + dp(3f), dp(5f), rect.right - dp(3f), h - dp(5f)), "s$idx", dp(10f))
-                    tp.color = t.text
+                    tp.color = t.onBg
                     tp.textSize = dp(17f)
                     tp.isFakeBoldText = idx == 0
                     drawText(c, s, rect.centerX(), cy, slot - dp(12f))
@@ -139,7 +139,7 @@ class StripView(ctx: Context) : View(ctx) {
             Mode.TOOLBAR -> {
                 val r = addHit(dp(4f), cy - btn / 2, dp(4f) + btn, cy + btn / 2, "toggle")
                 pressBg(c, r, "toggle", btn / 2)
-                drawIcon(c, "chevron_left", r.centerX(), cy, dp(24f), t.textSub)
+                drawIcon(c, "chevron_left", r.centerX(), cy, dp(24f), t.onBgSub)
                 val left = dp(48f)
                 val slot = (w - left - dp(4f)) / maxOf(1, tools.size)
                 val pw = minOf(dp(44f), slot - dp(2f))
@@ -154,13 +154,19 @@ class StripView(ctx: Context) : View(ctx) {
                         pressedTag == "t:${tool.id}" -> { fill.color = t.keyFn; c.drawRoundRect(pill, ph / 2, ph / 2, fill) }
                         tool.id == "voice" -> { fill.color = t.key; c.drawCircle(pill.centerX(), cy, ph / 2, fill) }
                     }
-                    drawIcon(c, tool.icon, rect.centerX(), cy, dp(22f), if (tool.active) t.onAccent else t.text)
+                    val ink = when {
+                        tool.active -> t.onAccent
+                        pressedTag == "t:${tool.id}" -> t.onFn
+                        tool.id == "voice" -> t.text
+                        else -> t.onBg
+                    }
+                    drawIcon(c, tool.icon, rect.centerX(), cy, dp(22f), ink)
                 }
             }
             Mode.TRANSLATE -> {
                 val r = addHit(dp(4f), cy - btn / 2, dp(4f) + btn, cy + btn / 2, "close")
                 pressBg(c, r, "close", btn / 2)
-                drawIcon(c, "close", r.centerX(), cy, dp(22f), t.textSub)
+                drawIcon(c, "close", r.centerX(), cy, dp(22f), t.onBgSub)
                 // go button (right)
                 val goW = dp(84f)
                 val go = addHit(w - dp(6f) - goW, cy - dp(17f), w - dp(6f), cy + dp(17f), "go")
@@ -175,14 +181,14 @@ class StripView(ctx: Context) : View(ctx) {
                 if (canUndo) {
                     val u = addHit(chipRight - btn, cy - btn / 2, chipRight, cy + btn / 2, "undo")
                     pressBg(c, u, "undo", btn / 2)
-                    drawIcon(c, "undo", u.centerX(), cy, dp(20f), t.text)
+                    drawIcon(c, "undo", u.centerX(), cy, dp(20f), t.onBg)
                     chipRight = u.left - dp(2f)
                 }
                 // target language chip
                 val chip = addHit(dp(50f), cy - dp(17f), chipRight, cy + dp(17f), "lang")
                 fill.color = if (pressedTag == "lang") t.keyPressed else t.keyFn
                 c.drawRoundRect(chip, dp(17f), dp(17f), fill)
-                tp.color = t.text
+                tp.color = t.onFn
                 tp.textSize = dp(14f)
                 drawText(c, "إلى: $targetName  ▾", chip.centerX(), cy, chip.width() - dp(14f))
             }
@@ -202,7 +208,7 @@ class StripView(ctx: Context) : View(ctx) {
                     tp.isFakeBoldText = false
                     right = p.left - dp(8f)
                 }
-                tp.color = t.text
+                tp.color = t.onBg
                 tp.textSize = dp(14f)
                 val left = dp(42f)
                 drawText(c, statusText, (left + right) / 2f, cy, right - left)

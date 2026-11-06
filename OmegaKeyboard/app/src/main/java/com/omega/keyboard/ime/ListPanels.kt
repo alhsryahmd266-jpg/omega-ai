@@ -56,31 +56,33 @@ abstract class ListPanel(ctx: Context) : LinearLayout(ctx) {
     protected fun setTitle(s: String) { title.text = s }
 
     protected open fun restyle() {
-        setBackgroundColor(theme.bg)
-        title.setTextColor(theme.text)
-        closeBtn.setTextColor(theme.text)
+        setBackgroundColor(if (theme.bgStyle >= 1) theme.bg2 else theme.bg)
+        title.setTextColor(theme.onBg)
+        closeBtn.setTextColor(theme.onFn)
         closeBtn.background = pill(theme.keyFn, 12f, context)
     }
 
-    protected fun row(text: String, sub: String? = null, selected: Boolean = false, onTap: () -> Unit): View {
+    protected fun row(text: String, sub: String? = null, selected: Boolean = false, onBackground: Boolean = false, onTap: () -> Unit): View {
         val ctx = context
         val box = LinearLayout(ctx).apply {
             orientation = VERTICAL
             setPadding(ctx.dpi(14f), ctx.dpi(10f), ctx.dpi(14f), ctx.dpi(10f))
-            background = pill(if (selected) theme.accent else theme.key, 12f, ctx)
+            background = pill(if (onBackground) Color.TRANSPARENT else if (selected) theme.accent else if (theme.glass) theme.popupBg else theme.key, 12f, ctx)
             isClickable = true
             setOnClickListener { onTap() }
         }
+        val ink = if (selected) theme.onAccent else if (onBackground) theme.onBg else theme.text
+        val inkSub = if (selected) theme.onAccent else if (onBackground) theme.onBgSub else theme.textSub
         box.addView(TextView(ctx).apply {
             this.text = text
             textSize = 15f
-            setTextColor(if (selected) theme.onAccent else theme.text)
+            setTextColor(ink)
             maxLines = 3
         })
         if (sub != null) box.addView(TextView(ctx).apply {
             this.text = sub
             textSize = 11.5f
-            setTextColor(if (selected) theme.onAccent else theme.textSub)
+            setTextColor(inkSub)
         })
         val lp = LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         lp.setMargins(ctx.dpi(8f), ctx.dpi(3f), ctx.dpi(8f), ctx.dpi(3f))
@@ -101,14 +103,14 @@ class ClipboardPanel(ctx: Context) : ListPanel(ctx) {
             list.addView(TextView(context).apply {
                 text = "الحافظة فاضية. انسخ أي نص وهيظهر هنا."
                 textSize = 14f
-                setTextColor(theme.textSub)
+                setTextColor(theme.onBgSub)
                 gravity = Gravity.CENTER
                 setPadding(context.dpi(16f), context.dpi(28f), context.dpi(16f), context.dpi(28f))
             })
             return
         }
         for (s in items) list.addView(row(s.take(300)) { onPick?.invoke(s) })
-        list.addView(row("مسح الكل") { onClear?.invoke() }.also { (it as LinearLayout).background = pill(Color.TRANSPARENT, 12f, context) })
+        list.addView(row("مسح الكل", onBackground = true) { onClear?.invoke() })
     }
 }
 
@@ -130,7 +132,7 @@ class LangPanel(ctx: Context) : ListPanel(ctx) {
     private fun sectionLabel(s: String) = TextView(context).apply {
         text = s
         textSize = 12f
-        setTextColor(theme.textSub)
+        setTextColor(theme.onBgSub)
         setPadding(context.dpi(16f), context.dpi(10f), context.dpi(16f), context.dpi(4f))
     }
 }
@@ -149,7 +151,7 @@ class AiPanel(ctx: Context) : ListPanel(ctx) {
         list.addView(TextView(context).apply {
             text = "بتشتغل على النص اللي إنت محدده، أو على الخانة كلها لو مفيش تحديد."
             textSize = 12f
-            setTextColor(theme.textSub)
+            setTextColor(theme.onBgSub)
             setPadding(context.dpi(16f), context.dpi(12f), context.dpi(16f), context.dpi(12f))
         })
     }

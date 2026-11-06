@@ -19,6 +19,7 @@ import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.ai.Translator
 import com.omega.keyboard.core.LlmPrompts
 import com.omega.keyboard.core.Languages
+import com.omega.keyboard.core.Palette
 import com.omega.keyboard.ime.Themes
 
 /** Every setting, grouped. Changes apply immediately (the keyboard reads them live). */
@@ -87,12 +88,30 @@ class SettingsActivity : BaseActivity() {
 
         // ---------------------------------------------------------------- look
         h.addView(UiKit.section(this, p, "الشكل"))
+        // the colour of the text you type: none, one of the named colours, or the rainbow (the full colour picker is in the keyboard)
+        val textChoices = listOf("none" to "بدون (لون الخانة)") + Palette.typed.map { it.color.toString() to it.name } + ("rainbow" to "قوس قزح")
+        val textKey = when {
+            prefs.textRainbow -> "rainbow"
+            prefs.textColor == 0 -> "none"
+            else -> prefs.textColor.toString()
+        }
         h.addView(UiKit.group(
             this, p,
             UiKit.valueRow(this, p, "المظهر", Themes.choices.firstOrNull { it.first == prefs.theme }?.second ?: "تلقائي") {
-                choose("المظهر", Themes.choices, prefs.theme) { prefs.theme = it }
+                choose("المظهر", Themes.choices, prefs.theme) { prefs.theme = it; Themes.resetCustom(prefs) }
             },
-            UiKit.seekRow(this, p, "ارتفاع الكيبورد", 80, 130, prefs.heightPct, { "$it%" }) { prefs.heightPct = it },
+            UiKit.valueRow(this, p, "لون الكتابة", textChoices.firstOrNull { it.first == textKey }?.second ?: "لون مخصص") {
+                choose("لون الكتابة", textChoices, textKey) { k ->
+                    when (k) {
+                        "none" -> { prefs.textColor = 0; prefs.textRainbow = false }
+                        "rainbow" -> prefs.textRainbow = true
+                        else -> { prefs.textColor = k.toInt(); prefs.textRainbow = false }
+                    }
+                }
+            },
+            UiKit.seekRow(this, p, "ارتفاع الكيبورد", 70, 150, prefs.heightPct, { "$it%" }) { prefs.heightPct = it },
+            UiKit.seekRow(this, p, "حجم الحروف", 80, 140, prefs.fontPct, { "$it%" }) { prefs.fontPct = it },
+            UiKit.seekRow(this, p, "عرض الكيبورد", 70, 100, prefs.widthPct, { "$it%" }) { prefs.widthPct = it },
             sw("صف الأرقام", "صف أرقام فوق الحروف", prefs.numberRow) { prefs.numberRow = it },
             sw("أرقام هندية في العربي", "٠١٢٣ بدل 0123", prefs.indicDigits) { prefs.indicDigits = it },
             sw("معاينة الحرف", "تكبير الحرف فوق الزرار", prefs.keyPreview) { prefs.keyPreview = it },

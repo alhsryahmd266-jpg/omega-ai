@@ -36,7 +36,25 @@ class Prefs private constructor(ctx: Context) {
 
     // ---- keyboard look & feel
     var theme by S("theme", "auto")
-    var heightPct by I("height_pct", 100)
+    var heightPct by I("height_pct", 100)                 // 70..150
+
+    // colours, size and effects. 0 / -1 mean "as the theme says"
+    var textColor by I("text_color", 0xFF2979FF.toInt())  // colour of the text you type; 0 = the field's own colour
+    var textRainbow by B("text_rainbow", false)           // every letter in the next colour of the rainbow
+    var textHighlight by B("text_highlight", false)       // highlighter pen: the colour goes behind the text
+    var keyColor by I("c_key", 0)
+    var fnColor by I("c_fn", 0)
+    var accentColor by I("c_accent", 0)
+    var letterColor by I("c_letter", 0)
+    var bgColor by I("c_bg", 0)
+    var bgStyle by I("bg_style", -1)                      // -1 theme, 0 flat, 1 gradient, 2 aurora (moves when you type)
+    var glassKeys by I("glass_keys", -1)                  // -1 theme, 0 solid keys, 1 see-through glass keys
+    var neonLetters by I("neon_letters", -1)              // -1 theme, 0 off, 1 letters glow
+    var fontPct by I("font_pct", 100)                     // size of the letters on the keys, 80..140
+    var widthPct by I("width_pct", 100)                   // width of the keys area, 70..100 (one-handed typing)
+    var kbAlign by I("kb_align", 0)                       // where a narrower keyboard sits: 0 centre, 1 left, 2 right
+    var fxGlow by B("fx_glow", true)                      // light that follows the finger across the keys
+    var fxRipple by B("fx_ripple", true)                  // ring that spreads from a pressed key
     var numberRow by B("number_row", false)
     var indicDigits by B("indic_digits", false)
     var haptic by B("haptic", true)

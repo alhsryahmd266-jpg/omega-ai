@@ -2,29 +2,38 @@ package com.omega.keyboard.ime
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.SparseArray
 import android.view.MotionEvent
 import android.view.View
+import com.omega.keyboard.core.ColorMath
 import com.omega.keyboard.core.Key
 import com.omega.keyboard.core.KeyKind
 import com.omega.keyboard.core.Layout
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The key grid. Everything is drawn on one canvas (like real keyboards do) for speed: rounded keys, corner hints,
- * press feedback, key previews and long-press alternatives (those two are drawn by [PopupOverlay] so they can rise
- * above the first row), multi-touch typing, hold-to-repeat on backspace and swipe-on-space to move the cursor.
+ * The key grid. Everything is drawn on one canvas (like real keyboards do) for speed: rounded keys with layered shadows,
+ * a glossy sheen and a light rim, corner hints, press feedback, key previews and long-press alternatives (those two are
+ * drawn by [PopupOverlay] so they can rise above the first row), multi-touch typing, hold-to-repeat on backspace and
+ * swipe-on-space to move the cursor.
+ *
+ * Extras that react to the finger: keys sink and light up when pressed, a soft light follows the finger across the keys
+ * ([fxGlow]) and a ring spreads from every pressed key ([fxRipple]). Nothing is drawn while the keyboard is idle.
  */
 class KeyboardView(ctx: Context) : View(ctx) {
 
@@ -53,13 +62,31 @@ class KeyboardView(ctx: Context) : View(ctx) {
         set(v) { if (field != v) { field = v; invalidate() } }
 
     var heightScale: Float = 1f
-        set(v) { field = v; requestLayout() }
+        set(v) { if (field != v) { field = v; requestLayout(); invalidate() } }
+
+    /** size of the letters on the keys, 1 = normal */
+    var fontScale: Float = 1f
+        set(v) { if (field != v) { field = v; invalidate() } }
+
+    /** width of the keys area as a share of the view (one-handed typing) and where it sits: 0 centre, 1 left, 2 right */
+    var widthScale: Float = 1f
+        set(v) { if (field != v) { field = v; computeKeys(); invalidate() } }
+
+    var alignMode: Int = 0
+        set(v) { if (field != v) { field = v; computeKeys(); invalidate() } }
+
+    var fxGlow: Boolean = true
+    var fxRipple: Boolean = true
 
     var showPreview: Boolean = true
     var layout: Layout? = null
         private set
 
-    private class KeyRect(val key: Key, val cell: RectF, val row: Int)
+    private class KeyRect(val key: Key, val cell: RectF, val row: Int) {
+        var press = 0f          // 0 = up .. 1 = fully pushed, animated
+    }
+
+    private class Ripple(val kr: KeyRect, val x: Float, val y: Float, val t0: Long)
 
     private class Ptr(val id: Int) {
         var kr: KeyRect? = null
@@ -72,9 +99,15 @@ class KeyboardView(ctx: Context) : View(ctx) {
         var runnable: Runnable? = null
     }
 
+    private companion object {
+        const val RIPPLE_MS = 460L
+        val SHADOW_FRAC = floatArrayOf(0.55f, 0.32f, 0.16f)
+    }
+
     private val keys = ArrayList<KeyRect>()
     private val pressed = HashSet<KeyRect>()
     private val ptrs = SparseArray<Ptr>()
+    private val ripples = ArrayList<Ripple>()
     private val handler = Handler(Looper.getMainLooper())
 
     private val density = resources.displayMetrics.density
@@ -86,18 +119,38 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
     }
+    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ripplePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val letterFace: Typeface = try { Typeface.create("sans-serif-medium", Typeface.NORMAL) } catch (_: Throwable) { Typeface.DEFAULT }
     private val rf = RectF()
     private val path = Path()
     private val icons = HashMap<String, Drawable?>()
+
+    // shaders that depend on the key height / theme only, built once and shared by every key
+    private var sheen: Shader? = null
+    private var rimShader: Shader? = null
+    private var shaderH = -1f
+    private var shaderTheme: KbTheme? = null
+
+    // animation state
+    private var lastFrame = 0L
+    private var glowX = 0f
+    private var glowY = 0f
+    private var glowAmount = 0f
 
     private val baseRowDp = 52f
     private val padTop get() = dp(6f)
     private val padBottom get() = dp(8f)
     private val rowHeight get() = dp(baseRowDp) * heightScale
+    private val insetX get() = dp(2.5f)
+    private val insetY get() = dp(4f)
 
     fun setLayout(l: Layout) {
         layout = l
         pressed.clear()
+        ripples.clear()
         cancelAll()
         computeKeys()
         requestLayout()
@@ -120,17 +173,21 @@ class KeyboardView(ctx: Context) : View(ctx) {
         val lay = layout ?: return
         if (width == 0) return
         val side = dp(2f)
-        val usable = width - 2 * side
-        val mirror = lay.rtl
+        val full = width - 2 * side
+        val usable = full * widthScale.coerceIn(0.5f, 1f)
+        val start = when (alignMode) {
+            1 -> side
+            2 -> side + (full - usable)
+            else -> side + (full - usable) / 2f
+        }
         for ((r, row) in lay.rows.withIndex()) {
             val unit = usable / row.total
-            var x = if (mirror) side + usable else side
+            var x = start
             val top = padTop + r * rowHeight
             for (k in row.keys) {
                 val kw = unit * k.weight
-                val left = if (mirror) x - kw else x
-                if (k.kind != KeyKind.SPACER) keys.add(KeyRect(k, RectF(left, top, left + kw, top + rowHeight), r))
-                x = if (mirror) x - kw else x + kw
+                if (k.kind != KeyKind.SPACER) keys.add(KeyRect(k, RectF(x, top, x + kw, top + rowHeight), r))
+                x += kw
             }
         }
     }
@@ -141,58 +198,157 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     private fun labelOf(k: Key): String = if (k.kind == KeyKind.CHAR && upper()) k.label.uppercase() else k.label
 
-    override fun onDraw(c: Canvas) {
-        val t = theme
-        c.drawColor(t.bg)
-        val insetX = dp(2.5f)
-        val insetY = dp(4f)
-        for (kr in keys) {
-            val k = kr.key
-            rf.set(kr.cell.left + insetX, kr.cell.top + insetY, kr.cell.right - insetX, kr.cell.bottom - insetY)
-            val isPressed = pressed.contains(kr)
-            val base = when (k.kind) {
-                KeyKind.CHAR -> if (k.fn) t.keyFn else t.key
-                KeyKind.SPACE, KeyKind.LANG -> t.key
-                KeyKind.ENTER -> t.accent
-                KeyKind.SHIFT -> if (shiftState == 2) t.accent else t.keyFn
-                else -> t.keyFn
-            }
-            // Gboard look: the enter key and the page switchers are pills, every other key is a rounded square
-            val pill = k.kind == KeyKind.ENTER || k.kind == KeyKind.SYMBOLS || k.kind == KeyKind.SYMBOLS2 || k.kind == KeyKind.LETTERS
-            val radius = if (pill) rf.height() / 2f else dp(10f)
-            // soft shadow under the key
-            fill.color = t.shadow
-            c.drawRoundRect(rf.left, rf.top + dp(1f), rf.right, rf.bottom + dp(1f), radius, radius, fill)
-            fill.color = if (isPressed) blend(base, t.keyPressed, if (k.kind == KeyKind.ENTER) 0.25f else 1f) else base
-            c.drawRoundRect(rf, radius, radius, fill)
-            drawContent(c, kr, rf, t)
-        }
+    private fun ensureShaders(h: Float, t: KbTheme) {
+        if (h == shaderH && t === shaderTheme && sheen != null) return
+        shaderH = h
+        shaderTheme = t
+        val topA = if (t.glass) 0x52 else if (t.dark) 0x22 else 0x66
+        val botA = if (t.glass) 0x00 else if (t.dark) 0x2A else 0x14
+        sheen = LinearGradient(
+            0f, 0f, 0f, h,
+            intArrayOf(ColorMath.withAlpha(ColorMath.PAPER, topA), ColorMath.withAlpha(ColorMath.PAPER, topA / 6), ColorMath.withAlpha(0xFF000000.toInt(), botA)),
+            floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
+        )
+        sheenPaint.shader = sheen
+        rimShader = LinearGradient(0f, 0f, 0f, h, intArrayOf(t.rim, ColorMath.withAlpha(t.rim, 0)), floatArrayOf(0f, 0.75f), Shader.TileMode.CLAMP)
+        rimPaint.shader = rimShader
     }
 
-    private fun blend(a: Int, b: Int, f: Float): Int {
-        val r = Color.red(a) + ((Color.red(b) - Color.red(a)) * f).toInt()
-        val g = Color.green(a) + ((Color.green(b) - Color.green(a)) * f).toInt()
-        val bl = Color.blue(a) + ((Color.blue(b) - Color.blue(a)) * f).toInt()
-        return Color.rgb(r, g, bl)
+    override fun onDraw(c: Canvas) {
+        val t = theme
+        val now = SystemClock.uptimeMillis()
+        val dt = if (lastFrame == 0L) 16f else (now - lastFrame).coerceIn(1L, 48L).toFloat()
+        lastFrame = now
+        if (t.bgStyle == 0) c.drawColor(t.bg)
+
+        // the light that follows the finger fades in under it and out again when it lifts
+        val glowTarget = if (fxGlow && ptrs.size() > 0) 1f else 0f
+        glowAmount += (glowTarget - glowAmount) * (1f - exp(-dt / (if (glowTarget > glowAmount) 70f else 170f)))
+        if (abs(glowTarget - glowAmount) < 0.01f) glowAmount = glowTarget
+        var busy = glowAmount != glowTarget
+        if (glowAmount > 0.01f) {
+            glowPaint.shader = RadialGradient(
+                glowX, glowY, dp(125f),
+                intArrayOf(ColorMath.withAlpha(t.accent, (0x55 * glowAmount).toInt()), ColorMath.withAlpha(t.accent, 0)),
+                null, Shader.TileMode.CLAMP,
+            )
+        }
+
+        ripples.removeAll { now - it.t0 > RIPPLE_MS }
+        ensureShaders(rowHeight - 2 * insetY, t)
+
+        for (kr in keys) {
+            val target = if (pressed.contains(kr)) 1f else 0f
+            kr.press += (target - kr.press) * (1f - exp(-dt / (if (target > kr.press) 38f else 105f)))
+            if (abs(target - kr.press) < 0.015f) kr.press = target else busy = true
+            drawKey(c, kr, t, now)
+        }
+        if (ripples.isNotEmpty()) busy = true
+        if (busy) postInvalidateOnAnimation()
+    }
+
+    private fun drawKey(c: Canvas, kr: KeyRect, t: KbTheme, now: Long) {
+        val k = kr.key
+        val p = kr.press
+        val sink = dp(1.4f) * p
+        rf.set(kr.cell.left + insetX + sink, kr.cell.top + insetY + sink, kr.cell.right - insetX - sink, kr.cell.bottom - insetY - sink)
+        // Gboard look: the enter key and the page switchers are pills, every other key is a rounded square
+        val pill = k.kind == KeyKind.ENTER || k.kind == KeyKind.SYMBOLS || k.kind == KeyKind.SYMBOLS2 || k.kind == KeyKind.LETTERS
+        val radius = if (pill) rf.height() / 2f else dp(11f)
+
+        val base = when (k.kind) {
+            KeyKind.CHAR -> if (k.fn) t.keyFn else t.key
+            KeyKind.SPACE, KeyKind.LANG -> t.key
+            KeyKind.ENTER -> t.accent
+            KeyKind.SHIFT -> if (shiftState == 2) t.accent else t.keyFn
+            else -> t.keyFn
+        }
+        val pressedTo = when {
+            k.kind == KeyKind.ENTER || (k.kind == KeyKind.SHIFT && shiftState == 2) -> ColorMath.shade(t.accent, -0.16f)
+            t.glass -> ColorMath.withAlpha(t.accent, 0xA0)
+            else -> t.keyPressed
+        }
+
+        // layered shadow: it shrinks as the key is pushed down
+        val sa = ColorMath.alpha(t.shadow)
+        if (!t.glass && sa > 0) {
+            val lift = 1f - 0.65f * p
+            for (i in 0 until 3) {
+                val spread = dp(0.7f) * i
+                val dy = dp(0.9f + 1.0f * i) * lift
+                fill.color = ColorMath.withAlpha(t.shadow, (sa * SHADOW_FRAC[i] * lift).toInt())
+                c.drawRoundRect(rf.left - spread, rf.top + dy - spread, rf.right + spread, rf.bottom + dy + spread, radius + spread, radius + spread, fill)
+            }
+        }
+
+        // body
+        fill.color = ColorMath.blend(base, pressedTo, p)
+        c.drawRoundRect(rf, radius, radius, fill)
+
+        // gloss, light under the finger, ripples: all clipped to the key by being drawn as the key's own shape
+        c.save()
+        c.translate(rf.left, rf.top)
+        sheenPaint.alpha = (255 * (1f - 0.55f * p)).toInt()
+        c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, sheenPaint)
+        val hw = density * 0.5f
+        c.drawRoundRect(hw, hw, rf.width() - hw, rf.height() - hw, radius, radius, rimPaint)
+        c.restore()
+
+        if (glowAmount > 0.01f) c.drawRoundRect(rf, radius, radius, glowPaint)
+
+        for (rp in ripples) {
+            if (rp.kr !== kr) continue
+            val age = ((now - rp.t0) / RIPPLE_MS.toFloat()).coerceIn(0f, 1f)
+            val e = 1f - (1f - age) * (1f - age)
+            val rad = dp(12f) + e * max(rf.width(), rf.height()) * 0.95f
+            val a = (1f - age) * 0.36f
+            val col = if (t.dark || t.glass) ColorMath.blend(t.accent, ColorMath.PAPER, 0.45f) else t.accent
+            ripplePaint.shader = RadialGradient(
+                rp.x, rp.y, max(1f, rad),
+                intArrayOf(ColorMath.withAlphaF(col, a), ColorMath.withAlphaF(col, a * 0.55f), ColorMath.withAlphaF(col, 0f)),
+                floatArrayOf(0f, 0.65f, 1f), Shader.TileMode.CLAMP,
+            )
+            c.drawRoundRect(rf, radius, radius, ripplePaint)
+        }
+
+        // tube-light edge of the neon theme: a few strokes of falling strength make the halo
+        if (t.neon != 0) {
+            val a = 0.5f + 0.5f * p
+            strokePaint.shader = null
+            strokePaint.strokeWidth = dp(5f); strokePaint.color = ColorMath.withAlphaF(t.neon, 0.08f * a)
+            c.drawRoundRect(rf, radius, radius, strokePaint)
+            strokePaint.strokeWidth = dp(3f); strokePaint.color = ColorMath.withAlphaF(t.neon, 0.16f * a)
+            c.drawRoundRect(rf, radius, radius, strokePaint)
+            strokePaint.strokeWidth = dp(1.2f); strokePaint.color = ColorMath.withAlphaF(t.neon, 0.85f * a)
+            c.drawRoundRect(rf, radius, radius, strokePaint)
+        }
+
+        drawContent(c, kr, rf, t)
     }
 
     private fun drawContent(c: Canvas, kr: KeyRect, r: RectF, t: KbTheme) {
         val k = kr.key
         val cx = r.centerX()
-        val cy = r.centerY()
+        val cy = r.centerY() + dp(0.6f) * kr.press
         when (k.kind) {
             KeyKind.CHAR -> {
                 val arabic = layout?.lang == "ar"
-                textPaint.color = t.text
+                textPaint.color = if (k.fn) t.onFn else t.text
+                textPaint.typeface = letterFace
                 textPaint.isFakeBoldText = false
                 // Arabic letters are drawn bigger (as Gboard does): at the English size they are hard to read
-                textPaint.textSize = if (arabic) min(rowHeight * 0.50f, dp(27f)) else min(rowHeight * 0.42f, dp(24f))
+                var size = (if (arabic) min(rowHeight * 0.50f, dp(27f)) else min(rowHeight * 0.42f, dp(24f))) * fontScale
                 val lab = labelOf(k)
-                if (lab.length > 2) textPaint.textSize = min(textPaint.textSize, dp(19f))
+                if (lab.length > 2) size = min(size, dp(19f) * fontScale)
+                size = min(size, min(kr.cell.width() * 0.92f, rowHeight * 0.62f))
+                textPaint.textSize = size
+                if (t.neon != 0) textPaint.setShadowLayer(dp(6f), 0f, 0f, ColorMath.withAlpha(t.neon, 0xE0))
                 drawCentered(c, lab, cx, cy)
+                textPaint.clearShadowLayer()
+                textPaint.typeface = Typeface.DEFAULT
                 if (k.hint.isNotEmpty()) {
                     hintPaint.color = t.textSub
-                    hintPaint.textSize = dp(10f)
+                    hintPaint.textSize = dp(10f) * min(1.2f, fontScale)
                     // Gboard puts the number hints of an Arabic key in its top-left corner
                     val hx = if (arabic) r.left + dp(7f) else r.right - dp(7f)
                     c.drawText(k.hint, hx, r.top + dp(13f), hintPaint)
@@ -206,19 +362,19 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 }
             }
             KeyKind.ENTER -> drawIcon(c, enterIcon, cx, cy, dp(24f), t.onAccent)
-            KeyKind.BACKSPACE -> drawIcon(c, "backspace", cx, cy, dp(24f), t.text)
+            KeyKind.BACKSPACE -> drawIcon(c, "backspace", cx, cy, dp(24f), t.onFn)
             KeyKind.LANG -> drawIcon(c, "language", cx, cy, dp(22f), t.text)
-            KeyKind.EMOJI -> drawIcon(c, "emoji_emotions", cx, cy, dp(22f), t.text)
-            KeyKind.SHIFT -> drawShift(c, cx, cy, if (shiftState == 2) t.onAccent else t.text, shiftState)
+            KeyKind.EMOJI -> drawIcon(c, "emoji_emotions", cx, cy, dp(22f), t.onFn)
+            KeyKind.SHIFT -> drawShift(c, cx, cy, if (shiftState == 2) t.onAccent else t.onFn, shiftState)
             KeyKind.SYMBOLS, KeyKind.SYMBOLS2, KeyKind.LETTERS -> {
-                textPaint.color = t.text
+                textPaint.color = t.onFn
                 textPaint.isFakeBoldText = true
                 textPaint.textSize = dp(15f)
                 drawCentered(c, k.label, cx, cy)
                 textPaint.isFakeBoldText = false
             }
             KeyKind.ALT -> {
-                textPaint.color = t.text
+                textPaint.color = t.onFn
                 textPaint.textSize = dp(20f)
                 drawCentered(c, k.label, cx, cy)
             }
@@ -254,6 +410,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
         path.lineTo(cx - w / 2, cy + dy)
         path.close()
         if (state == 0) {
+            strokePaint.shader = null
             strokePaint.color = color
             strokePaint.strokeWidth = dp(1.8f)
             c.drawPath(path, strokePaint)
@@ -307,6 +464,11 @@ class KeyboardView(ctx: Context) : View(ctx) {
         p.kr = kr; p.downX = x; p.lastX = x
         ptrs.put(id, p)
         pressed.add(kr)
+        glowX = x; glowY = y
+        if (fxRipple) {
+            ripples.add(Ripple(kr, x, y, SystemClock.uptimeMillis()))
+            if (ripples.size > 12) ripples.removeAt(0)
+        }
         listener?.onFeedback(kr.key.kind)
         armKey(p, kr)
         invalidate()
@@ -351,6 +513,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private fun move(id: Int, x: Float, y: Float) {
         val p = ptrs.get(id) ?: return
         val kr = p.kr ?: return
+        glowX = x; glowY = y
         if (p.altIndex >= 0) {
             val a = altSpec ?: return
             val idx = ((x - a.rect.left - a.pad) / a.cellW).toInt().coerceIn(0, a.items.size - 1)
@@ -371,6 +534,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 p.swiped = true
                 listener?.onSpaceSwipe(steps)
             }
+            invalidate()
             return
         }
         val nk = keyAt(x, y)
@@ -380,8 +544,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
             p.kr = nk
             pressed.add(nk)
             if (nk.key.kind != KeyKind.BACKSPACE) armKey(p, nk) else hidePopups()
-            invalidate()
         }
+        invalidate()
     }
 
     private fun up(id: Int) {
@@ -431,7 +595,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     // ------------------------------------------------------------------ popups (drawn by the overlay)
 
-    class PreviewSpec(val rect: RectF, val text: String)
+    class PreviewSpec(val rect: RectF, val text: String, val t0: Long = SystemClock.uptimeMillis())
     data class AltSpec(val rect: RectF, val items: List<String>, val selected: Int, val cellW: Float, val pad: Float)
 
     private var previewSpec: PreviewSpec? = null
@@ -453,8 +617,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
         if (ptrs.get(p.id) !== p) return
         val items = kr.key.popups
         if (items.isEmpty()) return
-        val cellW = dp(44f)
         val pad = dp(6f)
+        // a long list is squeezed to fit the screen instead of running off its edge
+        val cellW = min(dp(44f), (width - 2 * dp(3f) - 2 * pad) / items.size)
         val total = items.size * cellW + 2 * pad
         val cx = kr.cell.centerX()
         val left = (cx - total / 2).coerceIn(dp(3f), max(dp(3f), width - total - dp(3f)))
@@ -493,7 +658,10 @@ class PopupOverlay(ctx: Context) : View(ctx) {
     private fun dp(v: Float) = v * density
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f * density }
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = try { Typeface.create("sans-serif-medium", Typeface.NORMAL) } catch (_: Throwable) { Typeface.DEFAULT }
+    }
 
     init { isClickable = false; isFocusable = false }
 
@@ -512,34 +680,60 @@ class PopupOverlay(ctx: Context) : View(ctx) {
         if (preview != null || alt != null) { preview = null; alt = null; invalidate() }
     }
 
+    /** a floating bubble: soft shadow, a gradient body, a light rim, and a neon halo on the neon theme */
+    private fun bubble(c: Canvas, r: RectF, radius: Float, t: KbTheme) {
+        val sa = max(0x30, ColorMath.alpha(t.shadow))
+        for (i in 0 until 3) {
+            val spread = dp(1f) * i
+            fill.shader = null
+            fill.color = ColorMath.withAlpha(0xFF000000.toInt(), (sa * (0.5f - 0.14f * i)).toInt())
+            c.drawRoundRect(r.left - spread, r.top + dp(2f) + dp(1f) * i - spread, r.right + spread, r.bottom + dp(2f) + dp(1f) * i + spread, radius + spread, radius + spread, fill)
+        }
+        fill.shader = LinearGradient(0f, r.top, 0f, r.bottom, ColorMath.shade(t.popupBg, if (t.dark) 0.12f else 0.0f), ColorMath.shade(t.popupBg, if (t.dark) -0.04f else -0.06f), Shader.TileMode.CLAMP)
+        c.drawRoundRect(r, radius, radius, fill)
+        fill.shader = null
+        line.shader = null
+        line.strokeWidth = density
+        line.color = if (t.neon != 0) ColorMath.withAlpha(t.neon, 0xE0) else ColorMath.withAlpha(t.accent, 0x70)
+        c.drawRoundRect(r, radius, radius, line)
+        if (t.neon != 0) {
+            line.strokeWidth = dp(4f)
+            line.color = ColorMath.withAlpha(t.neon, 0x22)
+            c.drawRoundRect(r, radius, radius, line)
+            line.strokeWidth = density
+        }
+    }
+
     override fun onDraw(c: Canvas) {
+        val now = SystemClock.uptimeMillis()
+        var animating = false
         c.save()
         c.translate(dx, dy)
         val t = theme
         preview?.let { p ->
-            fill.color = t.shadow
-            c.drawRoundRect(p.rect.left, p.rect.top + dp(2f), p.rect.right, p.rect.bottom + dp(2f), dp(12f), dp(12f), fill)
-            fill.color = t.popupBg
-            c.drawRoundRect(p.rect, dp(12f), dp(12f), fill)
-            line.color = t.divider
-            c.drawRoundRect(p.rect, dp(12f), dp(12f), line)
+            val k = ((now - p.t0) / 110f).coerceIn(0f, 1f)
+            val e = 1f - (1f - k) * (1f - k)
+            if (k < 1f) animating = true
+            val sc = 0.80f + 0.20f * e
+            c.save()
+            c.scale(sc, sc, p.rect.centerX(), p.rect.bottom)      // grows out of the key
+            bubble(c, p.rect, dp(14f), t)
             text.color = t.text
-            text.textSize = dp(30f)
+            text.textSize = dp(31f)
+            if (t.neon != 0) text.setShadowLayer(dp(7f), 0f, 0f, ColorMath.withAlpha(t.neon, 0xF0))
             val fm = text.fontMetrics
             c.drawText(p.text, p.rect.centerX(), p.rect.centerY() - (fm.ascent + fm.descent) / 2f, text)
+            text.clearShadowLayer()
+            c.restore()
         }
         alt?.let { a ->
-            fill.color = t.shadow
-            c.drawRoundRect(a.rect.left, a.rect.top + dp(2f), a.rect.right, a.rect.bottom + dp(2f), dp(14f), dp(14f), fill)
-            fill.color = t.popupBg
-            c.drawRoundRect(a.rect, dp(14f), dp(14f), fill)
-            line.color = t.divider
-            c.drawRoundRect(a.rect, dp(14f), dp(14f), line)
+            bubble(c, a.rect, dp(16f), t)
             for ((i, s) in a.items.withIndex()) {
                 val l = a.rect.left + a.pad + i * a.cellW
                 if (i == a.selected) {
-                    fill.color = t.accent
-                    c.drawRoundRect(l + dp(2f), a.rect.top + dp(5f), l + a.cellW - dp(2f), a.rect.bottom - dp(5f), dp(10f), dp(10f), fill)
+                    fill.shader = LinearGradient(0f, a.rect.top, 0f, a.rect.bottom, ColorMath.shade(t.accent, 0.18f), t.accent, Shader.TileMode.CLAMP)
+                    c.drawRoundRect(l + dp(2f), a.rect.top + dp(5f), l + a.cellW - dp(2f), a.rect.bottom - dp(5f), dp(11f), dp(11f), fill)
+                    fill.shader = null
                     text.color = t.onAccent
                 } else text.color = t.text
                 text.textSize = dp(if (s.length > 2) 18f else 24f)
@@ -548,5 +742,6 @@ class PopupOverlay(ctx: Context) : View(ctx) {
             }
         }
         c.restore()
+        if (animating) postInvalidateOnAnimation()
     }
 }

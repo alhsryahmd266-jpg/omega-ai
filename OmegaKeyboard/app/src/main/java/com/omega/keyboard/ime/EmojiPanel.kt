@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.widget.OverScroller
 import com.omega.keyboard.Prefs
+import com.omega.keyboard.core.ColorMath
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -142,13 +143,13 @@ class EmojiPanel(ctx: Context) : View(ctx) {
 
     override fun onDraw(c: Canvas) {
         val t = theme
-        c.drawColor(t.bg)
+        c.drawColor(if (t.bgStyle >= 1) t.bg2 else t.bg)
         val gridH = height - barH
         c.save()
         c.clipRect(0f, 0f, width.toFloat(), gridH)
         emojiPaint.textSize = cell * 0.56f
         titlePaint.textSize = dp(13f)
-        titlePaint.color = t.textSub
+        titlePaint.color = t.onBgSub
         for (s in sections) {
             val top = s.top - scrollY
             if (top > gridH || top + s.height < 0) continue
@@ -188,9 +189,9 @@ class EmojiPanel(ctx: Context) : View(ctx) {
                 fill.color = t.key
                 c.drawRoundRect(cx - slot / 2 + dp(1f), gridH + dp(6f), cx + slot / 2 - dp(1f), height - dp(6f), dp(10f), dp(10f), fill)
             }
-            drawIcon(c, s.icon, cx, cy, dp(20f), if (i == cur) t.accent else t.textSub)
+            drawIcon(c, s.icon, cx, cy, dp(20f), if (i == cur) t.accent else ColorMath.withAlpha(t.onFn, 0xB4))
         }
-        drawIcon(c, "backspace", width - dp(30f), cy, dp(22f), t.text)
+        drawIcon(c, "backspace", width - dp(30f), cy, dp(22f), t.onFn)
     }
 
     override fun computeScroll() {

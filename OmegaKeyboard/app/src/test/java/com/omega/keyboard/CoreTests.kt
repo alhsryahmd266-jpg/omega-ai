@@ -18,7 +18,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -528,5 +528,101 @@ object CoreTests {
         keep.add("", 120, 2190, 880, 2300, cls = "android.widget.EditText", editable = true, hint = true)
         keep.add("", 930, 2200, 1040, 2290, desc = "Ok", clickable = true)
         check("an unchanged button is not promoted", SendFinder.candidates(after.screen(), aIn, keep.screen()).isEmpty())
+    }
+
+    // ------------------------------------------------------------------ colours
+
+    private fun near(a: Int, b: Int, tol: Int = 1): Boolean =
+        Math.abs(ColorMath.red(a) - ColorMath.red(b)) <= tol && Math.abs(ColorMath.green(a) - ColorMath.green(b)) <= tol &&
+            Math.abs(ColorMath.blue(a) - ColorMath.blue(b)) <= tol
+
+    private fun colors() {
+        val white = 0xFFFFFFFF.toInt()
+        val black = 0xFF000000.toInt()
+        val red = 0xFFFF0000.toInt()
+        val blue = 0xFF2979FF.toInt()
+
+        check("white is the brightest", Math.abs(ColorMath.luminance(white) - 1f) < 0.001f)
+        check("black has no luminance", ColorMath.luminance(black) < 0.001f)
+        check("black on white has the top contrast", Math.abs(ColorMath.contrast(black, white) - 21f) < 0.05f) { ColorMath.contrast(black, white).toString() }
+        check("contrast does not depend on the order", ColorMath.contrast(red, white) == ColorMath.contrast(white, red))
+
+        check("dark letters on a white key", ColorMath.onColor(white) == ColorMath.INK && ColorMath.isLight(white))
+        check("white letters on a black key", ColorMath.onColor(black) == ColorMath.PAPER && !ColorMath.isLight(black))
+        check("white letters on blue", ColorMath.onColor(blue) == ColorMath.PAPER)
+        val yellow = 0xFFFFEA00.toInt()
+        check("dark letters on neon yellow", ColorMath.onColor(yellow) == ColorMath.INK)
+        // whatever the key colour, the chosen letter colour reads at least as well as the other one
+        var worst = 21f
+        for (i in 0 until 360 step 15) for (s in listOf(0.2f, 0.6f, 1f)) for (v in listOf(0.2f, 0.5f, 0.8f, 1f)) {
+            val c = ColorMath.fromHsv(i.toFloat(), s, v)
+            worst = minOf(worst, ColorMath.contrast(c, ColorMath.onColor(c)))
+        }
+        check("letters are readable on every key colour (worst contrast $worst)", worst >= 3.9f) { worst.toString() }
+
+        check("blend at 0 is the first colour", ColorMath.blend(red, blue, 0f) == red)
+        check("blend at 1 is the second colour", ColorMath.blend(red, blue, 1f) == blue)
+        check("blend halfway", near(ColorMath.blend(black, white, 0.5f), 0xFF808080.toInt()))
+        check("alpha is blended too", ColorMath.alpha(ColorMath.blend(0x00FFFFFF, white, 0.5f)) in 127..128)
+        check("withAlpha keeps the colour", ColorMath.withAlpha(red, 0x40) == 0x40FF0000)
+        check("withAlphaF 1.0 is opaque", ColorMath.alpha(ColorMath.withAlphaF(red, 1f)) == 255 && ColorMath.alpha(ColorMath.withAlphaF(red, 0f)) == 0)
+
+        check("shade to black", ColorMath.shade(blue, -1f) == black)
+        check("shade to white", ColorMath.shade(blue, 1f) == white)
+        check("shade 0 keeps the colour", ColorMath.shade(blue, 0f) == blue)
+        check("shade keeps alpha", ColorMath.alpha(ColorMath.shade(0x80FF0000.toInt(), 0.3f)) == 0x80)
+        check("lighter is lighter", ColorMath.luminance(ColorMath.shade(blue, 0.3f)) > ColorMath.luminance(blue))
+        check("darker is darker", ColorMath.luminance(ColorMath.shade(blue, -0.3f)) < ColorMath.luminance(blue))
+
+        // HSV round trip over the whole wheel
+        var roundTripOk = true
+        var bad = ""
+        for (i in 0 until 360 step 7) for (s in listOf(0.15f, 0.5f, 1f)) for (v in listOf(0.2f, 0.6f, 1f)) {
+            val c = ColorMath.fromHsv(i.toFloat(), s, v)
+            val hsv = ColorMath.toHsv(c)
+            val back = ColorMath.fromHsv(hsv[0], hsv[1], hsv[2])
+            if (!near(c, back)) { roundTripOk = false; bad = "h=$i s=$s v=$v ${Integer.toHexString(c)} -> ${Integer.toHexString(back)}" }
+        }
+        check("HSV round trip", roundTripOk) { bad }
+        check("pure red is hue 0", ColorMath.toHsv(red)[0] == 0f && ColorMath.toHsv(red)[1] == 1f && ColorMath.toHsv(red)[2] == 1f)
+        check("pure green is hue 120", Math.abs(ColorMath.toHsv(0xFF00FF00.toInt())[0] - 120f) < 0.01f)
+        check("pure blue is hue 240", Math.abs(ColorMath.toHsv(0xFF0000FF.toInt())[0] - 240f) < 0.01f)
+        check("hue wraps around", ColorMath.fromHsv(360f, 1f, 1f) == red && ColorMath.fromHsv(-120f, 1f, 1f) == 0xFF0000FF.toInt())
+        check("grey has no saturation", ColorMath.toHsv(0xFF808080.toInt())[1] == 0f)
+
+        // the tone bar: black → pure hue → white
+        check("tone 0 is black", ColorMath.fromTone(200f, 0f) == black)
+        check("tone 1 is white", ColorMath.fromTone(200f, 1f) == white)
+        check("tone 0.5 is the pure hue", ColorMath.fromTone(0f, 0.5f) == red)
+        var toneOk = true
+        for (i in 0..20) {
+            val t = i / 20f
+            val back = ColorMath.toTone(ColorMath.fromTone(30f, t))
+            if (Math.abs(back - t) > 0.02f) toneOk = false
+        }
+        check("tone round trip", toneOk)
+        var mono = true
+        var prev = -1f
+        for (i in 0..20) { val l = ColorMath.luminance(ColorMath.fromTone(210f, i / 20f)); if (l + 0.0005f < prev) mono = false; prev = l }
+        check("moving right on the tone bar never gets darker", mono)
+
+        // gradients
+        for (c in listOf(blue, red, white, black, 0xFF14213D.toInt(), 0xFFFFEA00.toInt())) {
+            val g = ColorMath.gradientPartner(c)
+            check("gradient partner of ${Integer.toHexString(c)} differs", g != c)
+            check("gradient partner of ${Integer.toHexString(c)} is opaque", ColorMath.alpha(g) == 255)
+        }
+
+        // rainbow
+        val first = (0 until 6).map { ColorMath.rainbow(it) }
+        check("rainbow letters are different colours", first.toSet().size == 6)
+        check("rainbow colours are opaque and bright", first.all { ColorMath.alpha(it) == 255 && ColorMath.toHsv(it)[2] > 0.95f })
+
+        // palettes
+        check("typed palette has red and blue first", Palette.typed[0].color == 0xFF2979FF.toInt() && Palette.typed[1].color == 0xFFFF1744.toInt())
+        check("typed palette has fluorescent colours", Palette.typed.count { it.name.contains("فسفوري") } >= 5)
+        check("palette names are unique", Palette.typed.map { it.name }.toSet().size == Palette.typed.size && Palette.general.map { it.name }.toSet().size == Palette.general.size)
+        check("palette colours are opaque and unique", (Palette.typed + Palette.general).all { ColorMath.alpha(it.color) == 255 } &&
+            Palette.typed.map { it.color }.toSet().size == Palette.typed.size && Palette.general.map { it.color }.toSet().size == Palette.general.size)
     }
 }

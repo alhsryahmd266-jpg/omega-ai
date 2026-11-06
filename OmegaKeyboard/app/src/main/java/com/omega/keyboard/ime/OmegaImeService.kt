@@ -4,12 +4,18 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.text.InputType
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
@@ -30,6 +36,7 @@ import com.omega.keyboard.agent.ScreenTranslateController
 import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.ai.Translator
 import com.omega.keyboard.core.ArabicText
+import com.omega.keyboard.core.ColorMath
 import com.omega.keyboard.core.Dictionary
 import com.omega.keyboard.core.Key
 import com.omega.keyboard.core.KeyKind
@@ -84,6 +91,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private var clipPanel: ClipboardPanel? = null
     private var langPanel: LangPanel? = null
     private var aiPanel: AiPanel? = null
+    private var column: LinearLayout? = null
+    private var appearance: AppearanceSheet? = null
+    private var appearanceBelow = false              // true: the sheet is under the keyboard; false: it covers the keys (landscape)
+    private var aurora: AuroraDrawable? = null       // moving background of the aurora look; every key press nudges it
+    private var bgSignature: List<Int> = emptyList()
+    private var rainbowN = 0                         // next colour of the rainbow
 
     // field state
     private var editor: EditorInfo? = null
@@ -156,7 +169,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     }
 
     override fun onCreateInputView(): View {
-        theme = Themes.resolve(this, prefs.theme)
+        theme = Themes.resolve(this, prefs)
         // BaseFrame: the keyboard decides the height; previews and panels are laid over it (see BaseFrame)
         val frame = BaseFrame(this)
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -178,9 +191,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             v.setPadding(0, 0, 0, navInset(insets))
             insets
         }
-        root = frame; strip = st; content = ct; kbd = k; overlay = ov
+        root = frame; strip = st; content = ct; kbd = k; overlay = ov; this.column = column
         panel = null
         emojiPanel = null; clipPanel = null; langPanel = null; aiPanel = null
+        appearance = null; appearanceBelow = false; aurora = null; bgSignature = emptyList()
         applyTheme()
         applyViewPrefs()
         return frame
@@ -217,6 +231,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
         kbd?.cancelAll()
+        aurora?.stop()
         main.removeCallbacks(refreshRunnable)
         persistUserWords()
     }
@@ -256,17 +271,33 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     // ------------------------------------------------------------------ look
 
     private fun applyTheme() {
-        theme = Themes.resolve(this, prefs.theme)
-        root?.setBackgroundColor(theme.bg)
+        theme = Themes.resolve(this, prefs)
+        val r = root
+        if (r != null) {
+            // the background (flat, gradient or the moving aurora) is painted once behind strip and keys; it is only
+            // replaced when it really changed, so dragging a colour slider does not restart the animation
+            val sig = listOf(theme.bgStyle, theme.bg, theme.bg2) + theme.aurora
+            if (sig != bgSignature || r.background == null) {
+                bgSignature = sig
+                aurora?.stop()
+                aurora = null
+                r.background = when (theme.bgStyle) {
+                    2 -> AuroraDrawable(theme.bg, theme.bg2, theme.aurora).also { aurora = it }
+                    1 -> GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(theme.bg, theme.bg2))
+                    else -> ColorDrawable(theme.bg)
+                }
+            }
+        }
         strip?.theme = theme
         kbd?.theme = theme
         emojiPanel?.theme = theme
         clipPanel?.theme = theme
         langPanel?.theme = theme
         aiPanel?.theme = theme
+        appearance?.theme = theme
         try {
             val w = window?.window ?: return
-            w.navigationBarColor = theme.bg
+            w.navigationBarColor = if (theme.bgStyle >= 1) theme.bg2 else theme.bg
             if (Build.VERSION.SDK_INT >= 26) {
                 @Suppress("DEPRECATION")
                 val f = w.decorView.systemUiVisibility
@@ -280,8 +311,14 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     private fun applyViewPrefs() {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        kbd?.heightScale = prefs.heightPct / 100f * (if (landscape) 0.78f else 1f)
-        kbd?.showPreview = prefs.keyPreview
+        val k = kbd ?: return
+        k.heightScale = prefs.heightPct.coerceIn(70, 150) / 100f * (if (landscape) 0.78f else 1f)
+        k.fontScale = prefs.fontPct.coerceIn(80, 140) / 100f
+        k.widthScale = prefs.widthPct.coerceIn(70, 100) / 100f
+        k.alignMode = prefs.kbAlign
+        k.fxGlow = prefs.fxGlow
+        k.fxRipple = prefs.fxRipple
+        k.showPreview = prefs.keyPreview
     }
 
     private fun layoutFor(p: LayoutKind): Layout = when (p) {
@@ -341,7 +378,43 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun hidePanels() {
         panel?.let { content?.removeView(it) }
         panel = null
+        appearance?.let { if (appearanceBelow) column?.removeView(it) }
+        appearanceBelow = false
         kbd?.visibility = View.VISIBLE
+    }
+
+    // ------------------------------------------------------------------ appearance sheet
+
+    private val sheetHost = object : AppearanceSheet.Host {
+        override fun onLook() { applyTheme(); applyViewPrefs() }
+        override fun onSize() { applyViewPrefs() }
+        override fun onClose() { hideAppearance() }
+    }
+
+    private fun appearanceOpen(): Boolean = appearance?.parent != null
+
+    /** The colours / themes / size sheet. In portrait it opens under the keyboard so every change is seen live above it. */
+    private fun showAppearance() {
+        val col = column ?: return
+        if (appearanceOpen()) { hideAppearance(); return }
+        hidePanels()
+        val sh = appearance ?: AppearanceSheet(this, prefs, sheetHost).also { appearance = it }
+        sh.theme = theme
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (landscape) {
+            showPanel(sh)
+        } else {
+            appearanceBelow = true
+            col.addView(sh, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.density * 214f).toInt()))
+        }
+        sh.reopen()
+        refreshStrip()
+    }
+
+    private fun hideAppearance() {
+        if (!appearanceOpen()) return
+        hidePanels()
+        refreshStrip()
     }
 
     private fun showEmoji() {
@@ -417,8 +490,37 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         }
         undoCorrection = null
         spaceAfterSuggestion = false
-        ic.commitText(text, 1)
+        ic.commitText(styled(text), 1)
         afterTyped()
+    }
+
+    /**
+     * What gets committed for typed text: coloured as the user chose (red, blue, fluorescent, rainbow, or a highlighter pen).
+     * The colour travels as ordinary text spans, so it shows in every field that keeps formatting; in password-like
+     * fields the text stays plain.
+     */
+    private fun styled(text: String): CharSequence {
+        if (text.isEmpty() || plain || numeric) return text
+        val color = prefs.textColor
+        val rainbow = prefs.textRainbow
+        if (color == 0 && !rainbow) return text
+        val sp = SpannableString(text)
+        val flags = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        if (rainbow) {
+            var i = 0
+            while (i < text.length) {
+                val cp = text.codePointAt(i)
+                val n = Character.charCount(cp)
+                if (!Character.isWhitespace(cp)) sp.setSpan(ForegroundColorSpan(ColorMath.rainbow(rainbowN++)), i, i + n, flags)
+                i += n
+            }
+        } else if (prefs.textHighlight) {
+            sp.setSpan(BackgroundColorSpan(color), 0, text.length, flags)
+            sp.setSpan(ForegroundColorSpan(ColorMath.onColor(color)), 0, text.length, flags)
+        } else {
+            sp.setSpan(ForegroundColorSpan(color), 0, text.length, flags)
+        }
+        return sp
     }
 
     override fun onBackspaceRepeat() { doBackspace(false) }
@@ -439,6 +541,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     }
 
     override fun onFeedback(kind: KeyKind) {
+        aurora?.kick()
         if (prefs.haptic) {
             try {
                 @Suppress("DEPRECATION")
@@ -523,7 +626,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             if (before == joined) {
                 ic.beginBatchEdit()
                 ic.deleteSurroundingText(joined.length, 0)
-                ic.commitText(undo.original, 1)
+                ic.commitText(styled(undo.original), 1)
                 ic.endBatchEdit()
                 skipCorrectionFor = undo.original
                 undoCorrection = null
@@ -547,7 +650,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             if (before != null && before.length == 2 && before[1] == ' ' && before[0].isLetterOrDigit()) {
                 ic.beginBatchEdit()
                 ic.deleteSurroundingText(1, 0)
-                ic.commitText(". ", 1)
+                ic.commitText(styled(". "), 1)
                 ic.endBatchEdit()
                 lastSpaceTime = 0
                 undoCorrection = null
@@ -629,7 +732,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             if (ic.getTextBeforeCursor(1, 0)?.toString() == " ") ic.deleteSurroundingText(1, 0)
         }
         spaceAfterSuggestion = false
-        ic.commitText(sep, 1)
+        ic.commitText(styled(sep), 1)
         undoCorrection = undo?.let { Undo(it.original, it.fixed, sep) }
     }
 
@@ -642,7 +745,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             if (prev == null || prev.isWhitespace()) {
                 val fixed = "I" + word.substring(1)
                 ic.deleteSurroundingText(word.length, 0)
-                ic.commitText(fixed, 1)
+                ic.commitText(styled(fixed), 1)
                 return Undo(word, fixed, "")
             }
             return null
@@ -659,7 +762,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (d.frequency(cand) < (if (cand.length <= 3) 1_000_000 else 50_000)) return null
         val fixed = matchCase(word, cand)
         ic.deleteSurroundingText(word.length, 0)
-        ic.commitText(fixed, 1)
+        ic.commitText(styled(fixed), 1)
         return Undo(word, fixed, "")
     }
 
@@ -691,7 +794,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val word = currentWord(ic) ?: ""
         ic.beginBatchEdit()
         if (word.isNotEmpty()) ic.deleteSurroundingText(word.length, 0)
-        ic.commitText("$text ", 1)
+        ic.commitText(styled("$text "), 1)
         ic.endBatchEdit()
         dictFor(text)?.let { it.learn(text); dictsDirty = true }
         undoCorrection = null
@@ -772,10 +875,11 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         StripView.Tool("voice", "mic", "صوت", voiceActive),
         StripView.Tool("screen", "g_translate", "الشاشة", ScreenTranslateController.active),
         StripView.Tool("typed", "translate", "ترجم", translateBar),
-        StripView.Tool("settings", "settings", "إعدادات"),
+        StripView.Tool("theme", "palette", "المظهر", appearanceOpen()),
         StripView.Tool("auto", "smart_toy", "ذاتي", AutoPilot.running),
         StripView.Tool("ai", "auto_awesome", "تحسين"),
         StripView.Tool("clip", "content_paste", "الحافظة"),
+        StripView.Tool("settings", "settings", "إعدادات"),
     )
 
     private fun refreshStrip() {
@@ -843,6 +947,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             "voice" -> startVoice()
             "ai" -> showAi()
             "clip" -> showClipboard()
+            "theme" -> showAppearance()
             "settings" -> try {
                 startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Throwable) {
@@ -852,7 +957,11 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     override fun onStatusAction(id: String) {
         when (id) {
-            "voice_stop" -> VoiceSession.stopListening()
+            "voice_stop" -> {
+                VoiceSession.stopListening()
+                // if the recogniser is already gone there is nothing left to wait for: leave the listening state now
+                if (!VoiceSession.active) { voiceActive = false; voiceText = ""; refreshStrip() }
+            }
             "auto_stop" -> AutoPilot.stop("وقفته من الكيبورد")
             "cancel_busy" -> { Llm.cancel(); busyText = null; refreshStrip() }
             "undo_text" -> { undoReplacement(); flashText = null; refreshStrip() }
@@ -886,7 +995,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         voiceText = ""
         val ic = currentInputConnection
         if (ic == null) { refreshStrip(); return }
-        ic.commitText("$text ", 1)
+        ic.commitText(styled("$text "), 1)
         undoCorrection = null
         spaceAfterSuggestion = false
         afterTyped()
@@ -902,7 +1011,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         return (b + a) to false
     }
 
-    private fun replaceNow(text: String): Boolean {
+    private fun replaceNow(text: String, coloured: Boolean = false): Boolean {
         val ic = currentInputConnection ?: return false
         ic.beginBatchEdit()
         try {
@@ -914,7 +1023,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
                 if (b == 0 && a == 0) break
                 ic.deleteSurroundingText(b, a)
             }
-            ic.commitText(text, 1)
+            ic.commitText(if (coloured) styled(text) else text, 1)
         } finally {
             ic.endBatchEdit()
         }
@@ -957,7 +1066,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     private fun applyReplacement(original: String, result: String, wasSelection: Boolean) {
         val ic = currentInputConnection ?: return
-        if (wasSelection) ic.commitText(result, 1) else replaceNow(result)
+        if (wasSelection) ic.commitText(styled(result), 1) else replaceNow(result, coloured = true)
         lastReplacement = Triple(original, result, wasSelection)
         undoCorrection = null
         spaceAfterSuggestion = false
@@ -972,12 +1081,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             if (before == t.second) {
                 ic.beginBatchEdit()
                 ic.deleteSurroundingText(t.second.length, 0)
-                ic.commitText(t.first, 1)
+                ic.commitText(styled(t.first), 1)
                 ic.endBatchEdit()
                 true
             } else false
         } else {
-            if (readField(ic).first == t.second) { replaceNow(t.first); true } else false
+            if (readField(ic).first == t.second) { replaceNow(t.first, coloured = true); true } else false
         }
         lastReplacement = null
         if (!ok) flash("مقدرتش أرجّع النص (اتغيّر)", true) else refreshStrip()
