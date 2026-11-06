@@ -90,6 +90,15 @@
                 android:resource="@xml/accessibility_config" />
         </service>
 
+        <!-- the phone's download manager reports that the model download is finished: switch to it even if the app is closed -->
+        <receiver
+            android:name=".ai.DownloadDoneReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
         <!-- runs the Gemma model in its own process so a crash or out-of-memory kill can't take the keyboard down -->
         <service
             android:name=".ai.LlmService"

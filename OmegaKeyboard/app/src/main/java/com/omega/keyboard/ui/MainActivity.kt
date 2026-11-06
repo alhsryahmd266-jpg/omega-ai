@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -15,6 +17,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import com.omega.keyboard.ai.Llm
+import com.omega.keyboard.ai.ModelDownloader
 import com.omega.keyboard.ai.ModelStore
 import com.omega.keyboard.agent.ScreenAgentService
 
@@ -24,6 +27,16 @@ class MainActivity : BaseActivity() {
     private lateinit var p: Pal
     private lateinit var steps: LinearLayout
     private lateinit var hero: LinearLayout
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastKey = ""
+
+    /** while the model downloads, the step below shows the progress */
+    private val tick = object : Runnable {
+        override fun run() {
+            renderSteps(force = false)
+            if (ModelDownloader.status(this@MainActivity).active) handler.postDelayed(this, 1500)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +104,12 @@ class MainActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         renderSteps()
+        handler.postDelayed(tick, 1500)
+    }
+
+    override fun onPause() {
+        handler.removeCallbacks(tick)
+        super.onPause()
     }
 
     // ------------------------------------------------------------------ live status
@@ -117,12 +136,17 @@ class MainActivity : BaseActivity() {
 
     private fun permsGranted(): Boolean = wanted.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
-    private fun renderSteps() {
+    private fun renderSteps(force: Boolean = true) {
+        ModelDownloader.adoptIfDone(this)
         val imeOn = imeEnabled()
         val imeSel = imeSelected()
         val a11y = a11yEnabled()
         val perms = permsGranted()
         val model = ModelStore.path(this) != null
+        val dl = ModelDownloader.status(this)
+        val key = "$imeOn $imeSel $a11y $perms $model ${dl.kind} ${dl.percent} ${dl.message}"
+        if (!force && key == lastKey) return
+        lastKey = key
 
         // header
         hero.removeAllViews()
@@ -168,10 +192,24 @@ class MainActivity : BaseActivity() {
             if (perms) "تمام" else "الميكروفون بس، عشان تكتب بصوتك. اختياري.",
             if (perms) null else "السماح" to { requestPermissions(wanted, 11) }
         ))
+        val openModel = { startActivity(Intent(this, ModelActivity::class.java)) }
+        val downloadNow = { startActivity(Intent(this, ModelActivity::class.java).putExtra("autodownload", true)) }
         steps.addView(step(
             if (model) 1 else 0, "٥) النموذج المحلي (Gemma)",
-            if (model) "${ModelStore.sizeMb(this)} MB — ${Llm.statusText(this)}" else "اختار ملف النموذج اللي نزّلته (gemma-4-E2B-it.litertlm). مش بيتبعت لأي حد.",
-            (if (model) "إدارة" else "اختيار الملف") to { startActivity(Intent(this, ModelActivity::class.java)) }
+            when {
+                model -> "${ModelStore.sizeMb(this)} MB — ${Llm.statusText(this)}"
+                dl.kind == ModelDownloader.Kind.PAUSED -> "التنزيل واقف: ${dl.message}"
+                dl.active -> "بينزّل دلوقتي... ${dl.percent}% (بيكمل في الخلفية وبيتفعّل لوحده)"
+                dl.kind == ModelDownloader.Kind.FAILED -> "التنزيل ما اتمّش: ${dl.message}"
+                else -> "محتاجه للوضع الذاتي. نزّله من هنا مباشرةً (حوالي ٢.٦ جيجا، يفضّل واي فاي) أو اختار ملف نزّلته قبل كده. مش بيتبعت لأي حد."
+            },
+            when {
+                model -> "إدارة" to openModel
+                dl.active -> "المتابعة" to openModel
+                dl.kind == ModelDownloader.Kind.FAILED -> "التفاصيل" to openModel
+                else -> "تنزيل النموذج" to downloadNow
+            },
+            if (!model && !dl.active && dl.kind != ModelDownloader.Kind.FAILED) "اختيار ملف" to openModel else null
         ))
         steps.addView(UiKit.label(
             this, "ترجمة الشاشة والكتابة بتشتغل بدون النموذج لأغلب اللغات (محرك سريع على التليفون؛ أول مرة بتنزّل حزمة اللغة حوالي ٣٠ ميجا). النموذج مطلوب للوضع الذاتي ولباقي اللغات.",

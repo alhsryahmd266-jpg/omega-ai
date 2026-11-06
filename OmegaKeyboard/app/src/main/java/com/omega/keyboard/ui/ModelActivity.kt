@@ -25,6 +25,7 @@ import com.omega.keyboard.AppLog
 import com.omega.keyboard.Bg
 import com.omega.keyboard.Prefs
 import com.omega.keyboard.ai.Llm
+import com.omega.keyboard.ai.ModelDownloader
 import com.omega.keyboard.ai.ModelImporter
 import com.omega.keyboard.ai.ModelStore
 import java.io.File
@@ -46,6 +47,10 @@ class ModelActivity : BaseActivity() {
     private var progressBar: ProgressBar? = null
     private var progressLabel: TextView? = null
     private var lastRunning = false
+    private var dlBar: ProgressBar? = null
+    private var dlLabel: TextView? = null
+    private var lastDl = ModelDownloader.Kind.NONE
+    private var dlTick = 0
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -59,6 +64,7 @@ class ModelActivity : BaseActivity() {
                 render()
                 if (!s.running && s.done) Toast.makeText(this@ModelActivity, "النموذج اتضاف وجاهز", Toast.LENGTH_LONG).show()
             }
+            if (++dlTick % 4 == 0) pollDownload()
             handler.postDelayed(this, 250)
         }
     }
@@ -71,10 +77,16 @@ class ModelActivity : BaseActivity() {
         setContentView(UiKit.screen(this, p, "النموذج المحلي", holder) { finish() })
         lastRunning = ModelImporter.state.running
         render()
+        if (intent?.getBooleanExtra("autodownload", false) == true) {
+            intent.removeExtra("autodownload")
+            handler.post { if (!ModelDownloader.status(this).active) confirmDownload() }
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        if (ModelDownloader.adoptIfDone(this)) Toast.makeText(this, "النموذج اتنزّل واتفعّل وجاهز", Toast.LENGTH_LONG).show()
+        lastDl = ModelDownloader.status(this).kind
         render()
         handler.post(ticker)
         if (ModelImporter.state.running) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -97,6 +109,8 @@ class ModelActivity : BaseActivity() {
         holder.removeAllViews()
         progressBar = null
         progressLabel = null
+        dlBar = null
+        dlLabel = null
         build()
         sv?.post { sv.scrollTo(0, y) }
     }
@@ -138,6 +152,11 @@ class ModelActivity : BaseActivity() {
             h.addView(c)
         }
 
+        // ---- download: on top while there is no model or something is going on, otherwise below the other ways to add one
+        val dl = ModelDownloader.status(this)
+        val dlOnTop = path == null || dl.active || dl.kind == ModelDownloader.Kind.FAILED
+        if (dlOnTop) buildDownload(h, path != null, dl)
+
         // ---- choose
         h.addView(UiKit.section(this, p, "إضافة النموذج"))
         val choose = UiKit.card(this, p)
@@ -147,6 +166,7 @@ class ModelActivity : BaseActivity() {
         choose.addView(UiKit.label(this, "تليفونك مساحته ضيقة؟ استخدم الملف من مجلد التنزيلات زي ما هو من غير نسخ (بيحتاج إذن الوصول لكل الملفات).", 13.5f, p.sub))
         choose.addView(UiKit.button(this, p, if (hasAllFiles()) "استخدم ملف من التنزيلات" else "السماح بالوصول للملفات", filled = false) { useDownloads() })
         h.addView(choose)
+        if (!dlOnTop) buildDownload(h, true, dl)
 
         // ---- test
         h.addView(UiKit.section(this, p, "تجربة"))
@@ -199,6 +219,143 @@ class ModelActivity : BaseActivity() {
                 textDirection = android.view.View.TEXT_DIRECTION_LTR
                 setTextIsSelectable(true)
             })
+        }
+    }
+
+    // ------------------------------------------------------------------ download from the internet
+
+    private fun dlText(st: ModelDownloader.Status): String =
+        if (st.total > 0) "${st.percent}%  —  ${ModelImporter.mb(st.done)} من ${ModelImporter.mb(st.total)}" else ModelImporter.mb(st.done)
+
+    private fun pollDownload() {
+        val adopted = ModelDownloader.adoptIfDone(this)
+        val st = ModelDownloader.status(this)
+        if (adopted) Toast.makeText(this, "النموذج اتنزّل واتفعّل وجاهز", Toast.LENGTH_LONG).show()
+        if (adopted || st.kind != lastDl) {
+            lastDl = st.kind
+            render()
+        } else if (st.active) {
+            dlBar?.progress = if (st.total > 0) (st.done * 1000 / st.total).toInt() else 0
+            dlLabel?.text = dlText(st)
+        }
+    }
+
+    /** a row of equally wide buttons */
+    private fun buttonRow(primaryFirst: Boolean, vararg items: Pair<String, () -> Unit>): LinearLayout {
+        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((i, item) in items.withIndex()) {
+            val action = item.second
+            val b = UiKit.button(this, p, item.first, filled = primaryFirst && i == 0) { action() }
+            b.setPadding(dp(8), 0, dp(8), 0)
+            b.layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f).also { lp ->
+                lp.topMargin = dp(10)
+                if (i > 0) lp.marginStart = dp(8)
+            }
+            r.addView(b)
+        }
+        return r
+    }
+
+    private fun buildDownload(h: LinearLayout, hasModel: Boolean, st: ModelDownloader.Status) {
+        val failed = st.kind == ModelDownloader.Kind.FAILED
+        h.addView(UiKit.section(this, p, if (hasModel && !st.active && !failed) "تنزيل نسخة تانية من الإنترنت" else "تنزيل النموذج من الإنترنت"))
+        val c = UiKit.card(this, p)
+        when {
+            st.active -> {
+                val paused = st.kind == ModelDownloader.Kind.PAUSED
+                c.addView(UiKit.label(this, if (paused) "التنزيل واقف دلوقتي" else "بنزّل النموذج...", 15f, p.text, true))
+                if (paused) c.addView(UiKit.label(this, st.message, 13f, p.sub).apply { setPadding(0, dp(4), 0, 0) })
+                val pb = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 1000
+                    progress = if (st.total > 0) (st.done * 1000 / st.total).toInt() else 0
+                    progressTintList = android.content.res.ColorStateList.valueOf(p.accent)
+                }
+                c.addView(pb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(10)).also { it.topMargin = dp(12) })
+                val lab = UiKit.label(this, dlText(st), 13f, p.sub).apply { setPadding(0, dp(6), 0, 0) }
+                c.addView(lab)
+                c.addView(UiKit.label(
+                    this, "تقدر تقفل الشاشة أو التطبيق: التنزيل بيكمل في الخلفية (فيه إشعار بالتقدم) وبيتفعّل لوحده لما يخلص.", 12.5f, p.sub
+                ).apply { setPadding(0, dp(8), 0, 0) })
+                c.addView(UiKit.button(this, p, "إلغاء التنزيل", filled = false) {
+                    ModelDownloader.cancel(this)
+                    lastDl = ModelDownloader.Kind.NONE
+                    render()
+                })
+                dlBar = pb
+                dlLabel = lab
+            }
+            failed -> {
+                c.addView(UiKit.statusRow(this, p, -1, "التنزيل ما اتمّش", st.message))
+                c.addView(buttonRow(true, "حاول تاني" to { confirmDownload() }, "إلغاء" to {
+                    ModelDownloader.cancel(this)
+                    lastDl = ModelDownloader.Kind.NONE
+                    render()
+                }))
+            }
+            else -> {
+                c.addView(UiKit.label(
+                    this, "نزّل النموذج (Gemma 4 E2B، حوالي ٢.٦ جيجا) جوه التطبيق مباشرةً من غير ما تدوّر على ملفات. يفضّل واي فاي.", 13.5f, p.sub
+                ))
+                c.addView(UiKit.button(this, p, if (hasModel) "تنزيل تاني" else "تنزيل النموذج") { confirmDownload() })
+            }
+        }
+        // the link: to send to somebody else, or to download in a browser
+        c.addView(UiKit.spacer(this, 14f))
+        c.addView(UiKit.label(this, "رابط النموذج (ابعته لأي حد بيستخدم الكيبورد):", 12.5f, p.sub))
+        c.addView(UiKit.label(this, ModelDownloader.FILE_URL, 11.5f, p.text).apply {
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = UiKit.shape(this@ModelActivity, p.cardAlt, 10f)
+            textDirection = android.view.View.TEXT_DIRECTION_LTR
+            setTextIsSelectable(true)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = dp(6) })
+        c.addView(buttonRow(false, "فتح الصفحة" to { openLink(ModelDownloader.REPO_URL) }, "نسخ الرابط" to { copyLink() }, "مشاركة" to { shareLink() }))
+        h.addView(c)
+    }
+
+    private fun confirmDownload() {
+        AlertDialog.Builder(this)
+            .setTitle("تنزيل النموذج")
+            .setMessage("الملف حوالي ٢.٦ جيجا (Gemma 4 E2B من Hugging Face). بينزل في الخلفية ومعاه إشعار، وبيتفعّل لوحده لما يخلص. يفضّل واي فاي عشان باقة النت.")
+            .setPositiveButton("واي فاي بس") { _, _ -> startDownload(true) }
+            .setNeutralButton("أي شبكة") { _, _ -> startDownload(false) }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun startDownload(wifiOnly: Boolean) {
+        val err = ModelDownloader.start(this, wifiOnly)
+        if (err != null) {
+            AlertDialog.Builder(this).setTitle("مش هينفع").setMessage(err)
+                .setPositiveButton("تمام", null)
+                .setNeutralButton("فتح الصفحة") { _, _ -> openLink(ModelDownloader.REPO_URL) }
+                .show()
+        } else {
+            Toast.makeText(this, "بدأ التنزيل", Toast.LENGTH_SHORT).show()
+        }
+        lastDl = ModelDownloader.status(this).kind
+        render()
+    }
+
+    private fun openLink(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: Throwable) {
+            Toast.makeText(this, "مفيش متصفح يفتح الرابط", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun copyLink() {
+        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("model-link", ModelDownloader.FILE_URL))
+        Toast.makeText(this, "اتنسخ رابط النموذج", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun shareLink() {
+        val text = "نموذج Gemma لكيبورد Omega (حوالي ٢.٦ جيجا):\n${ModelDownloader.FILE_URL}\n\nصفحة النموذج: ${ModelDownloader.REPO_URL}"
+        val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        try {
+            startActivity(Intent.createChooser(i, "مشاركة رابط النموذج"))
+        } catch (_: Throwable) {
+            Toast.makeText(this, "مقدرتش أفتح المشاركة", Toast.LENGTH_LONG).show()
         }
     }
 

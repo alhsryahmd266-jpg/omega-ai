@@ -34,6 +34,11 @@ class Prefs private constructor(ctx: Context) {
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: Int) { sp.edit().putInt(k, value).apply() }
     }
 
+    private inner class L(val k: String, val d: Long) : ReadWriteProperty<Any?, Long> {
+        override fun getValue(thisRef: Any?, property: KProperty<*>): Long = sp.getLong(k, d)
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: Long) { sp.edit().putLong(k, value).apply() }
+    }
+
     // ---- keyboard look & feel
     var theme by S("theme", "auto")
     var heightPct by I("height_pct", 100)                 // 70..150
@@ -90,6 +95,8 @@ class Prefs private constructor(ctx: Context) {
     var backend by S("backend", "cpu")                // cpu | gpu
     var idleMinutes by I("idle_minutes", 10)           // 0 = keep loaded
     var llmNoCache by B("llm_nocache", false)         // saves ~GBs of storage, loads slower
+    var dlId by L("dl_id", -1L)                        // id of the model download in the phone's download manager, -1 = none
+    var dlName by S("dl_name", "")                     // file name that download writes to
 
     var clipboardHistory by S("clip_history", "")
     var recentEmoji by S("recent_emoji", "")
