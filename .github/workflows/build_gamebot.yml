@@ -1,0 +1,80 @@
+name: Build GameBot APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'GameBot/**'
+      - '.github/workflows/build_gamebot.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: gamebot-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK (release, debug-signed)
+        working-directory: GameBot
+        run: |
+          set +e
+          gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gamebot_gradle.log
+          echo "GRADLE_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Annotate errors
+        if: always()
+        run: |
+          grep -E "^e: |error: |What went wrong" -A2 gamebot_gradle.log | head -80 | while IFS= read -r l; do echo "::error::${l}"; done || true
+
+      - name: Push gradle log to branch gamebot-logs
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          rm -rf /tmp/lg && mkdir /tmp/lg && cp gamebot_gradle.log /tmp/lg/
+          cd /tmp/lg
+          git init -q -b gamebot-logs
+          git add -A
+          git -c user.email=bot@gvr.local -c user.name="GVR Bot" commit -qm "gamebot gradle log run ${{ github.run_number }}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" gamebot-logs
+          exit 0
+
+      - name: Fail if gradle failed
+        if: env.GRADLE_EXIT != '0'
+        run: exit 1
+
+      - name: Locate APK
+        run: |
+          APK=$(find GameBot/app/build/outputs/apk/release -name "*.apk" | head -1)
+          echo "found: $APK"
+          cp "$APK" "GameBot-1.0.${{ github.run_number }}.apk"
+          echo "APK_PATH=GameBot-1.0.${{ github.run_number }}.apk" >> "$GITHUB_ENV"
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "gamebot-v1.0.${{ github.run_number }}"
+          name: "GameBot v1.0.${{ github.run_number }}"
+          body: "GameBot - on-device screen-reading game bot (own-game QA). See GameBot/README.md for setup."
+          files: ${{ env.APK_PATH }}

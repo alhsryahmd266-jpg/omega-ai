@@ -1,4 +1,13 @@
-# GVR-Chat Project State (آخر تحديث: 2026-10-13)
+# GVR-Chat Project State (آخر تحديث: 2026-11-06)
+
+
+## جلسة 2026-11-06: GameBot (تطبيق مستقل داخل نفس الريبو)
+- **إيه هو:** تطبيق أندرويد مستقل في `GameBot/` (package `com.ahmedxg.gamebot`) بيلتقط الشاشة (MediaProjection) ← كشف TFLite ← قرار ← لمس متعدد عن طريق Shizuku (أو Accessibility). كله محلي، من غير صلاحية إنترنت. للاستخدام على لعبة المستخدم نفسه (QA).
+- **البناء:** workflow `.github/workflows/build_gamebot.yml` (يشتغل على push لـ `GameBot/**` أو يدوي). بيطلع release بتاج `gamebot-v1.0.<run>` فيه الـ APK. لوج الـ gradle بيتحط على فرع `gamebot-logs` (ملف `gamebot_gradle.log`) وأخطاء الـ build بتظهر كـ annotations. الـ workflow بيستخدم `GITHUB_TOKEN` الافتراضي (مش `GH_PAT`).
+- **فحص محلي قبل الرفع:** kotlinc 1.9.24 + `android.jar` (Sable/android-platforms) + stubs لمكتبات (TFLite/Shizuku). ده بيكشف أخطاء الـ Kotlin من غير ما نستنى الـ CI.
+- **الأجزاء:** `BotService` (حلقة الالتقاط والقرار)، `Detector` (YOLOv8/11 TFLite، NMS، letterbox)، `Policy` (Monkey بدون نموذج + Tactical بالكشف، 4 مستويات مهارة)، `Controller` (عصا حركة + نظر + نار + taps)، `ShizukuInput`/`AccessibilityInput`، `ForegroundGuard` (ما يلمسش خارج اللعبة)، `Hud` + `EditorService` (تعديل أماكن الأزرار)، `TouchTestActivity` (اختبار الحقن).
+- **المتبقي/معروف:** ما اتجرّبش على جهاز حقيقي. مفيش نموذج جاهز (لازم يتدرّب على اللعبة: `GameBot/training/`). مفيش تعلّم بالتقليد جوّه التطبيق بعد. تسجيل الشاشة بيطلب موافقة كل مرة. Ultralytics رخصتها AGPL-3.0.
+- **خطوة جاية مقترحة:** تجربة "اختبار حقن اللمس" على الجهاز، وبعدها تسجيل لقطات وتدريب أول نموذج `enemy`.
 
 
 
