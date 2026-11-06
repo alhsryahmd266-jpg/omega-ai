@@ -1,5 +1,7 @@
 package com.omega.keyboard.ime
 
+import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -23,7 +25,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputContentInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -48,6 +52,7 @@ import com.omega.keyboard.core.LlmPrompts
 import com.omega.keyboard.ui.SettingsActivity
 import com.omega.keyboard.voice.VoiceSession
 import org.json.JSONArray
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -876,6 +881,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         StripView.Tool("screen", "g_translate", "الشاشة", ScreenTranslateController.active),
         StripView.Tool("typed", "translate", "ترجم", translateBar),
         StripView.Tool("theme", "palette", "المظهر", appearanceOpen()),
+        StripView.Tool("neon", "bolt", "نيون"),
         StripView.Tool("auto", "smart_toy", "ذاتي", AutoPilot.running),
         StripView.Tool("ai", "auto_awesome", "تحسين"),
         StripView.Tool("clip", "content_paste", "الحافظة"),
@@ -948,10 +954,85 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             "ai" -> showAi()
             "clip" -> showClipboard()
             "theme" -> showAppearance()
+            "neon" -> sendNeon()
             "settings" -> try {
                 startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Throwable) {
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ neon picture
+
+    private inline fun <T> safely(block: () -> T?): T? = try { block() } catch (_: Throwable) { null }
+
+    /** what the field holds: the selection when there is one, otherwise everything that is written */
+    private fun fieldText(ic: InputConnection): String {
+        val sel = safely { ic.getSelectedText(0)?.toString() }
+        if (!sel.isNullOrBlank()) return sel
+        val all = safely { ic.getExtractedText(ExtractedTextRequest(), 0)?.text?.toString() }
+        if (!all.isNullOrBlank()) return all
+        val before = safely { ic.getTextBeforeCursor(1500, 0)?.toString() } ?: ""
+        val after = safely { ic.getTextAfterCursor(1500, 0)?.toString() } ?: ""
+        return before + after
+    }
+
+    /** the picture types the field says it can take (empty: it takes none) */
+    private fun acceptedImageTypes(ei: EditorInfo?): Array<String> {
+        if (ei == null || Build.VERSION.SDK_INT < 25) return emptyArray()
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            (EditorInfo::class.java.getField("contentMimeTypes").get(ei) as? Array<String>) ?: emptyArray()
+        } catch (_: Throwable) {
+            emptyArray()
+        }
+    }
+
+    /** Draws what is written in the field as a glowing neon sign and sends it as a picture. */
+    private fun sendNeon() {
+        val ic = currentInputConnection
+        if (ic == null) { flash("اضغط على خانة الكتابة الأول", true); return }
+        if (plain) { flash("مش هعمل صورة من خانة سرية", true); return }
+        val text = fieldText(ic).trim()
+        if (text.isEmpty()) { flash("اكتب الكلام الأول وبعدين دوس \"نيون\"", true); return }
+        val color = prefs.textColor
+        val rainbow = prefs.textRainbow
+        val app = applicationContext
+        flash("بجهّز صورة النيون...")
+        Bg.io {
+            val file = try {
+                NeonRenderer.renderToFile(app, text, color, rainbow)
+            } catch (t: Throwable) {
+                AppLog.e("neon", "could not draw the picture", t)
+                null
+            }
+            Bg.ui { if (file == null) flash("معرفتش أعمل الصورة", true) else deliverNeon(file) }
+        }
+    }
+
+    private fun deliverNeon(file: File) {
+        val uri = NeonProvider.uriFor(this, file)
+        val ic = currentInputConnection
+        val accepted = acceptedImageTypes(editor).any { ClipDescription.compareMimeTypes("image/png", it) }
+        if (Build.VERSION.SDK_INT >= 25 && ic != null && accepted) {
+            val ok = try {
+                val info = InputContentInfo(uri, ClipDescription("neon", arrayOf("image/png")), null)
+                ic.commitContent(info, InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null)
+            } catch (t: Throwable) {
+                AppLog.e("neon", "the field refused the picture", t)
+                false
+            }
+            if (ok) { flash("اتحطّت صورة النيون ✓"); return }
+        }
+        // the field takes no pictures: the share sheet lets the user pick the chat
+        try {
+            val send = Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            send.clipData = ClipData.newRawUri("neon", uri)
+            startActivity(Intent.createChooser(send, "ابعت صورة النيون").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (t: Throwable) {
+            AppLog.e("neon", "could not open the share sheet", t)
+            flash("مقدرتش أفتح المشاركة", true)
         }
     }
 

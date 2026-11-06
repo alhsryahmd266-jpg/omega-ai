@@ -90,6 +90,13 @@
                 android:resource="@xml/accessibility_config" />
         </service>
 
+        <!-- the neon pictures the keyboard makes: other apps get a temporary read grant for one file at a time -->
+        <provider
+            android:name=".ime.NeonProvider"
+            android:authorities="${applicationId}.neon"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <!-- the phone's download manager reports that the model download is finished: switch to it even if the app is closed -->
         <receiver
             android:name=".ai.DownloadDoneReceiver"
