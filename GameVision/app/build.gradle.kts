@@ -12,7 +12,7 @@ android {
         // RedMagic 6 Pro ships Android 12 (API 31); minSdk 26 so AccessibilityService.takeScreenshot()
         // (added in API 30) and dispatchGesture() (API 24+) are both safely available at runtime.
         minSdk = 26
-        targetSdk = 31
+        targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
     }
