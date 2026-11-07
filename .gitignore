@@ -1,0 +1,6 @@
+
+# GameVision (native Android, no gradlew committed)
+GameVision/.gradle/
+GameVision/app/build/
+GameVision/build/
+GameVision/local.properties

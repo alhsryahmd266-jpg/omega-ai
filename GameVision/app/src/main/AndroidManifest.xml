@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Floating on/off button drawn over other apps (standard system permission, granted by the user
+         in Settings — not auto-granted, not hidden). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Keeps the capture/gesture loop alive while the bot is switched on. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.GameVision"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The floating start/stop button + the bot's own status notification. Not exported: only this
+             app can start it, and only in response to a tap the device's own user made. -->
+        <service
+            android:name=".OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="On-device screen automation the user explicitly starts and stops for testing their own game." />
+        </service>
+
+        <!-- Captures the screen (AccessibilityService#takeScreenshot) and sends synthetic touches
+             (dispatchGesture) when the bot is switched on. Standard Android automation API — the same
+             mechanism accessibility tools and UI-testing frameworks use; it does not read or modify the
+             game's own process or files.
+             android:exported is forced true by the system for every AccessibilityService; BIND_ACCESSIBILITY_SERVICE
+             restricts binding to the OS itself, so no other app can drive this one. -->
+        <service
+            android:name=".CaptureAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+    </application>
+</manifest>
