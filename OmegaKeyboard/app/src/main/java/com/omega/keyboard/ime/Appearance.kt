@@ -11,6 +11,7 @@ import android.graphics.Shader
 import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -383,6 +384,7 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
 
     private val restylers = ArrayList<() -> Unit>()
     private val tabs = ArrayList<TextView>()
+    private val targetChips = ArrayList<TextView>()
     private val pages = ArrayList<View>()
     private var tab = 0
     private var target = Target.TEXT
@@ -456,7 +458,7 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
         val header = LinearLayout(ctx).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(ctx.dpi(10f), ctx.dpi(6f), ctx.dpi(8f), ctx.dpi(2f))
+            setPadding(ctx.dpi(10f), ctx.dpi(4f), ctx.dpi(8f), ctx.dpi(2f))
         }
         val names = listOf("الألوان", "الثيمات", "الحجم والتأثيرات")
         for ((i, n) in names.withIndex()) {
@@ -478,7 +480,7 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
             setOnClickListener { host.onClose() }
         }
         header.addView(close, LayoutParams(ctx.dpi(38f), ctx.dpi(34f)))
-        addView(header, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(42f)))
+        addView(header, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(HEADER_DP)))
         restylers.add {
             for ((i, tv) in tabs.withIndex()) styleChip(tv, i == tab)
             close.drawable?.mutate()?.setTint(theme.onBg)
@@ -561,27 +563,31 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
 
         // what to colour
         val (targetScroll, targetRow) = hScroll()
-        for (tg in Target.values()) targetRow.addView(chip(tg.label, { target == tg }) { target = tg; refreshColors() })
+        for (tg in Target.values()) {
+            val c = chip(tg.label, { target == tg }) { target = tg; refreshColors() }
+            targetChips.add(c)
+            targetRow.addView(c)
+        }
         targetRow.addView(chip("↺ الأصلي", { false }) { resetTarget() })
-        col.addView(targetScroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(36f)))
+        col.addView(targetScroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(34f)))
 
         // quick colours
         val (sw, swRow) = hScroll()
         swatchScroll = sw
         swRow.addView(swatches, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
         swatches.onPick = { item -> onSwatch(item) }
-        col.addView(sw, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(46f)))
+        col.addView(sw, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(44f)))
 
-        // any colour + preview and switches
+        // any colour + preview and switches (the side column holds the preview and, for the background, two switches)
         val low = LinearLayout(ctx).apply { orientation = HORIZONTAL }
         field.onPick = { c -> onField(c) }
         low.addView(field, LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         val side = LinearLayout(ctx).apply { orientation = VERTICAL; setPadding(ctx.dpi(8f), 0, 0, 0) }
-        side.addView(preview, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(40f)))
+        side.addView(preview, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(38f)))
         toggles.orientation = VERTICAL
         side.addView(toggles, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).also { it.topMargin = ctx.dpi(6f) })
         low.addView(side, LayoutParams(ctx.dpi(118f), ViewGroup.LayoutParams.MATCH_PARENT))
-        col.addView(low, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(100f)).also { it.topMargin = ctx.dpi(4f) })
+        col.addView(low, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(LOW_DP)).also { it.topMargin = ctx.dpi(4f) })
         return col
     }
 
@@ -767,5 +773,29 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
     /** the keyboard asks the sheet to forget a stale position after it was shown again */
     fun reopen() {
         showTab(tab)
+    }
+
+    /** Preview builds only (the keyboard calls it from its debug broadcast): where the tabs are, so the emulator test can open each one. */
+    fun dumpTabs() {
+        val loc = IntArray(2)
+        val sb = StringBuilder()
+        for ((i, t) in tabs.withIndex()) {
+            t.getLocationOnScreen(loc)
+            sb.append("tab").append(i).append('=').append(loc[0] + t.width / 2).append(',').append(loc[1] + t.height / 2).append(';')
+        }
+        for ((i, t) in targetChips.withIndex()) {
+            if (!t.isShown) continue
+            t.getLocationOnScreen(loc)
+            sb.append("target").append(i).append('=').append(loc[0] + t.width / 2).append(',').append(loc[1] + t.height / 2).append(';')
+        }
+        Log.d("OmegaSheet", sb.toString())
+    }
+
+    companion object {
+        private const val HEADER_DP = 40f
+        private const val LOW_DP = 112f      // colour field + (preview, two switches)
+
+        /** header 40 + page padding 12 + target chips 34 + swatches 44 + gap 4 + field 112 = 246, plus a little air */
+        const val PORTRAIT_DP = 248f
     }
 }

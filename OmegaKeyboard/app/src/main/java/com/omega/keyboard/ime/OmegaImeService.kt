@@ -167,6 +167,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             override fun onReceive(c: Context, i: Intent) {
                 kbd?.dumpKeys()
                 strip?.dumpHits()
+                appearance?.let { if (it.parent != null) it.dumpTabs() }
             }
         }
         val f = IntentFilter("com.omega.keyboard.DEBUG_DUMP")
@@ -434,7 +435,11 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             showPanel(sh)
         } else {
             appearanceBelow = true
-            col.addView(sh, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.density * 214f).toInt()))
+            // tall enough for the whole colours page (spectrum + switches), but never more than about a third of a small screen
+            val dm = resources.displayMetrics
+            val want = AppearanceSheet.PORTRAIT_DP * dm.density
+            val cap = maxOf(200f * dm.density, dm.heightPixels * 0.36f)
+            col.addView(sh, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, minOf(want, cap).toInt()))
         }
         sh.reopen()
         refreshStrip()

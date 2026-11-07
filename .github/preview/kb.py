@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Helpers for preview.sh (emulator screenshots of the keyboard): prefs files, finding the text field, tapping keys and tools by name."""
+"""Helpers for preview.sh (emulator screenshots of the keyboard): prefs files, finding the text field, tapping keys, tools and
+sheet tabs by name. The keyboard (debug builds only) answers the broadcast com.omega.keyboard.DEBUG_DUMP by logging where its
+keys (OmegaKeys), strip buttons (OmegaStrip) and appearance-sheet tabs (OmegaSheet) are on the screen."""
 import re
 import subprocess
 import sys
@@ -35,8 +37,14 @@ def prefs_xml(items):
 
 
 def screen_size():
+    """the size of the screen the way the user holds the phone now (portrait, or sideways when the test turned it)"""
     m = re.search(r"(\d+)x(\d+)", adb("shell", "wm", "size").stdout)
-    return (int(m.group(1)), int(m.group(2))) if m else (1080, 2400)
+    w, h = (int(m.group(1)), int(m.group(2))) if m else (1080, 2400)
+    rot = adb("shell", "settings", "get", "system", "user_rotation").stdout.strip()
+    auto = adb("shell", "settings", "get", "system", "accelerometer_rotation").stdout.strip()
+    if auto == "0" and rot in ("1", "3"):
+        w, h = h, w
+    return w, h
 
 
 def find_edit():
@@ -58,17 +66,17 @@ def find_edit():
 
 
 def ask_dump():
-    """asks the keyboard (preview builds only) where its keys and strip buttons are; returns two {name: (x, y)} maps"""
+    """asks the keyboard where its keys, strip buttons and sheet tabs are; returns three {name: (x, y)} maps"""
     adb("logcat", "-c")
     adb("shell", "am", "broadcast", "-a", "com.omega.keyboard.DEBUG_DUMP", "-p", "com.omega.keyboard")
     time.sleep(1.0)
-    log = adb("logcat", "-d", "-v", "tag", "-s", "OmegaKeys:D", "OmegaStrip:D").stdout
-    keys, strip = {}, {}
+    log = adb("logcat", "-d", "-v", "tag", "-s", "OmegaKeys:D", "OmegaStrip:D", "OmegaSheet:D").stdout
+    maps = {"OmegaKeys": {}, "OmegaStrip": {}, "OmegaSheet": {}}
     for line in log.splitlines():
-        m = re.match(r"^D/(OmegaKeys|OmegaStrip)\s*:\s*(.*)$", line.strip())
+        m = re.match(r"^D/(OmegaKeys|OmegaStrip|OmegaSheet)\s*:\s*(.*)$", line.strip())
         if not m:
             continue
-        target = keys if m.group(1) == "OmegaKeys" else strip
+        target = maps[m.group(1)]
         target.clear()
         for part in m.group(2).split(";"):
             if "=" not in part:
@@ -79,7 +87,18 @@ def ask_dump():
                 target[name] = (int(x), int(y))
             except ValueError:
                 pass
-    return keys, strip
+    return maps["OmegaKeys"], maps["OmegaStrip"], maps["OmegaSheet"]
+
+
+def wait_dump(tries=4, need="keys"):
+    """asks until the wanted map is not empty (the keyboard may still be coming up)"""
+    keys, strip, sheet = {}, {}, {}
+    for _ in range(tries):
+        keys, strip, sheet = ask_dump()
+        if {"keys": keys, "strip": strip, "sheet": sheet}[need]:
+            break
+        time.sleep(1.0)
+    return keys, strip, sheet
 
 
 def cmd_prefs(path, items):
@@ -101,31 +120,27 @@ def cmd_field():
 
 
 def cmd_dump():
-    keys, strip = {}, {}
-    for _ in range(4):
-        keys, strip = ask_dump()
-        if keys:
-            break
-        time.sleep(1.0)
+    keys, strip, sheet = wait_dump()
     print("KEYS", keys)
     print("STRIP", strip)
+    print("SHEET", sheet)
     return 0 if keys else 1
 
 
+def key_position(keys, name):
+    if name == " ":
+        name = "SPACE"
+    return keys.get(name) or keys.get(name.lower()) or keys.get(name.upper())
+
+
 def cmd_type(text):
-    keys = {}
-    for _ in range(4):
-        keys, _s = ask_dump()
-        if keys:
-            break
-        time.sleep(1.0)
+    keys, _s, _t = wait_dump()
     if not keys:
         print("keyboard not visible: no keys known", file=sys.stderr)
         return 1
     taps = []
     for ch in text:
-        name = "SPACE" if ch == " " else ch
-        pos = keys.get(name) or keys.get(name.lower()) or keys.get(name.upper())
+        pos = key_position(keys, ch)
         if not pos:
             print(f"missing key {ch!r}", file=sys.stderr)
             continue
@@ -135,9 +150,31 @@ def cmd_type(text):
     return 0
 
 
+def cmd_key(name):
+    """taps one key by its label or its kind name (SHIFT, SYMBOLS, EMOJI, LETTERS, ENTER, SPACE, LANG ...)"""
+    keys, _s, _t = wait_dump()
+    pos = key_position(keys, name)
+    if not pos:
+        print(f"key {name} not found", file=sys.stderr)
+        return 1
+    adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+    return 0
+
+
+def cmd_pos(name):
+    """prints 'x y' of a key (for preview.sh, which then holds it with input swipe)"""
+    keys, _s, _t = wait_dump()
+    pos = key_position(keys, name)
+    if not pos:
+        print(f"key {name} not found", file=sys.stderr)
+        return 1
+    print(pos[0], pos[1])
+    return 0
+
+
 def cmd_tool(name):
-    for attempt in range(3):
-        _k, strip = ask_dump()
+    for _attempt in range(3):
+        _k, strip, _t = ask_dump()
         pos = strip.get("t:" + name)
         if pos:
             adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
@@ -150,6 +187,28 @@ def cmd_tool(name):
             time.sleep(1.0)
     print(f"tool {name} not found", file=sys.stderr)
     return 1
+
+
+def cmd_tab(index):
+    """taps tab <index> of the appearance sheet (0 colours, 1 themes, 2 size and effects)"""
+    _k, _s, sheet = wait_dump(need="sheet")
+    pos = sheet.get(f"tab{index}")
+    if not pos:
+        print(f"sheet tab {index} not found", file=sys.stderr)
+        return 1
+    adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+    return 0
+
+
+def cmd_target(index):
+    """taps one of the colour targets of the appearance sheet (0 text, 1 keys, 2 letters, 3 background, 4 function keys, 5 accent)"""
+    _k, _s, sheet = wait_dump(need="sheet")
+    pos = sheet.get(f"target{index}")
+    if not pos:
+        print(f"sheet target {index} not found", file=sys.stderr)
+        return 1
+    adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+    return 0
 
 
 def main(argv):
@@ -165,8 +224,16 @@ def main(argv):
         return cmd_dump()
     if cmd == "type":
         return cmd_type(argv[2])
+    if cmd == "key":
+        return cmd_key(argv[2])
+    if cmd == "pos":
+        return cmd_pos(argv[2])
     if cmd == "tool":
         return cmd_tool(argv[2])
+    if cmd == "tab":
+        return cmd_tab(argv[2])
+    if cmd == "target":
+        return cmd_target(argv[2])
     return 2
 
 
