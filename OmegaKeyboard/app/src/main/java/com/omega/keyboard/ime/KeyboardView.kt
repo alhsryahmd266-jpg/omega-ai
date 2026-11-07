@@ -369,10 +369,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
             KeyKind.SHIFT -> drawShift(c, cx, cy, if (shiftState == 2) t.onAccent else t.onFn, shiftState)
             KeyKind.SYMBOLS, KeyKind.SYMBOLS2, KeyKind.LETTERS -> {
                 textPaint.color = t.onFn
-                // a real medium face, not fake bold: fake bold clipped the Arabic question mark of "؟123" in half
-                textPaint.typeface = letterFace
+                textPaint.typeface = letterFace          // a real medium face instead of fake bold
                 textPaint.textSize = dp(15f)
-                drawPageLabel(c, k.label, cx, cy)
+                drawCentered(c, k.label, cx, cy)
                 textPaint.typeface = Typeface.DEFAULT
             }
             KeyKind.ALT -> {
@@ -387,27 +386,6 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private fun drawCentered(c: Canvas, s: String, cx: Float, cy: Float) {
         val fm = textPaint.fontMetrics
         c.drawText(s, cx, cy - (fm.ascent + fm.descent) / 2f, textPaint)
-    }
-
-    /**
-     * The label of a page key ("?123", "ABC", "؟123", "أبج"). The Arabic question mark next to digits is drawn as its own piece
-     * (digits to the left of it, as they read on screen) so the mixed left-to-right / right-to-left text can not be centred or cut wrongly.
-     */
-    private fun drawPageLabel(c: Canvas, s: String, cx: Float, cy: Float) {
-        val q = s.indexOf('؟')
-        if (q < 0 || s.length < 2) { drawCentered(c, s, cx, cy); return }
-        val rest = s.removeRange(q, q + 1)
-        val w1 = textPaint.measureText(rest)
-        val w2 = textPaint.measureText("؟")
-        val gap = dp(1.5f)
-        val left = cx - (w1 + gap + w2) / 2f
-        val fm = textPaint.fontMetrics
-        val base = cy - (fm.ascent + fm.descent) / 2f
-        val align = textPaint.textAlign
-        textPaint.textAlign = Paint.Align.LEFT
-        c.drawText(rest, left, base, textPaint)
-        c.drawText("؟", left + w1 + gap, base, textPaint)
-        textPaint.textAlign = align
     }
 
     private fun drawIcon(c: Canvas, name: String, cx: Float, cy: Float, size: Float, color: Int) {

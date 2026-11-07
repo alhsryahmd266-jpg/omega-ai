@@ -133,7 +133,7 @@ object Layouts {
                     Key(KeyKind.BACKSPACE, "⌫", weight = 1f)
             )
         )
-        rows.add(bottomRow("ar", Key(KeyKind.SYMBOLS, "؟123"), AR_UNITS))
+        rows.add(bottomRow("ar", Key(KeyKind.SYMBOLS, "123"), AR_UNITS))
         return Layout("ar", "ar", LayoutKind.LETTERS, rows, false)
     }
 
@@ -147,7 +147,7 @@ object Layouts {
         val rows = listOf(
             Row(r1), Row(r2),
             Row(listOf(Key(KeyKind.LETTERS, "أبج", weight = w)) + r3 + Key(KeyKind.BACKSPACE, "⌫", weight = w)),
-            bottomRow("ar", Key(KeyKind.SYMBOLS, "؟123"), AR_UNITS),
+            bottomRow("ar", Key(KeyKind.SYMBOLS, "123"), AR_UNITS),
         )
         return Layout("ar_alt", "ar", LayoutKind.ARABIC_ALT, rows, false)
     }
@@ -189,7 +189,7 @@ object Layouts {
             row(listOf("~", "`", "|", "•", "√", "π", "÷", "×", "¶", "∆")),
             row(listOf("£", "¢", "€", "¥", "^", "°", "=", "{", "}", "\\")),
             Row(
-                listOf(Key(KeyKind.SYMBOLS, if (ar) "؟123" else "?123", weight = 1.5f * s)) +
+                listOf(Key(KeyKind.SYMBOLS, if (ar) "123" else "?123", weight = 1.5f * s)) +
                     listOf("%", "©", "®", "™", "✓", "[", "]").map { c(it, w = s) } +
                     Key(KeyKind.BACKSPACE, "⌫", weight = 1.5f * s)
             ),

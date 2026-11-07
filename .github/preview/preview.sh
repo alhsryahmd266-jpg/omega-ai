@@ -155,6 +155,18 @@ focus
 $KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-1
 $KB key SYMBOLS2 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-2
 
+# --- Arabic: symbols pages, the extra-letters page, the popup of the Arabic comma (has the Arabic question mark)
+scenario kb-symbols-ar s:theme=light s:last_lang=ar
+focus
+$KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-ar-1
+$KB key SYMBOLS2 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-ar-2
+scenario kb-alt-ar s:theme=dark s:last_lang=ar
+focus
+$KB key ALT 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-alt-ar
+scenario kb-popup-comma s:theme=dark s:last_lang=ar
+focus
+held kb-popup-comma "،"
+
 # --- the other panels of the tool row
 scenario kb-clip s:theme=dark s:last_lang=en
 focus

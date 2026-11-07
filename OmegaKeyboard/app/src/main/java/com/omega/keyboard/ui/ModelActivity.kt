@@ -171,7 +171,7 @@ class ModelActivity : BaseActivity() {
         choose.addView(UiKit.label(this, "تليفونك مساحته ضيقة؟ استخدم الملف من مجلد التنزيلات زي ما هو من غير نسخ (بيحتاج إذن الوصول لكل الملفات).", 13.5f, p.sub))
         choose.addView(UiKit.button(this, p, if (hasAllFiles()) "استخدم ملف من التنزيلات" else "السماح بالوصول للملفات", filled = false) { useDownloads() })
         h.addView(choose)
-        if (!dlOnTop) buildDownload(h, true, dl)
+        if (!dlOnTop) buildDownload(h, path != null, dl)
 
         // ---- test
         h.addView(UiKit.section(this, p, "تجربة"))
