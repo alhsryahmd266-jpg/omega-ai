@@ -36,12 +36,15 @@ scenario() {
   local name="$1"; shift
   say "== $name"
   adb shell am force-stop $PKG
+  adb shell ime enable "$IME" > /dev/null 2>&1
+  adb shell ime set "$IME" > /dev/null 2>&1
   $KB prefs "$RUNNER_TEMP/omega.xml" "$@"
   adb push "$RUNNER_TEMP/omega.xml" /data/local/tmp/omega.xml > /dev/null
   adb shell chmod 644 /data/local/tmp/omega.xml
   adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/omega.xml shared_prefs/omega.xml'" 2>&1 | tee -a "$LOG"
   adb shell am start -W -n $PKG/.ui.MainActivity > /dev/null
   sleep 2.5
+  say "default keyboard: $(adb shell settings get secure default_input_method | tr -d '\r')"
 }
 
 focus() { $KB field 2>&1 | tee -a "$LOG"; sleep 2.5; }
@@ -61,7 +64,7 @@ typed() {
 # --- the app's own screens
 scenario app-main s:theme=light
 shot app-main
-adb shell am start -W -n $PKG/.ui.ModelActivity 2>&1 | tail -3 >> "$LOG"; sleep 2.5; shot app-model
+adb shell am start -W -n $PKG/.ui.MainActivity --es page model 2>&1 | tail -3 >> "$LOG"; sleep 2.5; shot app-model
 adb shell am start -W -n $PKG/.ui.SettingsActivity 2>&1 | tail -3 >> "$LOG"; sleep 2.5; shot app-settings
 
 # --- the key grid, Arabic and English
