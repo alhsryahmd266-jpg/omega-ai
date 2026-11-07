@@ -193,6 +193,7 @@ class MainActivity : BaseActivity() {
             if (perms) null else "السماح" to { requestPermissions(wanted, 11) }
         ))
         val openModel = { startActivity(Intent(this, ModelActivity::class.java)) }
+        val pickFile = { startActivity(Intent(this, ModelActivity::class.java).putExtra("autopick", true)) }
         val downloadNow = { startActivity(Intent(this, ModelActivity::class.java).putExtra("autodownload", true)) }
         steps.addView(step(
             if (model) 1 else 0, "٥) النموذج المحلي (Gemma)",
@@ -201,15 +202,15 @@ class MainActivity : BaseActivity() {
                 dl.kind == ModelDownloader.Kind.PAUSED -> "التنزيل واقف: ${dl.message}"
                 dl.active -> "بينزّل دلوقتي... ${dl.percent}% (بيكمل في الخلفية وبيتفعّل لوحده)"
                 dl.kind == ModelDownloader.Kind.FAILED -> "التنزيل ما اتمّش: ${dl.message}"
-                else -> "محتاجه للوضع الذاتي. نزّله من هنا مباشرةً (حوالي ٢.٦ جيجا، يفضّل واي فاي) أو اختار ملف نزّلته قبل كده. مش بيتبعت لأي حد."
+                else -> "محتاجه للوضع الذاتي. اختار ملف النموذج اللي على تليفونك (الأساسي)، أو نزّله من هنا مباشرةً (حوالي ٢.٦ جيجا، يفضّل واي فاي). مش بيتبعت لأي حد."
             },
             when {
                 model -> "إدارة" to openModel
                 dl.active -> "المتابعة" to openModel
                 dl.kind == ModelDownloader.Kind.FAILED -> "التفاصيل" to openModel
-                else -> "تنزيل النموذج" to downloadNow
+                else -> "اختيار ملف" to pickFile            // the file already on the phone is the main way in; one tap opens the picker
             },
-            if (!model && !dl.active && dl.kind != ModelDownloader.Kind.FAILED) "اختيار ملف" to openModel else null
+            if (!model && !dl.active && dl.kind != ModelDownloader.Kind.FAILED) "تنزيل النموذج" to downloadNow else null
         ))
         steps.addView(UiKit.label(
             this, "ترجمة الشاشة والكتابة بتشتغل بدون النموذج لأغلب اللغات (محرك سريع على التليفون؛ أول مرة بتنزّل حزمة اللغة حوالي ٣٠ ميجا). النموذج مطلوب للوضع الذاتي ولباقي اللغات.",

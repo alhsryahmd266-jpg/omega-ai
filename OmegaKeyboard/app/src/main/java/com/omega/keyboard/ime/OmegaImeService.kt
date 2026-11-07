@@ -454,6 +454,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun showEmoji() {
         val p = emojiPanel ?: EmojiPanel(this).also { emojiPanel = it; it.listener = this }
         p.theme = theme
+        p.reload()                  // fills the grid (and the "recent" row); without this the panel stays empty
         showPanel(p)
     }
 

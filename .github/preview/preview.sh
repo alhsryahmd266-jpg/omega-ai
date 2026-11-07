@@ -47,12 +47,13 @@ scenario() {
   local name="$1"; shift
   say "== $name"
   adb shell am force-stop $PKG
-  sleep 2                       # a force-stop makes the system forget the selected keyboard a moment later: wait, then select ours
-  select_keyboard
+  # the settings go onto the disk BEFORE our keyboard is selected: selecting it starts the keyboard's process, which reads them once
   $KB prefs "$RUNNER_TEMP/omega.xml" "$@"
   adb push "$RUNNER_TEMP/omega.xml" /data/local/tmp/omega.xml > /dev/null
   adb shell chmod 644 /data/local/tmp/omega.xml
   adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cp /data/local/tmp/omega.xml shared_prefs/omega.xml'" 2>&1 | tee -a "$LOG"
+  sleep 2                       # a force-stop makes the system forget the selected keyboard a moment later: wait, then select ours
+  select_keyboard
   adb shell am start -W -n $PKG/.ui.MainActivity > /dev/null
   sleep 2.5
   say "default keyboard: $(current_ime)"
@@ -153,6 +154,21 @@ scenario kb-symbols s:theme=sunset s:last_lang=en
 focus
 $KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-1
 $KB key SYMBOLS2 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-2
+
+# --- the other panels of the tool row
+scenario kb-clip s:theme=dark s:last_lang=en
+focus
+$KB tool clip 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-clip
+scenario kb-lang s:theme=light s:last_lang=ar
+focus
+$KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-lang
+scenario kb-ai s:theme=ocean s:last_lang=en
+focus
+$KB type "hello how are you" 2>&1 | tee -a "$LOG"; sleep 1
+$KB tool ai 2>&1 | tee -a "$LOG"; sleep 2; shot kb-ai
+scenario kb-voice s:theme=light s:last_lang=ar
+focus
+$KB tool voice 2>&1 | tee -a "$LOG"; sleep 3; shot kb-voice
 
 # --- the neon picture: type, press the tool, take the PNG the keyboard made
 scenario neon-run s:theme=neon s:last_lang=en i:text_color=0xFF39FF14

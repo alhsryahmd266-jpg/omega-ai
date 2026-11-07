@@ -27,25 +27,34 @@ object EmojiData {
 
     @Volatile private var cache: List<Section>? = null
 
+    private fun safeHasGlyph(paint: Paint, s: String): Boolean = try { paint.hasGlyph(s) } catch (_: Throwable) { true }
+
     /** Parses assets/emoji.txt and drops every emoji this phone's font cannot draw (new Unicode releases). */
     fun load(ctx: Context): List<Section> {
         cache?.let { return it }
         synchronized(this) {
             cache?.let { return it }
             val paint = Paint()
-            val out = ArrayList<Section>()
+            val all = ArrayList<Pair<Int, List<String>>>()
             try {
                 ctx.assets.open("emoji.txt").bufferedReader(Charsets.UTF_8).useLines { lines ->
                     for (line in lines) {
                         val bar = line.indexOf('|')
                         if (bar < 0) continue
                         val idx = line.substring(0, bar).toIntOrNull() ?: continue
-                        val items = line.substring(bar + 1).split(' ').filter { it.isNotEmpty() && paint.hasGlyph(it) }
-                        if (idx in names.indices && items.isNotEmpty()) out.add(Section(names[idx], icons[idx], items))
+                        val items = line.substring(bar + 1).split(' ').filter { it.isNotEmpty() }
+                        if (idx in names.indices && items.isNotEmpty()) all.add(idx to items)
                     }
                 }
             } catch (_: Throwable) {
             }
+            val drawable = all.map { (idx, items) -> idx to items.filter { safeHasGlyph(paint, it) } }
+            val total = all.sumOf { it.second.size }
+            val kept = drawable.sumOf { it.second.size }
+            // hasGlyph can be wrong on an odd system font: when it rejects nearly everything, trust the list instead of showing nothing
+            val use = if (total > 0 && kept * 10 < total) all else drawable
+            val out = ArrayList<Section>()
+            for ((idx, items) in use) if (items.isNotEmpty()) out.add(Section(names[idx], icons[idx], items))
             cache = out
             return out
         }

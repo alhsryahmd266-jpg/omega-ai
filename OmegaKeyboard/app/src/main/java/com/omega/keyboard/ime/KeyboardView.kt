@@ -369,10 +369,11 @@ class KeyboardView(ctx: Context) : View(ctx) {
             KeyKind.SHIFT -> drawShift(c, cx, cy, if (shiftState == 2) t.onAccent else t.onFn, shiftState)
             KeyKind.SYMBOLS, KeyKind.SYMBOLS2, KeyKind.LETTERS -> {
                 textPaint.color = t.onFn
-                textPaint.isFakeBoldText = true
+                // a real medium face, not fake bold: fake bold clipped the Arabic question mark of "؟123" in half
+                textPaint.typeface = letterFace
                 textPaint.textSize = dp(15f)
-                drawCentered(c, k.label, cx, cy)
-                textPaint.isFakeBoldText = false
+                drawPageLabel(c, k.label, cx, cy)
+                textPaint.typeface = Typeface.DEFAULT
             }
             KeyKind.ALT -> {
                 textPaint.color = t.onFn
@@ -386,6 +387,27 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private fun drawCentered(c: Canvas, s: String, cx: Float, cy: Float) {
         val fm = textPaint.fontMetrics
         c.drawText(s, cx, cy - (fm.ascent + fm.descent) / 2f, textPaint)
+    }
+
+    /**
+     * The label of a page key ("?123", "ABC", "؟123", "أبج"). The Arabic question mark next to digits is drawn as its own piece
+     * (digits to the left of it, as they read on screen) so the mixed left-to-right / right-to-left text can not be centred or cut wrongly.
+     */
+    private fun drawPageLabel(c: Canvas, s: String, cx: Float, cy: Float) {
+        val q = s.indexOf('؟')
+        if (q < 0 || s.length < 2) { drawCentered(c, s, cx, cy); return }
+        val rest = s.removeRange(q, q + 1)
+        val w1 = textPaint.measureText(rest)
+        val w2 = textPaint.measureText("؟")
+        val gap = dp(1.5f)
+        val left = cx - (w1 + gap + w2) / 2f
+        val fm = textPaint.fontMetrics
+        val base = cy - (fm.ascent + fm.descent) / 2f
+        val align = textPaint.textAlign
+        textPaint.textAlign = Paint.Align.LEFT
+        c.drawText(rest, left, base, textPaint)
+        c.drawText("؟", left + w1 + gap, base, textPaint)
+        textPaint.textAlign = align
     }
 
     private fun drawIcon(c: Canvas, name: String, cx: Float, cy: Float, size: Float, color: Int) {
@@ -702,7 +724,9 @@ class PopupOverlay(ctx: Context) : View(ctx) {
             fill.color = ColorMath.withAlpha(0xFF000000.toInt(), (sa * (0.5f - 0.14f * i)).toInt())
             c.drawRoundRect(r.left - spread, r.top + dp(2f) + dp(1f) * i - spread, r.right + spread, r.bottom + dp(2f) + dp(1f) * i + spread, radius + spread, radius + spread, fill)
         }
-        fill.shader = LinearGradient(0f, r.top, 0f, r.bottom, ColorMath.shade(t.popupBg, if (t.dark) 0.12f else 0.0f), ColorMath.shade(t.popupBg, if (t.dark) -0.04f else -0.06f), Shader.TileMode.CLAMP)
+        // a shader is multiplied by the paint's own alpha: the faint shadow colour above must not stay on the paint, or the body turns see-through
+        fill.color = 0xFF000000.toInt()
+        fill.shader = LinearGradient(0f, r.top, 0f, r.bottom, ColorMath.shade(ColorMath.opaque(t.popupBg), if (t.dark) 0.12f else 0.0f), ColorMath.shade(ColorMath.opaque(t.popupBg), if (t.dark) -0.04f else -0.06f), Shader.TileMode.CLAMP)
         c.drawRoundRect(r, radius, radius, fill)
         fill.shader = null
         line.shader = null
@@ -744,6 +768,7 @@ class PopupOverlay(ctx: Context) : View(ctx) {
             for ((i, s) in a.items.withIndex()) {
                 val l = a.rect.left + a.pad + i * a.cellW
                 if (i == a.selected) {
+                    fill.color = 0xFF000000.toInt()
                     fill.shader = LinearGradient(0f, a.rect.top, 0f, a.rect.bottom, ColorMath.shade(t.accent, 0.18f), t.accent, Shader.TileMode.CLAMP)
                     c.drawRoundRect(l + dp(2f), a.rect.top + dp(5f), l + a.cellW - dp(2f), a.rect.bottom - dp(5f), dp(11f), dp(11f), fill)
                     fill.shader = null

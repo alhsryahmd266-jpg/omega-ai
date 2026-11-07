@@ -81,6 +81,11 @@ class ModelActivity : BaseActivity() {
             intent.removeExtra("autodownload")
             handler.post { if (!ModelDownloader.status(this).active) confirmDownload() }
         }
+        // "اختيار ملف" on the first screen: go straight to the system file picker (only on a fresh start, never after a rotation)
+        if (savedInstanceState == null && intent?.getBooleanExtra("autopick", false) == true) {
+            intent.removeExtra("autopick")
+            handler.post { pick() }
+        }
     }
 
     override fun onResume() {
@@ -152,9 +157,9 @@ class ModelActivity : BaseActivity() {
             h.addView(c)
         }
 
-        // ---- download: on top while there is no model or something is going on, otherwise below the other ways to add one
+        // ---- download: the file he already has is the main way in, so the download card goes below it; on top only while something is going on
         val dl = ModelDownloader.status(this)
-        val dlOnTop = path == null || dl.active || dl.kind == ModelDownloader.Kind.FAILED
+        val dlOnTop = dl.active || dl.kind == ModelDownloader.Kind.FAILED
         if (dlOnTop) buildDownload(h, path != null, dl)
 
         // ---- choose
