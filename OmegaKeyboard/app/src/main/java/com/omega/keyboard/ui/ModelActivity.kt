@@ -131,7 +131,7 @@ class ModelActivity : BaseActivity() {
             this, p, if (path != null) 1 else 0,
             if (path != null) File(path).name else "لسه مفيش نموذج",
             if (path != null) "${ModelStore.sizeMb(this)} MB — ${Llm.statusText(this)}"
-            else "الوضع الذاتي والترجمة لباقي اللغات محتاجين ملف النموذج (.litertlm) على التليفون."
+            else "الوضع الذاتي والترجمة لباقي اللغات محتاجين ملف النموذج (‎.litertlm) على التليفون."
         ))
         h.addView(status)
 
@@ -413,7 +413,7 @@ class ModelActivity : BaseActivity() {
         val files = ModelImporter.findInDownloads()
         when {
             files.isEmpty() -> AlertDialog.Builder(this).setTitle("مفيش ملف")
-                .setMessage("مفيش ملف بامتداد .litertlm في مجلد التنزيلات. استخدم \"اختيار ملف النموذج\" لو الملف في مكان تاني.")
+                .setMessage("مفيش ملف بامتداد ‎.litertlm‎ في مجلد التنزيلات. استخدم \"اختيار ملف النموذج\" لو الملف في مكان تاني.")
                 .setPositiveButton("تمام", null).show()
             files.size == 1 -> applyInPlace(files[0])
             else -> AlertDialog.Builder(this).setTitle("اختار الملف")
