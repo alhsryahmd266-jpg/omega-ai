@@ -28,17 +28,23 @@ object Util {
         }
     }
 
-    fun notification(ctx: Context, text: String, stopService: Class<*>, stopAction: String): Notification {
+    fun notification(ctx: Context, text: String, stopService: Class<*>, stopAction: String, toggleAction: String? = null): Notification {
         ensureChannel(ctx)
         val i = Intent(ctx, stopService)
         i.action = stopAction
         val pi = PendingIntent.getService(ctx, 1, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        return Notification.Builder(ctx, CHANNEL)
+        val b = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("GameBot")
             .setContentText(text)
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(android.R.drawable.ic_delete, "STOP", pi).build())
-            .build()
+        if (toggleAction != null) {
+            val ti = Intent(ctx, stopService)
+            ti.action = toggleAction
+            val tp = PendingIntent.getService(ctx, 2, ti, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            b.addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "START/PAUSE", tp).build())
+        }
+        b.addAction(Notification.Action.Builder(android.R.drawable.ic_delete, "STOP", pi).build())
+        return b.build()
     }
 }

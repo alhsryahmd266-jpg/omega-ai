@@ -15,6 +15,7 @@ class Controller(
     private val LOOK = 1
     private val FIRE = 2
     private val TAP = 3
+    private val MACRO = 4
 
     private var stickDown = false
     private var lookDown = false
@@ -104,6 +105,19 @@ class Controller(
             }, 70L)
         }
         backend.flush()
+    }
+
+    /** Immediate tap at a normalized position (used by the restart macro). */
+    @Synchronized
+    fun tapNow(nx: Float, ny: Float, w: Int, h: Int) {
+        backend.touchDown(MACRO, nx * w, ny * h)
+        backend.flush()
+        handler.postDelayed({
+            synchronized(this) {
+                backend.touchUp(MACRO)
+                backend.flush()
+            }
+        }, 90L)
     }
 
     @Synchronized

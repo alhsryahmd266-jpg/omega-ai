@@ -60,6 +60,16 @@ class MainActivity : Activity() {
     private lateinit var cbGpu: CheckBox
     private lateinit var cbGuard: CheckBox
     private lateinit var cbRecord: CheckBox
+    private lateinit var cbAuto: CheckBox
+    private lateinit var cbSoak: CheckBox
+    private lateinit var cbRelaunch: CheckBox
+    private lateinit var cbZone: CheckBox
+    private lateinit var cbHeading: CheckBox
+    private lateinit var etFrozen: EditText
+    private lateinit var etMacroN: EditText
+    private lateinit var etMacroDelay: EditText
+    private lateinit var etZoneColor: EditText
+    private lateinit var etZoneTol: EditText
 
     private val shizukuListener = Shizuku.OnRequestPermissionResultListener { _, _ ->
         runOnUiThread { refresh() }
@@ -144,6 +154,19 @@ class MainActivity : Activity() {
         statusTv.textSize = 13f
         col.addView(statusTv)
 
+        col.addView(title("تشغيل"))
+        val run = LinearLayout(this)
+        run.orientation = LinearLayout.HORIZONTAL
+        val start = btn("▶ تشغيل") { startBot() }
+        start.textSize = 20f
+        val stop = btn("■ إيقاف") { stopBot() }
+        stop.textSize = 20f
+        run.addView(start, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        run.addView(stop, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        col.addView(run)
+        col.addView(note("بعد الموافقة على تسجيل الشاشة هيفتح اللعبة، ادخل الماتش واضغط ▶ START على الـ HUD اللي فوق الشاشة. ⏸ PAUSE بيوقّف مؤقتًا و■ STOP بينهي ويطلّع تقرير."))
+        col.addView(btn("عرض آخر تقرير") { showReport() })
+
         col.addView(title("1) الصلاحيات"))
         col.addView(btn("Shizuku (التحكم باللمس - الأفضل)") { askShizuku() })
         col.addView(btn("Accessibility (بديل للمس + حماية)") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
@@ -211,13 +234,46 @@ class MainActivity : Activity() {
         cbRecord.isChecked = cfg.recordFrames
         col.addView(cbRecord)
 
-        val run = LinearLayout(this)
-        run.orientation = LinearLayout.HORIZONTAL
-        val start = btn("▶ تشغيل") { startBot() }
-        val stop = btn("■ إيقاف") { stopBot() }
-        run.addView(start, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        run.addView(stop, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        col.addView(run)
+        col.addView(title("7) الاختبار المكثف (Soak)"))
+        cbAuto = CheckBox(this)
+        cbAuto.text = "ابدأ تلقائي بعد التأخير (من غير ما أضغط START)"
+        cbAuto.setTextColor(Color.WHITE)
+        cbAuto.isChecked = cfg.autoStart
+        col.addView(cbAuto)
+        cbSoak = CheckBox(this)
+        cbSoak.text = "مراقب الاختبار: يكتشف الشاشة المجمّدة/الثابتة ويشغّل ماكرو إعادة الماتش"
+        cbSoak.setTextColor(Color.WHITE)
+        cbSoak.isChecked = cfg.soakEnabled
+        col.addView(cbSoak)
+        cbRelaunch = CheckBox(this)
+        cbRelaunch.text = "افتح اللعبة تاني لو وقعت أو اتقفلت (وعدّ مرات الوقوع)"
+        cbRelaunch.setTextColor(Color.WHITE)
+        cbRelaunch.isChecked = cfg.relaunchOnExit
+        col.addView(cbRelaunch)
+        etFrozen = field("اعتبر الشاشة ثابتة بعد كام ثانية (15)", cfg.frozenSeconds.toString(), true)
+        col.addView(etFrozen)
+        etMacroN = field("عدد ضغطات الماكرو m1..m4 (3)", cfg.macroCount.toString(), true)
+        col.addView(etMacroN)
+        etMacroDelay = field("الفاصل بين ضغطات الماكرو بالملي ثانية (1500)", cfg.macroDelayMs.toString(), true)
+        col.addView(etMacroDelay)
+        col.addView(note("أماكن m1..m4 (برتقالي) بتتظبط من 'تعديل أماكن الأزرار': حطها على أزرار (متابعة / العب تاني / ابدأ ماتش)."))
+
+        col.addView(title("8) توجيه الزون من الخريطة المصغرة"))
+        cbZone = CheckBox(this)
+        cbZone.text = "فعّل توجيه الزون (لو برّه الدايرة يجري ناحية مركزها)"
+        cbZone.setTextColor(Color.WHITE)
+        cbZone.isChecked = cfg.zoneEnabled
+        col.addView(cbZone)
+        etZoneColor = field("لون حلقة الزون RRGGBB (FFFFFF)", cfg.zoneColor, false)
+        col.addView(etZoneColor)
+        etZoneTol = field("تسامح اللون (40)", cfg.zoneTol.toString(), true)
+        col.addView(etZoneTol)
+        cbHeading = CheckBox(this)
+        cbHeading.text = "الخريطة بتلف مع اللاعب (أيقونة اللاعب ثابتة في النص ووشها لفوق)"
+        cbHeading.setTextColor(Color.WHITE)
+        cbHeading.isChecked = cfg.zoneHeadingUp
+        col.addView(cbHeading)
+        col.addView(note("حدّد مستطيل الخريطة بالعلامتين الصفرا (mapTL و mapBR) في 'تعديل أماكن الأزرار'. الـ HUD بيكتب 'zone ?' لو ما قراش الحلقة: غيّر اللون أو التسامح."))
 
         col.addView(title("السجل"))
         logTv = TextView(this)
@@ -309,6 +365,16 @@ class MainActivity : Activity() {
             cfg.aimScale = etAim.text.toString().trim().toFloatOrNull()?.coerceIn(0.1f, 3f) ?: 1f
             cfg.guardEnabled = cbGuard.isChecked
             cfg.recordFrames = cbRecord.isChecked
+            cfg.autoStart = cbAuto.isChecked
+            cfg.soakEnabled = cbSoak.isChecked
+            cfg.relaunchOnExit = cbRelaunch.isChecked
+            cfg.frozenSeconds = etFrozen.text.toString().trim().toIntOrNull()?.coerceIn(5, 300) ?: 15
+            cfg.macroCount = etMacroN.text.toString().trim().toIntOrNull()?.coerceIn(0, 4) ?: 3
+            cfg.macroDelayMs = etMacroDelay.text.toString().trim().toIntOrNull()?.coerceIn(300, 10000) ?: 1500
+            cfg.zoneEnabled = cbZone.isChecked
+            cfg.zoneColor = etZoneColor.text.toString().trim().removePrefix("#").ifEmpty { "FFFFFF" }
+            cfg.zoneTol = etZoneTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 40
+            cfg.zoneHeadingUp = cbHeading.isChecked
         } catch (t: Throwable) {
             Logger.i("collect failed: ${t.message}")
         }
@@ -361,9 +427,13 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("اختار لعبتك")
             .setItems(apps.map { it.first + "\n" + it.second }.toTypedArray()) { _, which ->
-                cfg.gamePackage = apps[which].second
-                cfg.save(this)
-                refresh()
+                if (Safety.isBlocked(apps[which].second)) {
+                    toast(Safety.MESSAGE)
+                } else {
+                    cfg.gamePackage = apps[which].second
+                    cfg.save(this)
+                    refresh()
+                }
             }
             .show()
     }
@@ -440,6 +510,10 @@ class MainActivity : Activity() {
             openOverlay()
             return
         }
+        if (Safety.isBlocked(cfg.gamePackage)) {
+            toast(Safety.MESSAGE)
+            return
+        }
         if (cfg.guardEnabled && cfg.gamePackage.isEmpty()) {
             toast("اختار اللعبة الأول")
             return
@@ -456,6 +530,12 @@ class MainActivity : Activity() {
         val i = Intent(this, BotService::class.java)
         i.action = BotService.ACTION_STOP
         startService(i)
+    }
+
+    private fun showReport() {
+        val f = File(filesDir, "last_report.txt")
+        val text = if (f.exists()) f.readText() else "مفيش تقرير لسه. التقرير بيتكتب لما توقّف البوت."
+        AlertDialog.Builder(this).setTitle("آخر تقرير").setMessage(text).setPositiveButton("تمام", null).show()
     }
 
     private fun shareLog() {

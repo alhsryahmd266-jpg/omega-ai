@@ -46,6 +46,14 @@ class ControlLayout {
         points["crouch"] = floatArrayOf(0.82f, 0.86f)
         points["reload"] = floatArrayOf(0.70f, 0.84f)
         points["ads"] = floatArrayOf(0.94f, 0.42f)
+        // menu / "play again" taps used by the soak-test macro
+        points["m1"] = floatArrayOf(0.50f, 0.82f)
+        points["m2"] = floatArrayOf(0.50f, 0.68f)
+        points["m3"] = floatArrayOf(0.80f, 0.88f)
+        points["m4"] = floatArrayOf(0.50f, 0.50f)
+        // minimap rectangle corners (for zone navigation)
+        points["mapTL"] = floatArrayOf(0.03f, 0.05f)
+        points["mapBR"] = floatArrayOf(0.17f, 0.32f)
         stickRadius = 0.10f
         lookRadius = 0.14f
     }
@@ -96,6 +104,16 @@ class Config {
     var aimScale = 1.0f
     var crossX = 0.5f
     var crossY = 0.5f
+    var autoStart = false          // false: wait for the START button on the HUD
+    var soakEnabled = true         // supervisor: frozen-screen detection + restart macro
+    var relaunchOnExit = true      // re-open the game if it closed / crashed
+    var frozenSeconds = 15
+    var macroCount = 3             // how many menu points (m1..m4) to tap
+    var macroDelayMs = 1500
+    var zoneEnabled = false
+    var zoneColor = "FFFFFF"       // RRGGBB of the safe-zone ring on the minimap
+    var zoneTol = 40               // max per-channel color difference
+    var zoneHeadingUp = true       // minimap rotates with the player (player icon at the center, facing up)
     val layout = ControlLayout()
 
     fun labelList(): List<String> {
@@ -132,6 +150,16 @@ class Config {
         o.put("aimScale", aimScale.toDouble())
         o.put("crossX", crossX.toDouble())
         o.put("crossY", crossY.toDouble())
+        o.put("autoStart", autoStart)
+        o.put("soakEnabled", soakEnabled)
+        o.put("relaunchOnExit", relaunchOnExit)
+        o.put("frozenSeconds", frozenSeconds)
+        o.put("macroCount", macroCount)
+        o.put("macroDelayMs", macroDelayMs)
+        o.put("zoneEnabled", zoneEnabled)
+        o.put("zoneColor", zoneColor)
+        o.put("zoneTol", zoneTol)
+        o.put("zoneHeadingUp", zoneHeadingUp)
         o.put("layout", layout.toJson())
         return o
     }
@@ -158,6 +186,16 @@ class Config {
         aimScale = o.optDouble("aimScale", aimScale.toDouble()).toFloat()
         crossX = o.optDouble("crossX", crossX.toDouble()).toFloat()
         crossY = o.optDouble("crossY", crossY.toDouble()).toFloat()
+        autoStart = o.optBoolean("autoStart", autoStart)
+        soakEnabled = o.optBoolean("soakEnabled", soakEnabled)
+        relaunchOnExit = o.optBoolean("relaunchOnExit", relaunchOnExit)
+        frozenSeconds = o.optInt("frozenSeconds", frozenSeconds)
+        macroCount = o.optInt("macroCount", macroCount)
+        macroDelayMs = o.optInt("macroDelayMs", macroDelayMs)
+        zoneEnabled = o.optBoolean("zoneEnabled", zoneEnabled)
+        zoneColor = o.optString("zoneColor", zoneColor)
+        zoneTol = o.optInt("zoneTol", zoneTol)
+        zoneHeadingUp = o.optBoolean("zoneHeadingUp", zoneHeadingUp)
         layout.load(o.optJSONObject("layout"))
     }
 

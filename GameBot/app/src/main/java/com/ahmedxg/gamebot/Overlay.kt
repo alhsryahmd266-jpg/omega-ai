@@ -19,11 +19,12 @@ import kotlin.math.hypot
 import kotlin.math.min
 
 /** Small always-on-top status panel with a STOP button (the kill switch while the bot runs). */
-class Hud(private val ctx: Context, private val onStop: () -> Unit) {
+class Hud(private val ctx: Context, private val onToggle: () -> Unit, private val onStop: () -> Unit) {
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val main = Handler(Looper.getMainLooper())
     private var root: LinearLayout? = null
     private var tv: TextView? = null
+    private var toggleBtn: Button? = null
 
     fun show() {
         main.post {
@@ -38,12 +39,21 @@ class Hud(private val ctx: Context, private val onStop: () -> Unit) {
             t.textSize = 9f
             t.typeface = Typeface.MONOSPACE
             t.text = "GameBot..."
+            val row = LinearLayout(ctx)
+            row.orientation = LinearLayout.HORIZONTAL
+            val tg = Button(ctx)
+            tg.text = "▶ START"
+            tg.textSize = 11f
+            tg.setOnClickListener { onToggle() }
             val b = Button(ctx)
-            b.text = "STOP"
-            b.textSize = 10f
+            b.text = "■ STOP"
+            b.textSize = 11f
             b.setOnClickListener { onStop() }
+            row.addView(tg, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             ll.addView(t)
-            ll.addView(b)
+            ll.addView(row)
+            toggleBtn = tg
             val lp = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -71,6 +81,10 @@ class Hud(private val ctx: Context, private val onStop: () -> Unit) {
         main.post { tv?.text = s }
     }
 
+    fun setArmed(armed: Boolean) {
+        main.post { toggleBtn?.text = if (armed) "⏸ PAUSE" else "▶ START" }
+    }
+
     fun hide() {
         main.post {
             val r = root
@@ -79,6 +93,7 @@ class Hud(private val ctx: Context, private val onStop: () -> Unit) {
             }
             root = null
             tv = null
+            toggleBtn = null
         }
     }
 }
@@ -112,12 +127,19 @@ class LayoutEditorView(
         "jump" -> Color.rgb(255, 193, 7)
         "crouch" -> Color.rgb(156, 39, 176)
         "reload" -> Color.rgb(0, 188, 212)
+        "mapTL", "mapBR" -> Color.rgb(255, 235, 59)
         else -> Color.rgb(255, 152, 0)
     }
 
     override fun onDraw(c: Canvas) {
         getLocationOnScreen(loc)
         val short = min(dispW, dispH).toFloat()
+        val tl = layout.points["mapTL"]
+        val br = layout.points["mapBR"]
+        if (tl != null && br != null) {
+            line.color = Color.rgb(255, 235, 59)
+            c.drawRect(tl[0] * dispW - loc[0], tl[1] * dispH - loc[1], br[0] * dispW - loc[0], br[1] * dispH - loc[1], line)
+        }
         for ((k, p) in layout.points) {
             val x = p[0] * dispW - loc[0]
             val y = p[1] * dispH - loc[1]
