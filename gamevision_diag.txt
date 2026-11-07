@@ -1,2 +1,11 @@
 === GameVision APK facts (2026-11-07T05:50:14Z) ===
 apk:  ( bytes)
+=== GameVision APK facts (2026-11-07T11:57:47Z) ===
+apk: GameVision/app/build/outputs/apk/release/app-release.apk (4636390 bytes)
+package: name='com.gamevision.bot' versionCode='1' versionName='0.1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+targetSdkVersion:'34'
+uses-permission: name='android.permission.SYSTEM_ALERT_WINDOW'
+uses-permission: name='android.permission.FOREGROUND_SERVICE'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.WAKE_LOCK'
+uses-permission: name='com.gamevision.bot.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
