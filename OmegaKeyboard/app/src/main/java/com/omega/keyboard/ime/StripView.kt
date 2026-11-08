@@ -57,8 +57,10 @@ class StripView(ctx: Context) : View(ctx) {
         set(v) { field = v; invalidate() }
     var statusActionId: String = ""
     var statusActionLabel: String = ""
-    var statusIcon: String = "smart_toy"
+    var statusIcon: String = "robot"
     var statusWarn: Boolean = false
+    /** the message is not a warning and its button is not a "stop": draw the button in the accent colour */
+    var statusCalm: Boolean = false
 
     private val density = resources.displayMetrics.density
     private fun dp(v: Float) = v * density
@@ -200,9 +202,10 @@ class StripView(ctx: Context) : View(ctx) {
                 if (statusActionLabel.isNotEmpty()) {
                     val pw = dp(86f)
                     val p = addHit(right - pw, cy - dp(16f), right, cy + dp(16f), "status")
-                    fill.color = if (pressedTag == "status") t.keyPressed else (if (statusWarn) t.accent else 0xFFD93025.toInt())
+                    val accentBtn = statusWarn || statusCalm
+                    fill.color = if (pressedTag == "status") t.keyPressed else (if (accentBtn) t.accent else 0xFFD93025.toInt())
                     c.drawRoundRect(p, dp(16f), dp(16f), fill)
-                    tp.color = if (statusWarn) t.onAccent else 0xFFFFFFFF.toInt()
+                    tp.color = if (accentBtn) t.onAccent else 0xFFFFFFFF.toInt()
                     tp.textSize = dp(14f)
                     tp.isFakeBoldText = true
                     drawText(c, statusActionLabel, p.centerX(), cy, pw - dp(8f))

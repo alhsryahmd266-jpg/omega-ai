@@ -174,29 +174,42 @@ $KB tool clip 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-clip
 scenario kb-lang s:theme=light s:last_lang=ar
 focus
 $KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-lang
-scenario kb-ai s:theme=ocean s:last_lang=en
-focus
-$KB type "hello how are you" 2>&1 | tee -a "$LOG"; sleep 1
-$KB tool ai 2>&1 | tee -a "$LOG"; sleep 2; shot kb-ai
 scenario kb-voice s:theme=light s:last_lang=ar
 focus
 $KB tool voice 2>&1 | tee -a "$LOG"; sleep 3; shot kb-voice
 
-# --- the neon picture: type, press the tool, take the PNG the keyboard made
-scenario neon-run s:theme=neon s:last_lang=en i:text_color=0xFF39FF14
+# --- the neon picture: see below (moved after the other screens)
+
+# --- resizing by hand: handles, drag the top edge up, the right edge in, the left edge in, done, then typing in the new size
+scenario kb-resize s:theme=light s:last_lang=ar
 focus
-$KB type "Omega" 2>&1 | tee -a "$LOG"
-sleep 1
-$KB tool neon 2>&1 | tee -a "$LOG"
-sleep 5
-shot neon-share
-F=$(adb shell "run-as $PKG ls -t cache/neon" 2>/dev/null | tr -d '\r' | head -1)
-if [ -n "$F" ]; then
-  adb exec-out "run-as $PKG cat cache/neon/$F" > "$OUT/neon-image.png"
-  say "neon picture $F ($(stat -c %s "$OUT/neon-image.png") bytes)"
-else
-  say "no neon picture was made"
-fi
+$KB tool resize 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-1
+$KB drag RZ_TOP 0 -240 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-2
+$KB drag RZ_RIGHT -260 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-3
+$KB drag RZ_LEFT 90 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-4
+$KB key RZ_DONE 2>&1 | tee -a "$LOG"; sleep 1.5
+$KB type "اعمل كل اللي قلتلك عليه" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-resize-typed
+say "typed after the resize: [$($KB text 2>/dev/null)]"
+# the size was saved: a fresh start comes up in it
+scenario kb-resize-kept s:theme=light s:last_lang=ar i:height_pct=140 i:width_pct=80 i:kb_offset=100
+focus
+shot kb-resize-kept
+
+# --- does every key type what it shows? The same sentence in the normal size, tall, narrow on the left, narrow on the right
+check() {
+  local name="$1" text="$2"; shift 2
+  scenario "$name" "$@"; focus
+  $KB type "$text" 2>&1 | tee -a "$LOG"
+  sleep 1.2
+  local got; got="$($KB text 2>/dev/null)"
+  if [ "$got" = "$text" ]; then say "CHECK $name: ok"; else say "CHECK $name: FAIL wanted [$text] got [$got]"; fi
+  shot "$name"
+}
+check type-normal "اعمل كل اللي قلتلك عليه" s:theme=light s:last_lang=ar
+check type-tall   "اضغط على حرف يطلع حرف تاني" s:theme=light s:last_lang=ar i:height_pct=165
+check type-short  "ضصثقفغعهخحج شسيبلاتنمكط ذءؤرىةوزظد" s:theme=light s:last_lang=ar i:height_pct=60
+check type-narrow-left  "hello world how are you" s:theme=light s:last_lang=en i:width_pct=65 i:kb_offset=0
+check type-narrow-right "اللوحة فيها غلط" s:theme=light s:last_lang=ar i:width_pct=65 i:kb_offset=100
 
 # --- landscape (last: it turns the phone sideways)
 scenario kb-land s:theme=aurora s:last_lang=en

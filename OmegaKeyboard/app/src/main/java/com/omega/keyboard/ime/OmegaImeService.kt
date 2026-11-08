@@ -70,6 +70,9 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         @Volatile var instance: OmegaImeService? = null
             private set
 
+        /** in landscape the keys are lower, so the app above still has room */
+        private const val LANDSCAPE_HEIGHT = 0.78f
+
         private const val SEPARATORS = ".,!?;:)\"…،؛؟"
         private const val SMART_PUNCT = ".,!?;:،؛؟"
 
@@ -131,6 +134,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     // strip state
     private var toolbarForced = false
     private var translateBar = false
+    private var resizing = false                     // the keyboard is in "drag the edges to resize" mode
     private var typedBusy = false
     private var lastReplacement: Triple<String, String, Boolean>? = null   // original, new text, was it a selection
     private var voiceActive = false
@@ -251,7 +255,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         analyseField(info)
         applyTheme()
         applyViewPrefs()
-        if (!restarting) hidePanels()
+        if (!restarting) { hidePanels(); resizing = false; kbd?.resizeMode = false }
         page = if (numeric) LayoutKind.NUMERIC else LayoutKind.LETTERS
         applyLayout()
         updateAutoShift()
@@ -342,10 +346,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun applyViewPrefs() {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val k = kbd ?: return
-        k.heightScale = prefs.heightPct.coerceIn(70, 150) / 100f * (if (landscape) 0.78f else 1f)
+        k.heightScale = prefs.heightPct.coerceIn(KeyboardView.MIN_HEIGHT_PCT, KeyboardView.MAX_HEIGHT_PCT) / 100f * (if (landscape) LANDSCAPE_HEIGHT else 1f)
         k.fontScale = prefs.fontPct.coerceIn(80, 140) / 100f
-        k.widthScale = prefs.widthPct.coerceIn(70, 100) / 100f
-        k.alignMode = prefs.kbAlign
+        k.widthScale = prefs.widthPct.coerceIn(KeyboardView.MIN_WIDTH_PCT, 100) / 100f
+        k.alignFrac = prefs.kbOffset / 100f
         k.fxGlow = prefs.fxGlow
         k.fxRipple = prefs.fxRipple
         k.showPreview = prefs.keyPreview
@@ -419,7 +423,44 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         override fun onLook() { applyTheme(); applyViewPrefs() }
         override fun onSize() { applyViewPrefs() }
         override fun onClose() { hideAppearance() }
+        override fun onDragResize() { startResize() }
     }
+
+    // ------------------------------------------------------------------ resize by hand
+
+    /** Handles appear around the keys: the user drags the top edge for the height and the side edges for the width. */
+    private fun startResize() {
+        hidePanels()                 // closes the appearance sheet when it was open and shows the keys again
+        translateBar = false
+        resizing = true
+        kbd?.resizeMode = true
+        refreshStrip()
+    }
+
+    private fun stopResize() {
+        if (!resizing) return
+        resizing = false
+        kbd?.resizeMode = false
+        refreshStrip()
+    }
+
+    private fun isLandscape() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    override fun onResized(heightScale: Float, widthScale: Float, alignFrac: Float) {
+        prefs.heightPct = Math.round(heightScale / (if (isLandscape()) LANDSCAPE_HEIGHT else 1f) * 100f)
+            .coerceIn(KeyboardView.MIN_HEIGHT_PCT, KeyboardView.MAX_HEIGHT_PCT)
+        prefs.widthPct = Math.round(widthScale * 100f).coerceIn(KeyboardView.MIN_WIDTH_PCT, 100)
+        prefs.kbOffset = Math.round(alignFrac * 100f)
+    }
+
+    override fun onResizeReset() {
+        prefs.heightPct = 100
+        prefs.widthPct = 100
+        prefs.kbOffset = 50
+        applyViewPrefs()
+    }
+
+    override fun onResizeDone() { stopResize() }
 
     private fun appearanceOpen(): Boolean = appearance?.parent != null
 
@@ -908,13 +949,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     /** Same slots as Gboard's tool row (mic, themes, translate, settings, GIF, stickers, more), filled with our own tools. */
     private fun buildTools(): List<StripView.Tool> = listOf(
         StripView.Tool("voice", "mic", "صوت", voiceActive),
-        StripView.Tool("screen", "g_translate", "الشاشة", ScreenTranslateController.active),
-        StripView.Tool("typed", "translate", "ترجم", translateBar),
+        StripView.Tool("screen", "g_translate", "الشاشة", ScreenTranslateController.active),   // translates the whole screen
         StripView.Tool("theme", "palette", "المظهر", appearanceOpen()),
-        StripView.Tool("neon", "bolt", "نيون"),
-        StripView.Tool("auto", "smart_toy", "ذاتي", AutoPilot.running),
-        StripView.Tool("ai", "auto_awesome", "تحسين"),
+        StripView.Tool("resize", "open_in_full", "الحجم", resizing),
+        StripView.Tool("auto", "robot", "ذاتي", AutoPilot.running),
         StripView.Tool("clip", "content_paste", "الحافظة"),
+        StripView.Tool("typed", "translate", "ترجم", translateBar),                              // translates what is typed: far from the screen one
         StripView.Tool("settings", "settings", "إعدادات"),
     )
 
@@ -924,9 +964,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         st.canUndo = translateBar && lastReplacement != null
         st.targetName = Languages.arabicName(prefs.typedTarget)
 
-        fun status(icon: String, text: String, warn: Boolean, label: String, id: String) {
+        fun status(icon: String, text: String, warn: Boolean, label: String, id: String, calm: Boolean = false) {
             st.statusIcon = icon
             st.statusWarn = warn
+            st.statusCalm = calm
             st.statusActionLabel = label
             st.statusActionId = id
             st.statusText = text
@@ -936,10 +977,11 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val busy = busyText
         val ft = flashText
         when {
+            resizing -> status("open_in_full", "اسحب الحواف لتغيير الحجم", false, "تم", "resize_done", calm = true)
             voiceActive -> status("mic", voiceText.ifBlank { "بسمعك..." }, false, "إيقاف", "voice_stop")
             busy != null -> status("auto_awesome", busy, false, "إلغاء", "cancel_busy")
             ft != null -> status(if (flashWarn) "warning" else "info", ft, flashWarn, flashActionLabel, flashActionId)
-            AutoPilot.running -> status("smart_toy", AutoPilot.status.ifBlank { "الوضع الذاتي شغال" }, false, "إيقاف", "auto_stop")
+            AutoPilot.running -> status("robot", AutoPilot.status.ifBlank { "الوضع الذاتي شغال" }, false, "إيقاف", "auto_stop")
             translateBar -> st.mode = StripView.Mode.TRANSLATE
             toolbarForced || (prefs.toolbarOpen && st.suggestions.isEmpty()) -> st.mode = StripView.Mode.TOOLBAR
             else -> st.mode = StripView.Mode.SUGGEST
@@ -976,7 +1018,9 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     override fun onMic() { startVoice() }
 
     override fun onTool(id: String) {
+        if (resizing && id != "resize") stopResize()
         when (id) {
+            "resize" -> if (resizing) stopResize() else startResize()
             "auto" -> if (AutoPilot.running) AutoPilot.stop("وقفته من الكيبورد") else AutoPilot.start(this)
             "screen" -> ScreenTranslateController.toggle(this)
             "typed" -> { hidePanels(); translateBar = true; refreshStrip() }
@@ -1073,6 +1117,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
                 // if the recogniser is already gone there is nothing left to wait for: leave the listening state now
                 if (!VoiceSession.active) { voiceActive = false; voiceText = ""; refreshStrip() }
             }
+            "resize_done" -> stopResize()
             "auto_stop" -> AutoPilot.stop("وقفته من الكيبورد")
             "cancel_busy" -> { Llm.cancel(); busyText = null; refreshStrip() }
             "undo_text" -> { undoReplacement(); flashText = null; refreshStrip() }

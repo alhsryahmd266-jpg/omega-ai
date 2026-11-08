@@ -211,6 +211,34 @@ def cmd_target(index):
     return 0
 
 
+def cmd_drag(name, dx, dy, ms):
+    """drags from a named point (a key, a strip button or a resize handle) by dx, dy pixels, taking ms milliseconds"""
+    keys, strip, _t = wait_dump()
+    pos = key_position(keys, name) or strip.get(name)
+    if not pos:
+        print(f"nothing named {name} to drag", file=sys.stderr)
+        return 1
+    adb("shell", "input", "swipe", str(pos[0]), str(pos[1]), str(pos[0] + int(dx)), str(pos[1] + int(dy)), str(int(ms)))
+    return 0
+
+
+def cmd_text():
+    """prints what the first text field of the screen holds now"""
+    adb("shell", "uiautomator", "dump", "/sdcard/ui.xml")
+    text = adb("exec-out", "cat", "/sdcard/ui.xml").stdout
+    if "<" not in text:
+        return 1
+    try:
+        root = ET.fromstring(text[text.index("<"):])
+    except ET.ParseError:
+        return 1
+    for node in root.iter("node"):
+        if node.get("class") == "android.widget.EditText":
+            print(node.get("text", ""))
+            return 0
+    return 1
+
+
 def main(argv):
     if len(argv) < 2:
         return 2
@@ -234,6 +262,10 @@ def main(argv):
         return cmd_tab(argv[2])
     if cmd == "target":
         return cmd_target(argv[2])
+    if cmd == "drag":
+        return cmd_drag(argv[2], argv[3], argv[4], argv[5] if len(argv) > 5 else "600")
+    if cmd == "text":
+        return cmd_text()
     return 2
 
 

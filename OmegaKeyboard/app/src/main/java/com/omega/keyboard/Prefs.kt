@@ -41,7 +41,7 @@ class Prefs private constructor(ctx: Context) {
 
     // ---- keyboard look & feel
     var theme by S("theme", "auto")
-    var heightPct by I("height_pct", 100)                 // 70..150
+    var heightPct by I("height_pct", 100)                 // 60..170 (dragged by hand or set with the slider)
 
     // colours, size and effects. 0 / -1 mean "as the theme says"
     var textColor by I("text_color", 0xFF2979FF.toInt())  // colour of the text you type; 0 = the field's own colour
@@ -56,8 +56,16 @@ class Prefs private constructor(ctx: Context) {
     var glassKeys by I("glass_keys", -1)                  // -1 theme, 0 solid keys, 1 see-through glass keys
     var neonLetters by I("neon_letters", -1)              // -1 theme, 0 off, 1 letters glow
     var fontPct by I("font_pct", 100)                     // size of the letters on the keys, 80..140
-    var widthPct by I("width_pct", 100)                   // width of the keys area, 70..100 (one-handed typing)
-    var kbAlign by I("kb_align", 0)                       // where a narrower keyboard sits: 0 centre, 1 left, 2 right
+    var widthPct by I("width_pct", 100)                   // width of the keys area, 60..100 (one-handed typing)
+    var kbAlign by I("kb_align", 0)                       // where a narrower keyboard sits: 0 centre, 1 left, 2 right (the older three-way setting)
+
+    /** where a narrower keyboard sits, 0 = at the left edge .. 50 = centred .. 100 = at the right edge; dragging the edges by hand can leave it anywhere */
+    var kbOffset: Int
+        get() = if (sp.contains("kb_offset")) sp.getInt("kb_offset", 50) else when (kbAlign) { 1 -> 0; 2 -> 100; else -> 50 }
+        set(v) {
+            val o = v.coerceIn(0, 100)
+            sp.edit().putInt("kb_offset", o).putInt("kb_align", if (o <= 8) 1 else if (o >= 92) 2 else 0).apply()
+        }
     var fxGlow by B("fx_glow", true)                      // light that follows the finger across the keys
     var fxRipple by B("fx_ripple", true)                  // ring that spreads from a pressed key
     var numberRow by B("number_row", false)

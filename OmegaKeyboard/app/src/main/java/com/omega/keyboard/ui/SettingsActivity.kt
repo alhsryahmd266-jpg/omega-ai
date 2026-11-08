@@ -109,9 +109,9 @@ class SettingsActivity : BaseActivity() {
                     }
                 }
             },
-            UiKit.seekRow(this, p, "ارتفاع الكيبورد", 70, 150, prefs.heightPct, { "$it%" }) { prefs.heightPct = it },
+            UiKit.seekRow(this, p, "ارتفاع الكيبورد", 60, 170, prefs.heightPct, { "$it%" }) { prefs.heightPct = it },
             UiKit.seekRow(this, p, "حجم الحروف", 80, 140, prefs.fontPct, { "$it%" }) { prefs.fontPct = it },
-            UiKit.seekRow(this, p, "عرض الكيبورد", 70, 100, prefs.widthPct, { "$it%" }) { prefs.widthPct = it },
+            UiKit.seekRow(this, p, "عرض الكيبورد", 60, 100, prefs.widthPct, { "$it%" }) { prefs.widthPct = it },
             sw("صف الأرقام", "صف أرقام فوق الحروف", prefs.numberRow) { prefs.numberRow = it },
             sw("أرقام هندية في العربي", "٠١٢٣ بدل 0123", prefs.indicDigits) { prefs.indicDigits = it },
             sw("معاينة الحرف", "تكبير الحرف فوق الزرار", prefs.keyPreview) { prefs.keyPreview = it },

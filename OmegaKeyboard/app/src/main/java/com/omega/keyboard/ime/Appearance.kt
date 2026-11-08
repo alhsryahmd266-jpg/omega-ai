@@ -373,6 +373,8 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
         /** height, letter size, width or alignment changed */
         fun onSize()
         fun onClose()
+        /** "drag by hand": close the sheet and show the resize handles on the keyboard */
+        fun onDragResize()
     }
 
     private enum class Target(val label: String) {
@@ -722,13 +724,14 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
     private fun buildSizePage(): View {
         val ctx = context
         val col = LinearLayout(ctx).apply { orientation = VERTICAL; setPadding(ctx.dpi(12f), ctx.dpi(4f), ctx.dpi(12f), ctx.dpi(8f)) }
-        col.addView(seekRow("الارتفاع", 70, 150, { prefs.heightPct }, { "$it%" }, liveApply = false) { prefs.heightPct = it; host.onSize() })
+        col.addView(seekRow("الارتفاع", KeyboardView.MIN_HEIGHT_PCT, KeyboardView.MAX_HEIGHT_PCT, { prefs.heightPct }, { "$it%" }, liveApply = false) { prefs.heightPct = it; host.onSize() })
         col.addView(seekRow("حجم الحروف", 80, 140, { prefs.fontPct }, { "$it%" }, liveApply = true) { prefs.fontPct = it; host.onSize() })
-        col.addView(seekRow("العرض", 70, 100, { prefs.widthPct }, { "$it%" }, liveApply = true) { prefs.widthPct = it; host.onSize() })
+        col.addView(seekRow("العرض", KeyboardView.MIN_WIDTH_PCT, 100, { prefs.widthPct }, { "$it%" }, liveApply = true) { prefs.widthPct = it; host.onSize() })
         val (sv, row) = hScroll()
-        row.addView(chip("وسط", { prefs.kbAlign == 0 }) { prefs.kbAlign = 0; host.onSize(); restyle() })
-        row.addView(chip("يمين", { prefs.kbAlign == 2 }) { prefs.kbAlign = 2; host.onSize(); restyle() })
-        row.addView(chip("شمال", { prefs.kbAlign == 1 }) { prefs.kbAlign = 1; host.onSize(); restyle() })
+        row.addView(chip("اسحب باليد ↕", { true }) { host.onDragResize() })
+        row.addView(chip("وسط", { prefs.kbOffset == 50 }) { prefs.kbOffset = 50; host.onSize(); restyle() })
+        row.addView(chip("يمين", { prefs.kbOffset == 100 }) { prefs.kbOffset = 100; host.onSize(); restyle() })
+        row.addView(chip("شمال", { prefs.kbOffset == 0 }) { prefs.kbOffset = 0; host.onSize(); restyle() })
         row.addView(chip("ضوء الإصبع", { prefs.fxGlow }) { prefs.fxGlow = !prefs.fxGlow; host.onLook(); restyle() })
         row.addView(chip("موجات الضغط", { prefs.fxRipple }) { prefs.fxRipple = !prefs.fxRipple; host.onLook(); restyle() })
         col.addView(sv, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(36f)).also { it.topMargin = ctx.dpi(4f) })

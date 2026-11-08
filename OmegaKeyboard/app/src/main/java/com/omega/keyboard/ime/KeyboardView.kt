@@ -45,6 +45,12 @@ class KeyboardView(ctx: Context) : View(ctx) {
         fun onSpaceSwipe(steps: Int)
         fun onGlobeLong()
         fun onFeedback(kind: KeyKind)
+        /** resize mode: a drag of an edge ended; these are the scales the view shows now (not percentages) */
+        fun onResized(heightScale: Float, widthScale: Float, alignFrac: Float)
+        /** resize mode: "back to the original size" was pressed */
+        fun onResizeReset()
+        /** resize mode: "done" was pressed */
+        fun onResizeDone()
     }
 
     var listener: Listener? = null
@@ -73,7 +79,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
     var widthScale: Float = 1f
         set(v) { if (field != v) { field = v; computeKeys(); invalidate() } }
 
-    var alignMode: Int = 0
+    /** where the keys area sits when it is narrower than the view: 0 = at the left edge, 0.5 = centred, 1 = at the right edge */
+    var alignFrac: Float = 0.5f
         set(v) { if (field != v) { field = v; computeKeys(); invalidate() } }
 
     var fxGlow: Boolean = true
@@ -92,6 +99,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private class Ptr(val id: Int) {
         var kr: KeyRect? = null
         var downX = 0f
+        var downY = 0f
         var lastX = 0f
         var longFired = false
         var swiped = false
@@ -100,9 +108,28 @@ class KeyboardView(ctx: Context) : View(ctx) {
         var runnable: Runnable? = null
     }
 
-    private companion object {
-        const val RIPPLE_MS = 460L
-        val SHADOW_FRAC = floatArrayOf(0.55f, 0.32f, 0.16f)
+    companion object {
+        private const val RIPPLE_MS = 460L
+
+        /** how long a letter is held before its alternatives open (a slow tap must not become "another letter") */
+        private const val LONG_PRESS_MS = 400L
+        private val SHADOW_FRAC = floatArrayOf(0.55f, 0.32f, 0.16f)
+
+        /** limits of the size the user can give the keyboard (percent of the normal one) */
+        const val MIN_HEIGHT_PCT = 60
+        const val MAX_HEIGHT_PCT = 170
+        const val MIN_WIDTH_PCT = 60
+
+        /** a finger that went down on a key moves to the next one only after leaving the first by this much and travelling this far (dp) */
+        private const val KEY_SWITCH_MARGIN_DP = 5f
+        private const val KEY_SWITCH_TRAVEL_DP = 11f
+
+        private const val RZ_NONE = 0
+        private const val RZ_TOP = 1
+        private const val RZ_LEFT = 2
+        private const val RZ_RIGHT = 3
+        private const val RZ_DONE = 4
+        private const val RZ_RESET = 5
     }
 
     private val keys = ArrayList<KeyRect>()
@@ -175,12 +202,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
         if (width == 0) return
         val side = dp(2f)
         val full = width - 2 * side
-        val usable = full * widthScale.coerceIn(0.5f, 1f)
-        val start = when (alignMode) {
-            1 -> side
-            2 -> side + (full - usable)
-            else -> side + (full - usable) / 2f
-        }
+        val usable = full * widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)
+        val start = side + (full - usable) * alignFrac.coerceIn(0f, 1f)
         for ((r, row) in lay.rows.withIndex()) {
             val unit = usable / row.total
             var x = start
@@ -245,6 +268,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
             drawKey(c, kr, t, now)
         }
         if (ripples.isNotEmpty()) busy = true
+        if (resizeMode) drawResize(c, t)
         if (busy) postInvalidateOnAnimation()
     }
 
@@ -444,6 +468,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (resizeMode) return resizeTouch(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = e.actionIndex
@@ -462,7 +487,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private fun down(id: Int, x: Float, y: Float) {
         val kr = keyAt(x, y) ?: return
         val p = Ptr(id)
-        p.kr = kr; p.downX = x; p.lastX = x
+        p.kr = kr; p.downX = x; p.downY = y; p.lastX = x
         ptrs.put(id, p)
         pressed.add(kr)
         glowX = x; glowY = y
@@ -499,7 +524,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 if (kr.key.popups.isNotEmpty()) {
                     val r = Runnable { openAlt(p, kr) }
                     p.runnable = r
-                    handler.postDelayed(r, 340)
+                    handler.postDelayed(r, LONG_PRESS_MS)
                 }
             }
             KeyKind.LANG -> {
@@ -539,7 +564,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
             return
         }
         val nk = keyAt(x, y)
-        if (nk != null && nk !== kr && !p.longFired) {
+        // Like the Android keyboard: a rolling fingertip must not type the neighbour. The finger has to leave the key it
+        // went down on by a clear margin (and really travel) before the other key takes over; a deliberate slide still does.
+        if (nk != null && nk !== kr && !p.longFired && leftKeyClearly(kr, p, x, y)) {
             pressed.remove(kr)
             cancelRunnable(p)
             p.kr = nk
@@ -547,6 +574,14 @@ class KeyboardView(ctx: Context) : View(ctx) {
             if (nk.key.kind != KeyKind.BACKSPACE) armKey(p, nk) else hidePopups()
         }
         invalidate()
+    }
+
+    /** True when (x, y) is a clear step away from [kr]: outside its edge by the margin AND far enough from where the finger went down. */
+    private fun leftKeyClearly(kr: KeyRect, p: Ptr, x: Float, y: Float): Boolean {
+        val c = kr.cell
+        val outside = hypot(max(max(c.left - x, 0f), x - c.right), max(max(c.top - y, 0f), y - c.bottom))
+        if (outside < dp(KEY_SWITCH_MARGIN_DP)) return false
+        return hypot(x - p.downX, y - p.downY) >= dp(KEY_SWITCH_TRAVEL_DP)
     }
 
     private fun up(id: Int) {
@@ -585,6 +620,16 @@ class KeyboardView(ctx: Context) : View(ctx) {
             val id = if (kr.key.kind == KeyKind.CHAR) kr.key.label else kr.key.kind.name
             sb.append(id).append('=').append((loc[0] + kr.cell.centerX()).toInt()).append(',').append((loc[1] + kr.cell.centerY()).toInt()).append(';')
         }
+        if (resizeMode) {
+            layoutResizeButtons()
+            val l = areaLeft(); val r = areaRight()
+            fun put(name: String, x: Float, y: Float) { sb.append(name).append('=').append((loc[0] + x).toInt()).append(',').append((loc[1] + y).toInt()).append(';') }
+            put("RZ_TOP", (l + r) / 2f, dp(10f))
+            put("RZ_LEFT", l + dp(10f), height / 2f)
+            put("RZ_RIGHT", r - dp(10f), height / 2f)
+            put("RZ_DONE", rzBtnDone.centerX(), rzBtnDone.centerY())
+            put("RZ_RESET", rzBtnReset.centerX(), rzBtnReset.centerY())
+        }
         Log.d("OmegaKeys", sb.toString())
     }
 
@@ -604,6 +649,189 @@ class KeyboardView(ctx: Context) : View(ctx) {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         cancelAll()
+    }
+
+    // ------------------------------------------------------------------ resize by hand
+
+    /** True while the user drags the edges to change the size of the keyboard. Nothing is typed in this mode. */
+    var resizeMode = false
+        set(v) {
+            if (field == v) return
+            field = v
+            rzPart = RZ_NONE
+            if (v) cancelAll()
+            requestLayout()
+            invalidate()
+        }
+
+    private val rzPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rzBtnDone = RectF()
+    private val rzBtnReset = RectF()
+    private var rzPart = RZ_NONE
+    private var rzRawX = 0f
+    private var rzRawY = 0f
+    private var rzH0 = 0f
+    private var rzL0 = 0f
+    private var rzR0 = 0f
+
+    private fun areaLeft(): Float {
+        val side = dp(2f)
+        val full = width - 2 * side
+        return side + (full - full * widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)) * alignFrac.coerceIn(0f, 1f)
+    }
+
+    private fun areaRight(): Float {
+        val side = dp(2f)
+        val full = width - 2 * side
+        return areaLeft() + full * widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)
+    }
+
+    private fun layoutResizeButtons() {
+        val l = areaLeft()
+        val r = areaRight()
+        val cx = (l + r) / 2f
+        val cy = height / 2f
+        val bw = min(dp(98f), (r - l - dp(104f)) / 2f).coerceAtLeast(dp(58f))
+        val bh = dp(38f)
+        val gap = dp(10f)
+        val top = cy - dp(2f)
+        rzBtnDone.set(cx + gap / 2f, top, cx + gap / 2f + bw, top + bh)
+        rzBtnReset.set(cx - gap / 2f - bw, top, cx - gap / 2f, top + bh)
+    }
+
+    private fun drawResize(c: Canvas, t: KbTheme) {
+        val l = areaLeft()
+        val r = areaRight()
+        val h = height.toFloat()
+        val cx = (l + r) / 2f
+        layoutResizeButtons()
+        // a light veil and a frame around the keys area: this is what the handles resize
+        rzPaint.style = Paint.Style.FILL
+        rzPaint.color = ColorMath.withAlpha(t.accent, 0x2A)
+        c.drawRect(l, 0f, r, h, rzPaint)
+        rzPaint.style = Paint.Style.STROKE
+        rzPaint.strokeWidth = dp(2.5f)
+        rzPaint.color = t.accent
+        rf.set(l + dp(1.5f), dp(1.5f), r - dp(1.5f), h - dp(1.5f))
+        c.drawRoundRect(rf, dp(10f), dp(10f), rzPaint)
+        // the three handles: top (height), left and right (width)
+        fun pill(left: Float, top: Float, right: Float, bottom: Float, active: Boolean) {
+            rzPaint.style = Paint.Style.FILL
+            rzPaint.color = if (active) t.onAccent else t.accent
+            rf.set(left, top, right, bottom)
+            c.drawRoundRect(rf, dp(6f), dp(6f), rzPaint)
+            rzPaint.color = if (active) t.accent else t.onAccent
+            rzPaint.style = Paint.Style.STROKE
+            rzPaint.strokeWidth = dp(1.6f)
+            rzPaint.strokeCap = Paint.Cap.ROUND
+            if (right - left > bottom - top) {
+                val y = (top + bottom) / 2f
+                c.drawLine(left + dp(16f), y, right - dp(16f), y, rzPaint)
+            } else {
+                val x = (left + right) / 2f
+                c.drawLine(x, top + dp(16f), x, bottom - dp(16f), rzPaint)
+            }
+        }
+        pill(cx - dp(40f), dp(4f), cx + dp(40f), dp(16f), rzPart == RZ_TOP)
+        pill(l + dp(4f), h / 2f - dp(40f), l + dp(16f), h / 2f + dp(40f), rzPart == RZ_LEFT)
+        pill(r - dp(16f), h / 2f - dp(40f), r - dp(4f), h / 2f + dp(40f), rzPart == RZ_RIGHT)
+        // a plate with the hint and the two buttons, readable over any keys
+        val plateW = min(r - l - dp(76f), dp(264f))
+        val plateH = dp(100f)
+        val py = h / 2f - plateH / 2f - dp(2f)
+        rf.set(cx - plateW / 2f, py, cx + plateW / 2f, py + plateH)
+        rzPaint.style = Paint.Style.FILL
+        rzPaint.color = ColorMath.withAlpha(if (t.dark) 0xFF101114.toInt() else 0xFFFFFFFF.toInt(), 0xEE)
+        c.drawRoundRect(rf, dp(16f), dp(16f), rzPaint)
+        textPaint.color = t.onBg
+        textPaint.textSize = dp(13.5f)
+        textPaint.isFakeBoldText = true
+        val hint = android.text.TextUtils.ellipsize("اسحب المقابض لتكبير الكيبورد أو تصغيره", android.text.TextPaint(textPaint), plateW - dp(16f), android.text.TextUtils.TruncateAt.END).toString()
+        drawCentered(c, hint, cx, py + dp(22f))
+        fun button(rect: RectF, label: String, main: Boolean, active: Boolean) {
+            rzPaint.style = Paint.Style.FILL
+            rzPaint.color = if (main) (if (active) t.keyPressed else t.accent) else (if (active) t.keyPressed else t.keyFn)
+            c.drawRoundRect(rect, dp(19f), dp(19f), rzPaint)
+            textPaint.color = if (main) t.onAccent else t.onFn
+            textPaint.textSize = dp(14f)
+            drawCentered(c, label, rect.centerX(), rect.centerY())
+        }
+        button(rzBtnReset, "الأصلي", false, rzPart == RZ_RESET)
+        button(rzBtnDone, "تم", true, rzPart == RZ_DONE)
+        textPaint.isFakeBoldText = false
+    }
+
+    private fun rzPartAt(x: Float, y: Float): Int {
+        layoutResizeButtons()
+        if (rzBtnDone.contains(x, y)) return RZ_DONE
+        if (rzBtnReset.contains(x, y)) return RZ_RESET
+        val l = areaLeft()
+        val r = areaRight()
+        val zone = dp(44f)
+        if (y < zone && x >= l - dp(20f) && x <= r + dp(20f)) return RZ_TOP
+        if (x >= l - dp(28f) && x <= l + zone) return RZ_LEFT
+        if (x >= r - zone && x <= r + dp(28f)) return RZ_RIGHT
+        return RZ_NONE
+    }
+
+    private fun resizeTouch(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                rzPart = rzPartAt(e.x, e.y)
+                rzRawX = e.rawX
+                rzRawY = e.rawY
+                rzH0 = height.toFloat()
+                rzL0 = areaLeft()
+                rzR0 = areaRight()
+                parent?.requestDisallowInterceptTouchEvent(true)
+                invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> if (rzPart == RZ_TOP || rzPart == RZ_LEFT || rzPart == RZ_RIGHT) dragResize(e.rawX, e.rawY)
+            MotionEvent.ACTION_UP -> {
+                val part = rzPart
+                rzPart = RZ_NONE
+                layoutResizeButtons()
+                when (part) {
+                    RZ_DONE -> if (rzBtnDone.contains(e.x, e.y)) listener?.onResizeDone()
+                    RZ_RESET -> if (rzBtnReset.contains(e.x, e.y)) listener?.onResizeReset()
+                    RZ_TOP, RZ_LEFT, RZ_RIGHT -> listener?.onResized(heightScale, widthScale, alignFrac)
+                }
+                invalidate()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                val part = rzPart
+                rzPart = RZ_NONE
+                if (part == RZ_TOP || part == RZ_LEFT || part == RZ_RIGHT) listener?.onResized(heightScale, widthScale, alignFrac)
+                invalidate()
+            }
+        }
+        return true
+    }
+
+    /** The finger's place on the SCREEN decides (the window moves while it grows, so the view's own coordinates would feed back). */
+    private fun dragResize(rawX: Float, rawY: Float) {
+        val side = dp(2f)
+        val full = width - 2 * side
+        val minUsable = full * MIN_WIDTH_PCT / 100f
+        when (rzPart) {
+            RZ_TOP -> {
+                val rows = (layout?.rows?.size ?: 4).coerceAtLeast(1)
+                val maxPx = resources.displayMetrics.heightPixels * 0.5f
+                val screenCap = (maxPx - padTop - padBottom) / (rows * dp(baseRowDp))
+                val want = (rzH0 + (rzRawY - rawY) - padTop - padBottom) / (rows * dp(baseRowDp))
+                heightScale = want.coerceIn(MIN_HEIGHT_PCT / 100f, min(MAX_HEIGHT_PCT / 100f, max(screenCap, MIN_HEIGHT_PCT / 100f)))
+            }
+            RZ_LEFT -> setArea((rzL0 + (rawX - rzRawX)).coerceIn(side, rzR0 - minUsable), rzR0)
+            RZ_RIGHT -> setArea(rzL0, (rzR0 + (rawX - rzRawX)).coerceIn(rzL0 + minUsable, width - side))
+        }
+    }
+
+    private fun setArea(l: Float, r: Float) {
+        val side = dp(2f)
+        val full = width - 2 * side
+        val usable = (r - l).coerceIn(full * MIN_WIDTH_PCT / 100f, full)
+        widthScale = usable / full
+        alignFrac = if (full - usable < 1f) 0.5f else ((l - side) / (full - usable)).coerceIn(0f, 1f)
     }
 
     // ------------------------------------------------------------------ popups (drawn by the overlay)
