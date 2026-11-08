@@ -128,6 +128,8 @@ class LayoutEditorView(
         "crouch" -> Color.rgb(156, 39, 176)
         "reload" -> Color.rgb(0, 188, 212)
         "mapTL", "mapBR" -> Color.rgb(255, 235, 59)
+        "hpTL", "hpBR" -> Color.rgb(139, 195, 74)
+        "heal" -> Color.rgb(233, 30, 99)
         else -> Color.rgb(255, 152, 0)
     }
 

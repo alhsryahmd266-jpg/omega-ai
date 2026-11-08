@@ -54,6 +54,8 @@ class BotService : Service() {
     private var reader: ImageReader? = null
     private var detector: Detector? = null
     private var zoneNav: ZoneNav? = null
+    private var hitDetector: HitDetector? = null
+    private var healthReader: HealthReader? = null
     private var backend: InputBackend? = null
     private var controller: Controller? = null
     private var policy: Policy? = null
@@ -112,6 +114,9 @@ class BotService : Service() {
     private var zoneSeen = 0L
     private var zoneValid = 0L
     private var zoneOutside = 0L
+    private var hitCount = 0
+    private var lastHitFlag = false
+    private var lastHealth = -1f
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -185,6 +190,7 @@ class BotService : Service() {
         backend = b
         backendName = pair.second
 
+        AssetModel.ensure(this, cfg)
         if (cfg.mode == Mode.AI) {
             if (cfg.modelFile.isNotEmpty()) {
                 val d = Detector(cfg)
@@ -199,8 +205,11 @@ class BotService : Service() {
                 toast("مفيش نموذج — هيشتغل Monkey")
             }
         }
+        val tactics = Tactics(cfg.tacticSneak, cfg.tacticAmbush, cfg.tacticDodge, cfg.tacticJump, cfg.tacticCrouch, cfg.style)
+        if (detector != null && cfg.tacticDodge) hitDetector = HitDetector(cfg.hitSensitivity)
+        if (cfg.healthEnabled) healthReader = HealthReader(cfg)
         val base: Policy = if (detector != null) {
-            TacticalPolicy(cfg.skill, cfg.aimScale, cfg.crossX, cfg.crossY)
+            TacticalPolicy(cfg.skill, cfg.aimScale, cfg.crossX, cfg.crossY, tactics)
         } else {
             MonkeyPolicy()
         }
@@ -455,8 +464,20 @@ class BotService : Service() {
             lastZone = null
         }
 
+        var hit = false
+        var health = -1f
+        if (active && inGame && !inMacro) {
+            val hd = hitDetector
+            if (hd != null) hit = hd.update(bmp, w, h, now)
+            val hr = healthReader
+            if (hr != null) health = hr.read(bmp, w, h)
+            if (hit && !lastHitFlag) hitCount++
+            lastHitFlag = hit
+        }
+        lastHealth = health
+
         val act: Action = if (active && inGame && !inMacro) {
-            policy?.decide(Perception(now, dets, scrW, scrH), now) ?: Action.idle()
+            policy?.decide(Perception(now, dets, scrW, scrH, hit, health), now) ?: Action.idle()
         } else {
             Action.idle()
         }
@@ -560,7 +581,7 @@ class BotService : Service() {
                 stopBot("الجهاز سخن جدًا")
                 return
             }
-            if (now - startedAt > cfg.maxRunMinutes * 60_000L) {
+            if (cfg.maxRunMinutes > 0 && now - startedAt > cfg.maxRunMinutes * 60_000L) {
                 stopBot("خلص الوقت الأقصى (${cfg.maxRunMinutes} دقيقة)")
                 return
             }
@@ -596,7 +617,9 @@ class BotService : Service() {
                 "BOT ${if (detector != null) "AI" else "MONKEY"} ${cfg.skill.label} | $backendName\n" +
                     "FPS $fps  det ${emaDet.toInt()}ms  loop ${emaLoop.toInt()}ms  inj ${emaInj.toInt()}ms\n" +
                     "$state | dets $nDets | ${if (guardOk) "guard OK" else "away ($guardFg)"} | T$thermal$zoneTxt\n" +
-                    "exits $relaunches  static $staticEvents  macros $macroRuns"
+                    "exits $relaunches  static $staticEvents  macros $macroRuns  hits $hitCount" +
+                    (if (lastHealth >= 0f) "  HP ${(lastHealth * 100).toInt()}%" else "") +
+                    " | ${cfg.style.label}"
             )
             handler?.postDelayed(this, 500L)
         }
@@ -628,6 +651,7 @@ class BotService : Service() {
             sb.append("frames: ").append(framesTotal).append(", avg FPS while active: ").append("%.1f".format(avgFps)).append('\n')
             sb.append("game exits / relaunches: ").append(relaunches).append('\n')
             sb.append("static-screen events: ").append(staticEvents).append(", macro runs: ").append(macroRuns).append('\n')
+            sb.append("times hit: ").append(hitCount).append(", plan: ").append(cfg.style.label).append('\n')
             sb.append("max thermal status: ").append(maxThermal).append('\n')
             if (cfg.zoneEnabled) {
                 sb.append("zone reading valid: ").append("%.0f".format(zonePct)).append("%, outside zone: ").append("%.0f".format(outPct)).append("% of valid\n")

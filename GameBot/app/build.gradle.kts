@@ -13,8 +13,8 @@ android {
         // targetSdk 31 on purpose: sideloaded tool, avoids Android 14 foreground-service-type and
         // per-session MediaProjection enforcement. Runs on Android 11-15.
         targetSdk = 31
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
         ndk {
             abiFilters.add("arm64-v8a")
         }

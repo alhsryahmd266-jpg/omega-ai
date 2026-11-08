@@ -12,7 +12,6 @@ import org.tensorflow.lite.gpu.GpuDelegate
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -205,74 +204,8 @@ class Detector(private val cfg: Config) {
             }
         }
 
-        val a = outShape[1]
-        val b = outShape[2]
-        val chFirst = a < b
-        val ch = if (chFirst) a else b
-        val n = if (chFirst) b else a
-        val nc = ch - 4
-        if (nc < 1) return emptyList()
-
-        val cand = ArrayList<FloatArray>()   // cls, score, cx, cy, w, h
-        var maxCoord = 0f
-        for (idx in 0 until n) {
-            var best = -1
-            var bs = 0f
-            for (k in 0 until nc) {
-                val sc = if (chFirst) outFloats[(4 + k) * n + idx] else outFloats[idx * ch + 4 + k]
-                if (sc > bs) { bs = sc; best = k }
-            }
-            if (best < 0 || bs < cfg.conf) continue
-            val cx: Float
-            val cy: Float
-            val w: Float
-            val h: Float
-            if (chFirst) {
-                cx = outFloats[idx]; cy = outFloats[n + idx]; w = outFloats[2 * n + idx]; h = outFloats[3 * n + idx]
-            } else {
-                val o = idx * ch
-                cx = outFloats[o]; cy = outFloats[o + 1]; w = outFloats[o + 2]; h = outFloats[o + 3]
-            }
-            maxCoord = max(maxCoord, max(max(cx, cy), max(w, h)))
-            cand.add(floatArrayOf(best.toFloat(), bs, cx, cy, w, h))
-        }
-        val pixelCoords = maxCoord > 2f
-        cand.sortByDescending { it[1] }
-        val top = if (cand.size > 80) cand.subList(0, 80) else cand
-
-        val keep = ArrayList<Det>()
-        for (t in top) {
-            var cx = t[2]; var cy = t[3]; var w = t[4]; var h = t[5]
-            if (!pixelCoords) { cx *= inW; cy *= inH; w *= inW; h *= inH }
-            val d = Det(
-                t[0].toInt(),
-                labels.getOrNull(t[0].toInt()) ?: ("cls" + t[0].toInt()),
-                t[1],
-                (cx - padX) / scale / srcW,
-                (cy - padY) / scale / srcH,
-                w / scale / srcW,
-                h / scale / srcH
-            )
-            var suppressed = false
-            for (k in keep) {
-                if (k.cls == d.cls && iou(k, d) > cfg.iou) { suppressed = true; break }
-            }
-            if (!suppressed) keep.add(d)
-            if (keep.size >= 30) break
-        }
+        val res = YoloDecode.decode(outFloats, outShape, inW, inH, scale, padX, padY, srcW, srcH, labels, cfg.conf, cfg.iou)
         lastMs = (System.nanoTime() - t0) / 1e6f
-        return keep
-    }
-
-    private fun iou(a: Det, b: Det): Float {
-        val ax1 = a.cx - a.w / 2; val ax2 = a.cx + a.w / 2
-        val ay1 = a.cy - a.h / 2; val ay2 = a.cy + a.h / 2
-        val bx1 = b.cx - b.w / 2; val bx2 = b.cx + b.w / 2
-        val by1 = b.cy - b.h / 2; val by2 = b.cy + b.h / 2
-        val iw = max(0f, min(ax2, bx2) - max(ax1, bx1))
-        val ih = max(0f, min(ay2, by2) - max(ay1, by1))
-        val inter = iw * ih
-        val u = a.w * a.h + b.w * b.h - inter
-        return if (u <= 0f) 0f else inter / u
+        return res
     }
 }

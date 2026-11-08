@@ -49,6 +49,17 @@ class MainActivity : Activity() {
     private lateinit var spMode: Spinner
     private lateinit var spSkill: Spinner
     private lateinit var spBackend: Spinner
+    private lateinit var spStyle: Spinner
+    private lateinit var wizardBtn: Button
+    private lateinit var cbSneak: CheckBox
+    private lateinit var cbAmbush: CheckBox
+    private lateinit var cbDodge: CheckBox
+    private lateinit var cbJump: CheckBox
+    private lateinit var cbCrouch: CheckBox
+    private lateinit var etHitSens: EditText
+    private lateinit var cbHealth: CheckBox
+    private lateinit var etHealthColor: EditText
+    private lateinit var etHealthTol: EditText
     private lateinit var etLabels: EditText
     private lateinit var etConf: EditText
     private lateinit var etThreads: EditText
@@ -126,6 +137,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         Logger.init(this)
         cfg = Config.load(this)
+        AssetModel.ensure(this, cfg)
         try { Shizuku.addRequestPermissionResultListener(shizukuListener) } catch (t: Throwable) { }
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 99)
@@ -153,6 +165,9 @@ class MainActivity : Activity() {
         statusTv.setTextColor(Color.WHITE)
         statusTv.textSize = 13f
         col.addView(statusTv)
+        wizardBtn = btn("...") { nextStep().act() }
+        wizardBtn.textSize = 16f
+        col.addView(wizardBtn)
 
         col.addView(title("تشغيل"))
         val run = LinearLayout(this)
@@ -182,10 +197,13 @@ class MainActivity : Activity() {
         col.addView(btn("تشغيل اللعبة") { launchGame() })
 
         col.addView(title("3) الوضع والمستوى"))
-        spMode = spinner(listOf("Monkey (حركة عشوائية للاختبار، من غير نموذج)", "AI (كشف + قرار، محتاج نموذج)"), cfg.mode.ordinal)
+        spMode = spinner(listOf("Monkey (حركة عشوائية للاختبار، من غير نموذج)", "AI (كشف + تكتيك، بيرجع Monkey لو مفيش نموذج)"), cfg.mode.ordinal)
         col.addView(spMode)
         spSkill = spinner(Skill.values().map { it.label }, cfg.skill.ordinal)
         col.addView(spSkill)
+        spStyle = spinner(Style.values().map { it.label }, cfg.style.ordinal)
+        col.addView(spStyle)
+        col.addView(note("الخطة: Balanced متوازن، Aggressive هجومي، Stealth تسلل وكمين، Survivor بيهرب من الخناقات البعيدة وبيعالج بدري."))
 
         col.addView(title("4) نموذج الكشف (TFLite)"))
         modelTv = TextView(this)
@@ -219,7 +237,7 @@ class MainActivity : Activity() {
         col.addView(etCap)
         etDelay = field("تأخير البداية بالثواني (5)", cfg.startDelaySec.toString(), true)
         col.addView(etDelay)
-        etMax = field("أقصى مدة تشغيل بالدقايق (30)", cfg.maxRunMinutes.toString(), true)
+        etMax = field("أقصى مدة تشغيل بالدقايق (0 = لحد ما أوقّفه)", cfg.maxRunMinutes.toString(), true)
         col.addView(etMax)
         etAim = field("حساسية التصويب (1.0)", cfg.aimScale.toString(), true)
         col.addView(etAim)
@@ -234,9 +252,48 @@ class MainActivity : Activity() {
         cbRecord.isChecked = cfg.recordFrames
         col.addView(cbRecord)
 
-        col.addView(title("7) الاختبار المكثف (Soak)"))
+        col.addView(title("7) التكتيك (محتاج نموذج كشف)"))
+        cbSneak = CheckBox(this)
+        cbSneak.text = "هجوم مباغت: يتسلل ويلف على العدو قبل ما يضرب"
+        cbSneak.setTextColor(Color.WHITE)
+        cbSneak.isChecked = cfg.tacticSneak
+        col.addView(cbSneak)
+        cbAmbush = CheckBox(this)
+        cbAmbush.text = "كمين: يثبت ويراقب لما يفقد عدو قريب"
+        cbAmbush.setTextColor(Color.WHITE)
+        cbAmbush.isChecked = cfg.tacticAmbush
+        col.addView(cbAmbush)
+        cbDodge = CheckBox(this)
+        cbDodge.text = "مراوغة: ينط ويتحرك جانبي لما يتضرب (بيقرا الحواف الحمرا)"
+        cbDodge.setTextColor(Color.WHITE)
+        cbDodge.isChecked = cfg.tacticDodge
+        col.addView(cbDodge)
+        cbJump = CheckBox(this)
+        cbJump.text = "قفز أثناء القتال"
+        cbJump.setTextColor(Color.WHITE)
+        cbJump.isChecked = cfg.tacticJump
+        col.addView(cbJump)
+        cbCrouch = CheckBox(this)
+        cbCrouch.text = "استخدم زرار الانحناء (لو لعبتك بتشتغل toggle) أثناء التسلل والكمين"
+        cbCrouch.setTextColor(Color.WHITE)
+        cbCrouch.isChecked = cfg.tacticCrouch
+        col.addView(cbCrouch)
+        etHitSens = field("حساسية كشف الضرب (25، قلّلها لو مابيحسش)", cfg.hitSensitivity.toString(), true)
+        col.addView(etHitSens)
+        cbHealth = CheckBox(this)
+        cbHealth.text = "اقرا شريط الصحة من الـ HUD (ينسحب ويعالج لما الصحة تقل)"
+        cbHealth.setTextColor(Color.WHITE)
+        cbHealth.isChecked = cfg.healthEnabled
+        col.addView(cbHealth)
+        etHealthColor = field("لون شريط الصحة RRGGBB (00FF00)", cfg.healthColor, false)
+        col.addView(etHealthColor)
+        etHealthTol = field("تسامح لون الصحة (50)", cfg.healthTol.toString(), true)
+        col.addView(etHealthTol)
+        col.addView(note("حدّد شريط الصحة بالعلامتين الخضرا hpTL/hpBR، وزرار العلاج heal، من 'تعديل أماكن الأزرار'. الصديق مقابل العدو: درّب كلاس ally في النموذج، والبوت مابيضربش لو صديق قدام التصويب."))
+
+        col.addView(title("8) الاختبار المكثف (Soak)"))
         cbAuto = CheckBox(this)
-        cbAuto.text = "ابدأ تلقائي بعد التأخير (من غير ما أضغط START)"
+        cbAuto.text = "ابدأ لوحده بعد التأخير (من غير ما أضغط START على الـ HUD)"
         cbAuto.setTextColor(Color.WHITE)
         cbAuto.isChecked = cfg.autoStart
         col.addView(cbAuto)
@@ -258,7 +315,7 @@ class MainActivity : Activity() {
         col.addView(etMacroDelay)
         col.addView(note("أماكن m1..m4 (برتقالي) بتتظبط من 'تعديل أماكن الأزرار': حطها على أزرار (متابعة / العب تاني / ابدأ ماتش)."))
 
-        col.addView(title("8) توجيه الزون من الخريطة المصغرة"))
+        col.addView(title("9) توجيه الزون من الخريطة المصغرة"))
         cbZone = CheckBox(this)
         cbZone.text = "فعّل توجيه الزون (لو برّه الدايرة يجري ناحية مركزها)"
         cbZone.setTextColor(Color.WHITE)
@@ -305,6 +362,7 @@ class MainActivity : Activity() {
         override fun run() {
             logTv.text = Logger.tail(40)
             statusTv.text = statusText()
+            wizardBtn.text = nextStep().text
             ui.postDelayed(this, 1000L)
         }
     }
@@ -342,7 +400,33 @@ class MainActivity : Activity() {
             "البوت: ${if (BotService.running) "شغّال" else "واقف"} (${BotService.status})"
     }
 
+    private class Step(val text: String, val act: () -> Unit)
+
+    /** One button that always does the next thing still missing (no external apps needed). */
+    private fun nextStep(): Step {
+        val shizukuOk = shizukuState().startsWith("✔")
+        val a11y = BotAccessibilityService.instance != null
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!shizukuOk && !a11y) {
+            return Step("الخطوة 1: فعّل خدمة GameBot Input (Accessibility) ←") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        }
+        if (!Settings.canDrawOverlays(this)) {
+            return Step("الخطوة 2: اسمح بالظهور فوق التطبيقات ←") { openOverlay() }
+        }
+        if (cfg.guardEnabled && !a11y && !hasUsage()) {
+            return Step("الخطوة 3: فعّل Usage access ←") { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+        }
+        if (cfg.gamePackage.isEmpty()) {
+            return Step("الخطوة 4: اختار لعبتك ←") { pickGame() }
+        }
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            return Step("الخطوة 5: استثناء توفير البطارية ←") { askBattery() }
+        }
+        return Step("✔ كله جاهز: افتح لعبتك واضغط هنا للتشغيل ▶") { startBot() }
+    }
+
     private fun refresh() {
+        wizardBtn.text = nextStep().text
         gameTv.text = if (cfg.gamePackage.isEmpty()) "اللعبة: لسه ما اتحددتش" else "اللعبة: ${cfg.gamePackage}"
         modelTv.text = if (cfg.modelFile.isEmpty()) "مفيش نموذج (وضع Monkey بس)" else "النموذج: ${File(cfg.modelFile).name}"
         statusTv.text = statusText()
@@ -361,7 +445,7 @@ class MainActivity : Activity() {
             cfg.targetFps = etFps.text.toString().trim().toIntOrNull()?.coerceIn(5, 60) ?: 30
             cfg.captureShortSide = etCap.text.toString().trim().toIntOrNull()?.coerceIn(160, 1080) ?: 480
             cfg.startDelaySec = etDelay.text.toString().trim().toIntOrNull()?.coerceIn(0, 60) ?: 5
-            cfg.maxRunMinutes = etMax.text.toString().trim().toIntOrNull()?.coerceIn(1, 600) ?: 30
+            cfg.maxRunMinutes = etMax.text.toString().trim().toIntOrNull()?.coerceIn(0, 1440) ?: 0
             cfg.aimScale = etAim.text.toString().trim().toFloatOrNull()?.coerceIn(0.1f, 3f) ?: 1f
             cfg.guardEnabled = cbGuard.isChecked
             cfg.recordFrames = cbRecord.isChecked
@@ -375,6 +459,16 @@ class MainActivity : Activity() {
             cfg.zoneColor = etZoneColor.text.toString().trim().removePrefix("#").ifEmpty { "FFFFFF" }
             cfg.zoneTol = etZoneTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 40
             cfg.zoneHeadingUp = cbHeading.isChecked
+            cfg.style = Style.values()[spStyle.selectedItemPosition.coerceIn(0, Style.values().size - 1)]
+            cfg.tacticSneak = cbSneak.isChecked
+            cfg.tacticAmbush = cbAmbush.isChecked
+            cfg.tacticDodge = cbDodge.isChecked
+            cfg.tacticJump = cbJump.isChecked
+            cfg.tacticCrouch = cbCrouch.isChecked
+            cfg.hitSensitivity = etHitSens.text.toString().trim().toIntOrNull()?.coerceIn(5, 120) ?: 25
+            cfg.healthEnabled = cbHealth.isChecked
+            cfg.healthColor = etHealthColor.text.toString().trim().removePrefix("#").ifEmpty { "00FF00" }
+            cfg.healthTol = etHealthTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 50
         } catch (t: Throwable) {
             Logger.i("collect failed: ${t.message}")
         }

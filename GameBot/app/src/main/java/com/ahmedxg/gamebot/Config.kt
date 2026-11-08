@@ -8,25 +8,6 @@ import java.io.File
 enum class Mode { MONKEY, AI }
 enum class Backend { AUTO, SHIZUKU, ACCESSIBILITY }
 
-/** Difficulty profile of the bot (QA bots usually need several levels). */
-enum class Skill(
-    val label: String,
-    val reactionMs: Int,
-    val aimGain: Float,
-    val burstOnMs: Int,
-    val burstOffMs: Int,
-    val strafe: Boolean
-) {
-    EASY("Easy", 450, 0.30f, 120, 600, false),
-    NORMAL("Normal", 250, 0.50f, 160, 350, true),
-    PRO("Pro", 120, 0.70f, 220, 180, true),
-    MAX("Max", 0, 0.92f, 450, 80, true);
-
-    companion object {
-        fun from(name: String?): Skill = values().firstOrNull { it.name == name } ?: NORMAL
-    }
-}
-
 /** Positions of the game's on-screen controls, normalized 0..1 of the display. */
 class ControlLayout {
     val points = LinkedHashMap<String, FloatArray>()
@@ -51,6 +32,10 @@ class ControlLayout {
         points["m2"] = floatArrayOf(0.50f, 0.68f)
         points["m3"] = floatArrayOf(0.80f, 0.88f)
         points["m4"] = floatArrayOf(0.50f, 0.50f)
+        points["heal"] = floatArrayOf(0.62f, 0.88f)
+        // HUD health bar rectangle corners
+        points["hpTL"] = floatArrayOf(0.30f, 0.93f)
+        points["hpBR"] = floatArrayOf(0.50f, 0.96f)
         // minimap rectangle corners (for zone navigation)
         points["mapTL"] = floatArrayOf(0.03f, 0.05f)
         points["mapBR"] = floatArrayOf(0.17f, 0.32f)
@@ -84,7 +69,7 @@ class ControlLayout {
 
 class Config {
     var gamePackage = ""
-    var mode = Mode.MONKEY
+    var mode = Mode.AI
     var skill = Skill.NORMAL
     var backend = Backend.AUTO
     var modelFile = ""
@@ -97,14 +82,14 @@ class Config {
     var targetFps = 30
     var captureShortSide = 480
     var guardEnabled = true
-    var maxRunMinutes = 30
+    var maxRunMinutes = 0          // 0 = play until you press STOP
     var startDelaySec = 5
     var recordFrames = false
     var recordEveryMs = 500
     var aimScale = 1.0f
     var crossX = 0.5f
     var crossY = 0.5f
-    var autoStart = false          // false: wait for the START button on the HUD
+    var autoStart = true           // true: starts by itself after the countdown; false: wait for START on the HUD
     var soakEnabled = true         // supervisor: frozen-screen detection + restart macro
     var relaunchOnExit = true      // re-open the game if it closed / crashed
     var frozenSeconds = 15
@@ -114,6 +99,16 @@ class Config {
     var zoneColor = "FFFFFF"       // RRGGBB of the safe-zone ring on the minimap
     var zoneTol = 40               // max per-channel color difference
     var zoneHeadingUp = true       // minimap rotates with the player (player icon at the center, facing up)
+    var tacticSneak = true         // stalk / flank an enemy before striking
+    var tacticAmbush = true        // hold the angle for a moment after losing an enemy at close range
+    var tacticDodge = true         // evasive strafe + jump when taking damage
+    var tacticJump = true          // jump-peeks while strafing
+    var tacticCrouch = false       // use the crouch button (toggle style) while stalking / ambushing
+    var style = Style.BALANCED     // match plan: balanced / aggressive / stealth / survivor
+    var healthEnabled = false      // read the HUD health bar (retreat / heal when low)
+    var healthColor = "00FF00"     // RRGGBB of the health bar fill
+    var healthTol = 50
+    var hitSensitivity = 25        // red-edge flash threshold used to detect "I got hit"
     val layout = ControlLayout()
 
     fun labelList(): List<String> {
@@ -160,13 +155,23 @@ class Config {
         o.put("zoneColor", zoneColor)
         o.put("zoneTol", zoneTol)
         o.put("zoneHeadingUp", zoneHeadingUp)
+        o.put("tacticSneak", tacticSneak)
+        o.put("tacticAmbush", tacticAmbush)
+        o.put("tacticDodge", tacticDodge)
+        o.put("tacticJump", tacticJump)
+        o.put("tacticCrouch", tacticCrouch)
+        o.put("style", style.name)
+        o.put("healthEnabled", healthEnabled)
+        o.put("healthColor", healthColor)
+        o.put("healthTol", healthTol)
+        o.put("hitSensitivity", hitSensitivity)
         o.put("layout", layout.toJson())
         return o
     }
 
     fun fromJson(o: JSONObject) {
         gamePackage = o.optString("gamePackage", gamePackage)
-        mode = try { Mode.valueOf(o.optString("mode", mode.name)) } catch (e: Exception) { Mode.MONKEY }
+        mode = try { Mode.valueOf(o.optString("mode", mode.name)) } catch (e: Exception) { Mode.AI }
         skill = Skill.from(o.optString("skill", skill.name))
         backend = try { Backend.valueOf(o.optString("backend", backend.name)) } catch (e: Exception) { Backend.AUTO }
         modelFile = o.optString("modelFile", modelFile)
@@ -196,6 +201,16 @@ class Config {
         zoneColor = o.optString("zoneColor", zoneColor)
         zoneTol = o.optInt("zoneTol", zoneTol)
         zoneHeadingUp = o.optBoolean("zoneHeadingUp", zoneHeadingUp)
+        tacticSneak = o.optBoolean("tacticSneak", tacticSneak)
+        tacticAmbush = o.optBoolean("tacticAmbush", tacticAmbush)
+        tacticDodge = o.optBoolean("tacticDodge", tacticDodge)
+        tacticJump = o.optBoolean("tacticJump", tacticJump)
+        tacticCrouch = o.optBoolean("tacticCrouch", tacticCrouch)
+        style = Style.from(o.optString("style", style.name))
+        healthEnabled = o.optBoolean("healthEnabled", healthEnabled)
+        healthColor = o.optString("healthColor", healthColor)
+        healthTol = o.optInt("healthTol", healthTol)
+        hitSensitivity = o.optInt("hitSensitivity", hitSensitivity)
         layout.load(o.optJSONObject("layout"))
     }
 
