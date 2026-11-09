@@ -1,2 +1,13 @@
 === TacticAI APK facts (2026-11-09T05:12:23Z) ===
 apk:  ( bytes)
+=== TacticAI APK facts (2026-11-09T23:13:57Z) ===
+apk: TacticAI/app/build/outputs/apk/release/app-release.apk (53744672 bytes)
+package: name='com.tacticai.bot' versionCode='1' versionName='0.1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+targetSdkVersion:'34'
+uses-permission: name='android.permission.SYSTEM_ALERT_WINDOW'
+uses-permission: name='android.permission.FOREGROUND_SERVICE'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.WAKE_LOCK'
+uses-permission: name='com.tacticai.bot.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+uses-permission: name='android.permission.INTERNET'
