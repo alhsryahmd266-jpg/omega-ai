@@ -111,8 +111,17 @@ class OverlayService : Service() {
             Toast.makeText(this, "فعّل خدمة الوصول الأول من الإعدادات", Toast.LENGTH_LONG).show()
             return
         }
-        val nowRunning = !(StatusBus.state.value.running)
-        if (nowRunning) svc.startEngine() else svc.stopEngine()
+        val wantRunning = !(StatusBus.state.value.running)
+        var nowRunning = wantRunning
+        if (wantRunning) {
+            val refused = svc.startEngine()
+            if (refused != null) {
+                Toast.makeText(this, refused, Toast.LENGTH_LONG).show()
+                nowRunning = false
+            }
+        } else {
+            svc.stopEngine()
+        }
         bubble?.setImageResource(if (nowRunning) R.drawable.overlay_button_on else R.drawable.overlay_button_off)
         updateNotification(nowRunning)
     }
