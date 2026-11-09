@@ -1,6 +1,7 @@
 
 # GameVision (native Android, no gradlew committed)
-GameVision/.gradle/
-GameVision/app/build/
-GameVision/build/
-GameVision/local.properties
+TacticAI/.gradle/
+TacticAI/app/build/
+TacticAI/build/
+TacticAI/local.properties
+TacticAI/app/src/main/assets/*.tflite
