@@ -18,8 +18,15 @@ class CaptureAccessibilityService : AccessibilityService() {
         StatusBus.setServiceConnected(true)
     }
 
+    /** Package name only (never window content) — just enough for the [Safety] blocklist check. */
+    var foregroundPackage: String? = null
+        private set
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Intentionally empty: this service never inspects other apps' UI events or content.
+        // Only the event's own package-name field is read here — window content stays untouched
+        // (canRetrieveWindowContent is false in the service config).
+        event?.packageName?.let { foregroundPackage = it.toString() }
+        if (Safety.isBlocked(foregroundPackage)) stopEngine()
     }
 
     override fun onInterrupt() { /* no-op */ }
@@ -31,10 +38,13 @@ class CaptureAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    fun startEngine(strategy: com.tacticai.bot.act.Strategy = com.tacticai.bot.act.NoopStrategy()) {
-        if (engine?.isRunning == true) return
+    /** Null on success; the reason string if refused ([Safety] blocklist or already running). */
+    fun startEngine(strategy: com.tacticai.bot.act.Strategy = com.tacticai.bot.act.NoopStrategy()): String? {
+        if (Safety.isBlocked(foregroundPackage)) return Safety.reason(foregroundPackage)
+        if (engine?.isRunning == true) return null
         engine = BotEngine(this, strategy) { info -> StatusBus.postTick(info) }.also { it.start() }
         StatusBus.setRunning(true)
+        return null
     }
 
     fun stopEngine() {

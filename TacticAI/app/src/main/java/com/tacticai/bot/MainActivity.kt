@@ -1,6 +1,6 @@
 package com.tacticai.bot
 
-import android.content.ColorStateList
+import android.content.res.ColorStateList
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri

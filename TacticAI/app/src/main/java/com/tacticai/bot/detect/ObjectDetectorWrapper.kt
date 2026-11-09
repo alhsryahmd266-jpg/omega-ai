@@ -30,7 +30,7 @@ class ObjectDetectorWrapper private constructor(private val detector: ObjectDete
             val top = d.categories().maxByOrNull { it.score() } ?: return@mapNotNull null
             val bb = d.boundingBox()
             WorldDetection(
-                box = Rect(bb.left, bb.top, bb.right, bb.bottom),
+                box = Rect(bb.left.toInt(), bb.top.toInt(), bb.right.toInt(), bb.bottom.toInt()),
                 label = top.categoryName() ?: "object",
                 score = top.score(),
             )
