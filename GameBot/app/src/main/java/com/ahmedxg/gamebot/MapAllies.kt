@@ -25,12 +25,17 @@ class AllyMapReader(private val cfg: Config) {
         if (rw < 24 || rh < 24 || x0 + rw > bmp.width || y0 + rh > bmp.height) return MapMarks(emptyList(), emptyList())
         if (buf.size < rw * rh) buf = IntArray(rw * rh)
         bmp.getPixels(buf, 0, rw, x0, y0, rw, rh)
-        val allies = if (cfg.allyMapEnabled) detect(rw, rh, cfg.allyColor, cfg.allyTol, Color.CYAN) else emptyList()
-        val enemies = if (cfg.enemyMapEnabled) detect(rw, rh, cfg.enemyMapColor, cfg.enemyMapTol, Color.RED) else emptyList()
+        val allies = ArrayList<MapMark>()
+        if (cfg.allyMapEnabled) {
+            allies.addAll(detect(rw, rh, cfg.allyColor, cfg.allyTol, Color.GREEN, 12))
+            if (cfg.allyColor2.isNotBlank()) allies.addAll(detect(rw, rh, cfg.allyColor2, cfg.allyTol, Color.CYAN, 12))
+        }
+        // enemies: small red dots, or a big red glow while a fight is going on (bigger blobs allowed)
+        val enemies = if (cfg.enemyMapEnabled) detect(rw, rh, cfg.enemyMapColor, cfg.enemyMapTol, Color.RED, 4) else emptyList()
         return MapMarks(allies, enemies)
     }
 
-    private fun detect(rw: Int, rh: Int, hex: String, tolIn: Int, fallback: Int): List<MapMark> {
+    private fun detect(rw: Int, rh: Int, hex: String, tolIn: Int, fallback: Int, maxDiv: Int): List<MapMark> {
         val tc = try {
             Color.parseColor("#" + hex.trim().removePrefix("#"))
         } catch (e: Exception) {
@@ -46,7 +51,7 @@ class AllyMapReader(private val cfg: Config) {
             mask[i] = abs(((p shr 16) and 255) - tr) <= tol && abs(((p shr 8) and 255) - tg) <= tol && abs((p and 255) - tb) <= tol
         }
         val minArea = max(6, rw * rh / 2500)
-        val maxArea = rw * rh / 12
+        val maxArea = rw * rh / maxDiv
         return MapMath.marks(MapMath.blobs(mask, rw, rh, minArea, maxArea), rw, rh)
     }
 }

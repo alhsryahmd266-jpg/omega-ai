@@ -126,7 +126,7 @@ object LayoutDetect {
     fun assign(all: List<Circle>): Map<String, FloatArray> {
         val out = LinkedHashMap<String, FloatArray>()
         val circles = all.filter { it.r >= 0.055f }
-        val left = circles.filter { it.cx < 0.42f && it.cy > 0.40f }.sortedByDescending { it.r }
+        val left = circles.filter { it.cx < 0.40f && it.cy > 0.55f }.sortedByDescending { it.r }
         if (left.isNotEmpty()) out["stick"] = floatArrayOf(left[0].cx, left[0].cy, left[0].r)
         val right = circles.filter { it.cx > 0.58f && it.cy > 0.20f && it.cy < 0.92f }.sortedByDescending { it.r }
         if (right.isNotEmpty()) {

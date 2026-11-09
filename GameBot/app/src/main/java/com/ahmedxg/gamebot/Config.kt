@@ -20,12 +20,12 @@ class ControlLayout {
 
     fun reset() {
         points.clear()
-        points["stick"] = floatArrayOf(0.16f, 0.72f)
+        points["stick"] = floatArrayOf(0.16f, 0.70f)
         points["look"] = floatArrayOf(0.72f, 0.50f)
-        points["fire"] = floatArrayOf(0.86f, 0.70f)
-        points["jump"] = floatArrayOf(0.93f, 0.80f)
-        points["crouch"] = floatArrayOf(0.82f, 0.86f)
-        points["reload"] = floatArrayOf(0.70f, 0.84f)
+        points["fire"] = floatArrayOf(0.868f, 0.677f)
+        points["jump"] = floatArrayOf(0.903f, 0.87f)
+        points["crouch"] = floatArrayOf(0.97f, 0.672f)
+        points["reload"] = floatArrayOf(0.971f, 0.835f)
         points["ads"] = floatArrayOf(0.94f, 0.42f)
         // menu / "play again" taps used by the soak-test macro
         points["m1"] = floatArrayOf(0.50f, 0.82f)
@@ -34,11 +34,11 @@ class ControlLayout {
         points["m4"] = floatArrayOf(0.50f, 0.50f)
         points["heal"] = floatArrayOf(0.62f, 0.88f)
         // HUD health bar rectangle corners
-        points["hpTL"] = floatArrayOf(0.30f, 0.93f)
-        points["hpBR"] = floatArrayOf(0.50f, 0.96f)
+        points["hpTL"] = floatArrayOf(0.40f, 0.885f)
+        points["hpBR"] = floatArrayOf(0.65f, 0.905f)
         // minimap rectangle corners (for zone navigation)
-        points["mapTL"] = floatArrayOf(0.845f, 0.012f)
-        points["mapBR"] = floatArrayOf(0.995f, 0.27f)
+        points["mapTL"] = floatArrayOf(0.853f, 0.025f)
+        points["mapBR"] = floatArrayOf(0.998f, 0.258f)
         stickRadius = 0.10f
         lookRadius = 0.14f
     }
@@ -111,9 +111,10 @@ class Config {
     var allyMapEnabled = false     // read teammate markers from the minimap (numbered circles or green dots)
     var enemyMapEnabled = false    // read red enemy dots from the minimap
     var enemyMapColor = "FF2D2D"
-    var enemyMapTol = 55
-    var allyColor = "00A2FF"       // RRGGBB of the teammate markers
-    var allyTol = 45
+    var enemyMapTol = 60
+    var allyColor = "00FF00"       // RRGGBB of the teammate markers (green dots)
+    var allyColor2 = ""            // optional 2nd color: background of the numbered teammate badges
+    var allyTol = 70
     var squadFollow = false
     var fovDeg = 80
     var autoCalibrate = true       // find the stick / fire buttons by itself (needs the camera to move)
@@ -180,6 +181,7 @@ class Config {
         o.put("enemyMapColor", enemyMapColor)
         o.put("enemyMapTol", enemyMapTol)
         o.put("allyColor", allyColor)
+        o.put("allyColor2", allyColor2)
         o.put("allyTol", allyTol)
         o.put("squadFollow", squadFollow)
         o.put("fovDeg", fovDeg)
@@ -237,6 +239,7 @@ class Config {
         enemyMapColor = o.optString("enemyMapColor", enemyMapColor)
         enemyMapTol = o.optInt("enemyMapTol", enemyMapTol)
         allyColor = o.optString("allyColor", allyColor)
+        allyColor2 = o.optString("allyColor2", allyColor2)
         allyTol = o.optInt("allyTol", allyTol)
         squadFollow = o.optBoolean("squadFollow", squadFollow)
         fovDeg = o.optInt("fovDeg", fovDeg)

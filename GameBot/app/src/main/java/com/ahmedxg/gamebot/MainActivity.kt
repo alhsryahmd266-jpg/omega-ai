@@ -65,6 +65,7 @@ class MainActivity : Activity() {
     private lateinit var cbAllyMap: CheckBox
     private lateinit var etAllyColor: EditText
     private lateinit var etAllyTol: EditText
+    private lateinit var etAllyColor2: EditText
     private lateinit var cbEnemyMap: CheckBox
     private lateinit var etEnemyColor: EditText
     private lateinit var etEnemyTol: EditText
@@ -354,22 +355,24 @@ class MainActivity : Activity() {
         cbCalibEvery.isChecked = cfg.calibrateEveryRun
         col.addView(cbCalibEvery)
         cbAllyMap = CheckBox(this)
-        cbAllyMap.text = "الأصدقاء من الخريطة (دواير مرقمة أو نقط خضرا)"
+        cbAllyMap.text = "الأصدقاء من الخريطة (نقط خضرا، أو دواير مرقمة بلون خلفيتها)"
         cbAllyMap.setTextColor(Color.WHITE)
         cbAllyMap.isChecked = cfg.allyMapEnabled
         col.addView(cbAllyMap)
-        etAllyColor = field("لون علامة الصديق RRGGBB (00A2FF)", cfg.allyColor, false)
+        etAllyColor = field("لون النقطة الخضرا للصديق RRGGBB (00FF00)", cfg.allyColor, false)
         col.addView(etAllyColor)
-        etAllyTol = field("تسامح لون الصديق (45)", cfg.allyTol.toString(), true)
+        etAllyColor2 = field("لون خلفية العلامة المرقمة (اختياري) RRGGBB", cfg.allyColor2, false)
+        col.addView(etAllyColor2)
+        etAllyTol = field("تسامح لون الصديق (70)", cfg.allyTol.toString(), true)
         col.addView(etAllyTol)
         cbEnemyMap = CheckBox(this)
-        cbEnemyMap.text = "الأعداء من الخريطة (نقط حمرا)"
+        cbEnemyMap.text = "الأعداء من الخريطة (نقط حمرا، أو توهج أحمر وقت الاشتباك)"
         cbEnemyMap.setTextColor(Color.WHITE)
         cbEnemyMap.isChecked = cfg.enemyMapEnabled
         col.addView(cbEnemyMap)
         etEnemyColor = field("لون نقطة العدو RRGGBB (FF2D2D)", cfg.enemyMapColor, false)
         col.addView(etEnemyColor)
-        etEnemyTol = field("تسامح لون العدو (55)", cfg.enemyMapTol.toString(), true)
+        etEnemyTol = field("تسامح لون العدو (60)", cfg.enemyMapTol.toString(), true)
         col.addView(etEnemyTol)
         cbSquad = CheckBox(this)
         cbSquad.text = "ارجع للفريق لو بعيد ومفيش عدو قدامه"
@@ -559,11 +562,12 @@ class MainActivity : Activity() {
             cfg.autoCalibrate = cbCalib.isChecked
             cfg.calibrateEveryRun = cbCalibEvery.isChecked
             cfg.allyMapEnabled = cbAllyMap.isChecked
-            cfg.allyColor = etAllyColor.text.toString().trim().removePrefix("#").ifEmpty { "00A2FF" }
-            cfg.allyTol = etAllyTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 45
+            cfg.allyColor = etAllyColor.text.toString().trim().removePrefix("#").ifEmpty { "00FF00" }
+            cfg.allyColor2 = etAllyColor2.text.toString().trim().removePrefix("#")
+            cfg.allyTol = etAllyTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 70
             cfg.enemyMapEnabled = cbEnemyMap.isChecked
             cfg.enemyMapColor = etEnemyColor.text.toString().trim().removePrefix("#").ifEmpty { "FF2D2D" }
-            cfg.enemyMapTol = etEnemyTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 55
+            cfg.enemyMapTol = etEnemyTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 60
             cfg.squadFollow = cbSquad.isChecked
             cfg.fovDeg = etFov.text.toString().trim().toIntOrNull()?.coerceIn(30, 150) ?: 80
         } catch (t: Throwable) {
