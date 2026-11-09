@@ -29,6 +29,19 @@ object SendFinder {
 
     private fun norm(s: String) = s.lowercase()
 
+    /**
+     * How much one node looks like a "send" button by its view id and label alone (0 = not at all, 80..170 = it does).
+     * Position is not considered here: used where there is no text box to measure against (a picture preview).
+     */
+    fun nodeScore(n: UiNode): Int {
+        val label = norm(n.label)
+        val id = n.shortId
+        if (NEGATIVE.any { label.contains(it) } || NEGATIVE_IDS.any { id.contains(it) }) return 0
+        val idHit = id.contains("send") && !id.contains("sending")
+        val labelHit = SEND_WORDS.any { label == it || label.startsWith(it) || label.contains(" $it") || label.contains("$it ") || (it.length > 3 && label.contains(it)) }
+        return (if (idHit) 90 else 0) + (if (labelHit) 80 else 0)
+    }
+
     /** what a button is, not where it is (the composer may grow a line and push everything up) */
     private fun sig(n: UiNode): String =
         if (n.label.isBlank() && n.shortId.isBlank()) "pos:${n.cls}:${n.centerX / 12},${n.centerY / 12}"

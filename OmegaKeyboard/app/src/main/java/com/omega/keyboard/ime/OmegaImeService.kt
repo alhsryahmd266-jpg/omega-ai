@@ -39,10 +39,12 @@ import com.omega.keyboard.Bg
 import com.omega.keyboard.Prefs
 import com.omega.keyboard.agent.AutoPilot
 import com.omega.keyboard.agent.Notice
+import com.omega.keyboard.agent.PreviewSend
 import com.omega.keyboard.agent.ScreenTranslateController
 import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.ai.Translator
 import com.omega.keyboard.core.ArabicText
+import com.omega.keyboard.core.ColorCodes
 import com.omega.keyboard.core.ColorMath
 import com.omega.keyboard.core.Dictionary
 import com.omega.keyboard.core.Key
@@ -169,12 +171,27 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0) return
         val r = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
+                if (i.action == "com.omega.keyboard.DEBUG_PIC") {
+                    // draws the coloured picture (text arrives base64-encoded: adb mangles non-ASCII arguments)
+                    try {
+                        val text = String(android.util.Base64.decode(i.getStringExtra("b64") ?: "", android.util.Base64.DEFAULT), Charsets.UTF_8).ifBlank { "hello" }
+                        val color = i.getIntExtra("color", 0xFF2979FF.toInt())
+                        val rainbow = i.getBooleanExtra("rainbow", false)
+                        val f = if (i.getStringExtra("style") == "neon") NeonRenderer.renderToFile(c, text, color, rainbow)
+                        else ColorPicRenderer.renderToFile(c, text, color, rainbow, i.getBooleanExtra("marker", false))
+                        android.util.Log.d("OmegaPic", "file=${f.name}")
+                    } catch (t: Throwable) {
+                        android.util.Log.e("OmegaPic", "failed", t)
+                    }
+                    return
+                }
                 kbd?.dumpKeys()
                 strip?.dumpHits()
                 appearance?.let { if (it.parent != null) it.dumpTabs() }
             }
         }
         val f = IntentFilter("com.omega.keyboard.DEBUG_DUMP")
+        f.addAction("com.omega.keyboard.DEBUG_PIC")
         try {
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED) else registerReceiver(r, f)
             debugDump = r
@@ -260,6 +277,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         applyLayout()
         updateAutoShift()
         refreshSuggestions()
+        if (pendingDictation != null) main.postDelayed({ flushPendingDictation() }, 250)
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -420,7 +438,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     // ------------------------------------------------------------------ appearance sheet
 
     private val sheetHost = object : AppearanceSheet.Host {
-        override fun onLook() { applyTheme(); applyViewPrefs() }
+        override fun onLook() { applyTheme(); applyViewPrefs(); refreshStrip() }
         override fun onSize() { applyViewPrefs() }
         override fun onClose() { hideAppearance() }
         override fun onDragResize() { startResize() }
@@ -744,6 +762,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             translateField(thenEnter = true)
             return
         }
+        if (colourEnter()) { sendColoured(fromEnter = true); return }
         performEnter()
     }
 
@@ -947,8 +966,9 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     // ------------------------------------------------------------------ strip
 
     /** Same slots as Gboard's tool row (mic, themes, translate, settings, GIF, stickers, more), filled with our own tools. */
-    private fun buildTools(): List<StripView.Tool> = listOf(
+    private fun buildTools(): List<StripView.Tool> = listOfNotNull(
         StripView.Tool("voice", "mic", "صوت", voiceActive),
+        if (colourActive() && !plain && !numeric) StripView.Tool("csend", "send", "ملوّن") else null,
         StripView.Tool("screen", "g_translate", "الشاشة", ScreenTranslateController.active),   // translates the whole screen
         StripView.Tool("theme", "palette", "المظهر", appearanceOpen()),
         StripView.Tool("resize", "open_in_full", "الحجم", resizing),
@@ -963,6 +983,9 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         st.tools = buildTools()
         st.canUndo = translateBar && lastReplacement != null
         st.targetName = Languages.arabicName(prefs.typedTarget)
+        st.swatch = if (prefs.textColor == 0) 0xFF2979FF.toInt() else prefs.textColor
+        st.swatchRainbow = prefs.textRainbow
+        st.colourSend = colourActive() && !plain && !numeric
 
         fun status(icon: String, text: String, warn: Boolean, label: String, id: String, calm: Boolean = false) {
             st.statusIcon = icon
@@ -1017,6 +1040,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     override fun onMic() { startVoice() }
 
+    override fun onColourSend() { sendColoured() }
+
     override fun onTool(id: String) {
         if (resizing && id != "resize") stopResize()
         when (id) {
@@ -1028,7 +1053,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             "ai" -> showAi()
             "clip" -> showClipboard()
             "theme" -> showAppearance()
-            "neon" -> sendNeon()
+            "csend" -> sendColoured()
             "settings" -> try {
                 startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Throwable) {
@@ -1036,20 +1061,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         }
     }
 
-    // ------------------------------------------------------------------ neon picture
+    // ------------------------------------------------------------------ coloured send
 
     private inline fun <T> safely(block: () -> T?): T? = try { block() } catch (_: Throwable) { null }
 
-    /** what the field holds: the selection when there is one, otherwise everything that is written */
-    private fun fieldText(ic: InputConnection): String {
-        val sel = safely { ic.getSelectedText(0)?.toString() }
-        if (!sel.isNullOrBlank()) return sel
-        val all = safely { ic.getExtractedText(ExtractedTextRequest(), 0)?.text?.toString() }
-        if (!all.isNullOrBlank()) return all
-        val before = safely { ic.getTextBeforeCursor(1500, 0)?.toString() } ?: ""
-        val after = safely { ic.getTextAfterCursor(1500, 0)?.toString() } ?: ""
-        return before + after
-    }
+    /** a text colour (or the rainbow) is chosen, so what is typed is coloured */
+    private fun colourActive(): Boolean = prefs.textColor != 0 || prefs.textRainbow
 
     /** the picture types the field says it can take (empty: it takes none) */
     private fun acceptedImageTypes(ei: EditorInfo?): Array<String> {
@@ -1062,50 +1079,117 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         }
     }
 
-    /** Draws what is written in the field as a glowing neon sign and sends it as a picture. */
-    private fun sendNeon() {
+    private fun takesPictures(): Boolean =
+        Build.VERSION.SDK_INT >= 25 && acceptedImageTypes(editor).any { ClipDescription.compareMimeTypes("image/png", it) }
+
+    private fun codeFormat(): ColorCodes.Format = ColorCodes.Format.of(prefs.colorCodes)
+
+    /** colour of the n-th letter exactly as typing uses it */
+    private fun letterColour(n: Int): Int = if (prefs.textRainbow) ColorMath.rainbow(n) else prefs.textColor
+
+    /**
+     * The Enter key of a chat box ("send" action) sends the coloured version while a colour is chosen, if there is a way for the
+     * colour to arrive (a box that takes pictures, or a game colour-code format the user picked).
+     */
+    private fun colourEnter(): Boolean {
+        if (!prefs.colourOnSend || !colourActive() || plain || numeric) return false
+        val o = editor?.imeOptions ?: 0
+        if ((o and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0) return false
+        if ((o and EditorInfo.IME_MASK_ACTION) != EditorInfo.IME_ACTION_SEND) return false
+        if (!takesPictures() && codeFormat() == ColorCodes.Format.NONE) return false
+        val ic = currentInputConnection ?: return false
+        return readField(ic).first.isNotBlank()
+    }
+
+    /**
+     * Sends what is written in the field so that its colour arrives: as a picture where the box takes pictures (WhatsApp,
+     * Telegram, Messenger ...), as the game's colour codes where it does not and the user picked a format, otherwise through the
+     * share sheet. Plain text cannot carry colour, so these are the only ways.
+     */
+    fun sendColoured(fromEnter: Boolean = false) {
         val ic = currentInputConnection
         if (ic == null) { flash("اضغط على خانة الكتابة الأول", true); return }
-        if (plain) { flash("مش هعمل صورة من خانة سرية", true); return }
-        val text = fieldText(ic).trim()
-        if (text.isEmpty()) { flash("اكتب الكلام الأول وبعدين دوس \"نيون\"", true); return }
+        if (plain || numeric) { flash("الخانة دي مش للنص الملون", true); return }
+        if (!colourActive()) { flash("اختار لون الكتابة الأول من \"المظهر\"", true); return }
+        val (raw, wasSelection) = readField(ic)
+        val text = raw.trim()
+        if (text.isEmpty()) { flash("اكتب الكلام الأول وبعدين دوس زرار اللون", true); return }
+        val fmt = codeFormat()
+        if (!takesPictures() && fmt != ColorCodes.Format.NONE) { sendWithCodes(text, wasSelection, fmt); return }
+        sendAsPicture(text, wasSelection)
+    }
+
+    /** the text becomes a game colour code message ("[FF0000]hello") and is sent */
+    private fun sendWithCodes(text: String, wasSelection: Boolean, fmt: ColorCodes.Format) {
+        val ic = currentInputConnection ?: return
+        val coded = ColorCodes.wrap(text, fmt) { n -> letterColour(n) }
+        if (wasSelection) ic.commitText(coded, 1) else replaceNow(coded)
+        undoCorrection = null
+        spaceAfterSuggestion = false
+        if (prefs.picAutoSend) { performEnter(); flash("اتبعتت بكود الألوان (${fmt.label.substringBefore("  ")})") }
+        else flash("الكود اتكتب. دوس إرسال")
+    }
+
+    private fun sendAsPicture(text: String, wasSelection: Boolean) {
         val color = prefs.textColor
         val rainbow = prefs.textRainbow
+        val marker = prefs.textHighlight
+        val neon = prefs.picStyle == "neon"
         val app = applicationContext
-        flash("بجهّز صورة النيون...")
+        val target = editor?.packageName
+        val gen = fieldGen
+        flash("بجهّز الصورة الملونة...")
         Bg.io {
             val file = try {
-                NeonRenderer.renderToFile(app, text, color, rainbow)
+                if (neon) NeonRenderer.renderToFile(app, text, color, rainbow) else ColorPicRenderer.renderToFile(app, text, color, rainbow, marker)
             } catch (t: Throwable) {
-                AppLog.e("neon", "could not draw the picture", t)
+                AppLog.e("colourpic", "could not draw the picture", t)
                 null
             }
-            Bg.ui { if (file == null) flash("معرفتش أعمل الصورة", true) else deliverNeon(file) }
+            Bg.ui {
+                when {
+                    file == null -> flash("معرفتش أعمل الصورة", true)
+                    gen != fieldGen -> {}                       // the user went to another box meanwhile
+                    else -> deliverPicture(file, text, wasSelection, target)
+                }
+            }
         }
     }
 
-    private fun deliverNeon(file: File) {
+    private fun deliverPicture(file: File, text: String, wasSelection: Boolean, targetPkg: String?) {
         val uri = NeonProvider.uriFor(this, file)
         val ic = currentInputConnection
-        val accepted = acceptedImageTypes(editor).any { ClipDescription.compareMimeTypes("image/png", it) }
-        if (Build.VERSION.SDK_INT >= 25 && ic != null && accepted) {
+        if (Build.VERSION.SDK_INT >= 25 && ic != null && takesPictures()) {
+            // the text is becoming the picture: take it out of the box first (some apps copy the box into the picture's caption)
+            if (wasSelection) ic.commitText("", 1) else replaceNow("")
             val ok = try {
-                val info = InputContentInfo(uri, ClipDescription("neon", arrayOf("image/png")), null)
+                val info = InputContentInfo(uri, ClipDescription("colour", arrayOf("image/png")), null)
                 ic.commitContent(info, InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null)
             } catch (t: Throwable) {
-                AppLog.e("neon", "the field refused the picture", t)
+                AppLog.e("colourpic", "the field refused the picture", t)
                 false
             }
-            if (ok) { flash("اتحطّت صورة النيون ✓"); return }
+            if (ok) {
+                if (prefs.picAutoSend && PreviewSend.canPress()) {
+                    flash("اتحوّلت لصورة ملونة وبتتبعت ✓")
+                    PreviewSend.start(this, targetPkg)
+                } else {
+                    flash("الصورة جاهزة. دوس إرسال في المعاينة")
+                }
+                return
+            }
+            // refused after all: the words go back into the box
+            currentInputConnection?.commitText(styled(text), 1)
         }
-        // the field takes no pictures: the share sheet lets the user pick the chat
+        // the box takes no pictures: the share sheet lets the user pick the chat
         try {
             val send = Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            send.clipData = ClipData.newRawUri("neon", uri)
-            startActivity(Intent.createChooser(send, "ابعت صورة النيون").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            send.clipData = ClipData.newRawUri("colour", uri)
+            startActivity(Intent.createChooser(send, "ابعت الصورة الملونة").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            flash("التطبيق ده مبيقبلش صور مباشرة. اختار المحادثة من القايمة", true)
         } catch (t: Throwable) {
-            AppLog.e("neon", "could not open the share sheet", t)
+            AppLog.e("colourpic", "could not open the share sheet", t)
             flash("مقدرتش أفتح المشاركة", true)
         }
     }
@@ -1146,15 +1230,35 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (!active && text.isNotBlank()) flash(text, warn) else refreshStrip()
     }
 
+    /** words that were heard while the field was not attached (the system's voice dialog had the screen): typed as soon as it is back */
+    private var pendingDictation: String? = null
+    private var pendingAt = 0L
+
     override fun onDictation(text: String) {
         voiceActive = false
         voiceText = ""
         val ic = currentInputConnection
-        if (ic == null) { refreshStrip(); return }
-        ic.commitText(styled("$text "), 1)
+        if (ic == null || !typeDictation(ic, text)) {
+            pendingDictation = text
+            pendingAt = SystemClock.uptimeMillis()
+            refreshStrip()
+        }
+    }
+
+    private fun typeDictation(ic: InputConnection, text: String): Boolean {
+        val ok = try { ic.commitText(styled("$text "), 1) } catch (_: Throwable) { false }
+        if (!ok) return false
         undoCorrection = null
         spaceAfterSuggestion = false
         afterTyped()
+        return true
+    }
+
+    private fun flushPendingDictation() {
+        val t = pendingDictation ?: return
+        if (SystemClock.uptimeMillis() - pendingAt > 30_000L) { pendingDictation = null; return }
+        val ic = currentInputConnection ?: return
+        if (typeDictation(ic, t)) pendingDictation = null
     }
 
     // ------------------------------------------------------------------ whole-field text (translation, rewriting, autonomous mode)

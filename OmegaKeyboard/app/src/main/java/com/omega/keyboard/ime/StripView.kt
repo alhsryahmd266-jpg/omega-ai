@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.text.TextPaint
@@ -27,6 +28,8 @@ class StripView(ctx: Context) : View(ctx) {
         fun onTool(id: String)
         fun onToggleToolbar()
         fun onMic()
+        /** the round "send in my colour" button */
+        fun onColourSend()
         fun onTranslateAction(id: String)
         fun onStatusAction(id: String)
     }
@@ -40,6 +43,14 @@ class StripView(ctx: Context) : View(ctx) {
 
     var suggestions: List<String> = emptyList()
         set(v) { field = v; invalidate() }
+
+    // the round "send in my colour" button: shown while a text colour is chosen; it wears that colour
+    var colourSend: Boolean = false
+        set(v) { if (field != v) { field = v; invalidate() } }
+    var swatch: Int = 0xFF2979FF.toInt()
+        set(v) { if (field != v) { field = v; invalidate() } }
+    var swatchRainbow: Boolean = false
+        set(v) { if (field != v) { field = v; invalidate() } }
 
     var tools: List<Tool> = emptyList()
         set(v) { field = v; invalidate() }
@@ -99,6 +110,23 @@ class StripView(ctx: Context) : View(ctx) {
         }
     }
 
+    /** the round colour button: a disc in the typing colour (or the rainbow) with a "send" arrow in a readable ink */
+    private fun drawSwatch(c: Canvas, cx: Float, cy: Float, radius: Float, pressed: Boolean) {
+        val prev = fill.shader
+        if (swatchRainbow) {
+            val cs = IntArray(7) { com.omega.keyboard.core.ColorMath.rainbow(it * 8 + 1) }
+            cs[6] = cs[0]
+            fill.shader = SweepGradient(cx, cy, cs, null)
+        } else {
+            fill.shader = null
+            fill.color = swatch
+        }
+        c.drawCircle(cx, cy, if (pressed) radius * 0.92f else radius, fill)
+        fill.shader = prev
+        val ink = if (swatchRainbow) 0xFFFFFFFF.toInt() else com.omega.keyboard.core.ColorMath.onColor(swatch)
+        drawIcon(c, "send", cx, cy, radius * 1.15f, ink)
+    }
+
     private fun drawText(c: Canvas, s: String, cx: Float, cy: Float, maxW: Float) {
         val shown = TextUtils.ellipsize(s, tp, maxW, TextUtils.TruncateAt.END).toString()
         val fm = tp.fontMetrics
@@ -121,7 +149,12 @@ class StripView(ctx: Context) : View(ctx) {
                 val mr = addHit(w - dp(4f) - btn, cy - btn / 2, w - dp(4f), cy + btn / 2, "mic")
                 pressBg(c, mr, "mic", btn / 2)
                 drawIcon(c, "mic", mr.centerX(), cy, dp(22f), t.onBgSub)
-                val left = dp(48f)
+                var left = dp(48f)
+                if (colourSend) {
+                    val sr = addHit(left - dp(2f), cy - btn / 2, left - dp(2f) + btn, cy + btn / 2, "csend")
+                    drawSwatch(c, sr.centerX(), cy, dp(16f), pressedTag == "csend")
+                    left = sr.right + dp(2f)
+                }
                 val right = w - dp(48f)
                 val slot = (right - left) / 3f
                 // order on screen: second | best | third
@@ -152,6 +185,10 @@ class StripView(ctx: Context) : View(ctx) {
                     val rect = addHit(l, 0f, l + slot, h, "t:${tool.id}")
                     val pill = RectF(rect.centerX() - pw / 2, cy - ph / 2, rect.centerX() + pw / 2, cy + ph / 2)
                     // Gboard look: icons only. The microphone sits in a round bubble, a running tool in a filled pill.
+                    if (tool.id == "csend") {
+                        drawSwatch(c, pill.centerX(), cy, ph / 2, pressedTag == "t:csend")
+                        continue
+                    }
                     when {
                         tool.active -> { fill.color = t.accent; c.drawRoundRect(pill, ph / 2, ph / 2, fill) }
                         pressedTag == "t:${tool.id}" -> { fill.color = t.keyFn; c.drawRoundRect(pill, ph / 2, ph / 2, fill) }
@@ -256,6 +293,7 @@ class StripView(ctx: Context) : View(ctx) {
         when {
             tag == "toggle" -> listener?.onToggleToolbar()
             tag == "mic" -> listener?.onMic()
+            tag == "csend" -> listener?.onColourSend()
             tag.startsWith("s") && tag.length == 2 && tag[1].isDigit() -> suggestions.getOrNull(tag[1] - '0')?.let { listener?.onSuggestion(it) }
             tag.startsWith("t:") -> listener?.onTool(tag.substring(2))
             tag == "status" -> listener?.onStatusAction(statusActionId)

@@ -17,6 +17,7 @@ import com.omega.keyboard.AppLog
 import com.omega.keyboard.Prefs
 import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.ai.Translator
+import com.omega.keyboard.core.ColorCodes
 import com.omega.keyboard.core.LlmPrompts
 import com.omega.keyboard.core.Languages
 import com.omega.keyboard.core.Palette
@@ -131,6 +132,25 @@ class SettingsActivity : BaseActivity() {
             sw("الاقتراحات", "كلمات مقترحة فوق الكيبورد", prefs.suggestions) { prefs.suggestions = it },
             sw("التصحيح التلقائي", "في الإنجليزي بس، وبيسيب العامية والحروف اللاتينية للعربي زي ما هي. اضغط مسح فورًا بعد التصحيح عشان ترجّع كلمتك.", prefs.autoCorrect) { prefs.autoCorrect = it },
             sw("نقطة بالمسافتين", "مسافتين ورا بعض = نقطة ومسافة", prefs.doubleSpacePeriod) { prefs.doubleSpacePeriod = it },
+        ))
+
+        // ---------------------------------------------------------------- coloured sending
+        h.addView(UiKit.section(this, p, "إرسال الكتابة الملونة"))
+        val picStyles = listOf("clean" to "عادي (كلامك بلونه)", "neon" to "نيون مضيء")
+        val codeChoices = ColorCodes.Format.values().map { it.id to it.label }
+        h.addView(UiKit.group(
+            this, p,
+            sw("زرار الإرسال يبعت ملوّن", "في خانات الدردشة اللي بتقبل صور (واتساب، تليجرام، ماسنجر): الكلام يتحوّل لصورة بلونك ويتبعت. الدايرة الملونة فوق الكيبورد بتعمل نفس الشيء.", prefs.colourOnSend) { prefs.colourOnSend = it },
+            sw("إرسال تلقائي", "يدوس \"إرسال\" لوحده في معاينة الصورة (محتاج تفعيل خدمة إمكانية الوصول للكيبورد)", prefs.picAutoSend) { prefs.picAutoSend = it },
+            UiKit.valueRow(this, p, "شكل الصورة", picStyles.firstOrNull { it.first == prefs.picStyle }?.second ?: "عادي") {
+                choose("شكل الصورة الملونة", picStyles, prefs.picStyle) { prefs.picStyle = it }
+            },
+            UiKit.valueRow(
+                this, p, "ألوان الألعاب", codeChoices.firstOrNull { it.first == prefs.colorCodes }?.second ?: "بدون كود",
+                "للألعاب والتطبيقات اللي مبتقبلش صور: الكلام بيتبعت بكود ألوان تفهمه اللعبة. اختار الصيغة بتاعتها (Free Fire مثلًا)"
+            ) {
+                choose("كود ألوان الألعاب", codeChoices, prefs.colorCodes) { prefs.colorCodes = it }
+            },
         ))
 
         // ---------------------------------------------------------------- translation

@@ -1,6 +1,8 @@
 package com.omega.keyboard
 
 import com.omega.keyboard.core.*
+import com.omega.keyboard.ime.ColorPicRenderer
+import com.omega.keyboard.voice.VoicePlan
 
 /**
  * Plain-Kotlin test suite (no JUnit dependency in the logic itself) so it can be run with kotlinc on any machine
@@ -18,7 +20,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -624,5 +626,108 @@ object CoreTests {
         check("palette names are unique", Palette.typed.map { it.name }.toSet().size == Palette.typed.size && Palette.general.map { it.name }.toSet().size == Palette.general.size)
         check("palette colours are opaque and unique", (Palette.typed + Palette.general).all { ColorMath.alpha(it.color) == 255 } &&
             Palette.typed.map { it.color }.toSet().size == Palette.typed.size && Palette.general.map { it.color }.toSet().size == Palette.general.size)
+    }
+
+    // ------------------------------------------------------------------ dictation: which recogniser / language is tried, in which order
+
+    private fun voicePlan() {
+        val google = "com.google.android.googlequicksearchbox/com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
+        val oem = "com.vendor.speech/com.vendor.speech.Service"
+        val other = "org.other.asr/org.other.asr.Service"
+
+        check("Google's recogniser is ranked first", VoicePlan.rank(listOf(oem, google, other), oem).first() == google)
+        check("without Google the phone's default comes first", VoicePlan.rank(listOf(other, oem), oem).first() == oem)
+        check("rank drops duplicates", VoicePlan.rank(listOf(oem, oem, google), null).size == 2)
+
+        check("ar-EG chain", VoicePlan.languageChain("ar-EG") == listOf("ar-EG", "ar-SA", "ar"))
+        check("ar chain", VoicePlan.languageChain("ar") == listOf("ar", "ar-SA", "ar-EG"))
+        check("en-US chain", VoicePlan.languageChain("en-US") == listOf("en-US", "en"))
+        check("underscore is accepted", VoicePlan.languageChain("en_GB") == listOf("en-GB", "en"))
+        check("no language wanted: no chain", VoicePlan.languageChain("").isEmpty() && VoicePlan.languageChain(null).isEmpty())
+
+        val plan = VoicePlan.build(listOf(oem, google), oem, "ar-EG", false)
+        check("first attempt is Google with the wanted language", plan.first() == VoicePlan.Attempt(google, "ar-EG", false)) { plan.toString() }
+        check("every recogniser gets every spelling", plan.size == 6 && plan.count { it.service == google } == 3) { plan.toString() }
+        check("online unless offline was asked for", plan.none { it.offline })
+
+        val off = VoicePlan.build(listOf(google), null, "ar-EG", true)
+        check("offline first, then the same online", off[0] == VoicePlan.Attempt(google, "ar-EG", true) && off[1] == VoicePlan.Attempt(google, "ar-EG", false)) { off.toString() }
+        check("plan is capped", VoicePlan.build(listOf(google, oem, other), null, "ar-EG", true).size == 8)
+
+        val bare = VoicePlan.build(emptyList(), null, "ar-EG", false)
+        check("no recogniser found: the phone's default is still tried", bare.isNotEmpty() && bare.all { it.service == null })
+        check("no language wanted: one attempt without language", VoicePlan.build(listOf(google), null, "", false).single().lang == "")
+
+        val good = VoicePlan.Attempt(oem, "ar-SA", false)
+        val promoted = VoicePlan.build(listOf(oem, google), oem, "ar-EG", false, good.key)
+        check("what worked last time goes first", promoted.first() == good && promoted.size == plan.size && promoted.toSet() == plan.toSet()) { promoted.toString() }
+        val unknown = VoicePlan.build(listOf(oem, google), oem, "ar-EG", false, "nothing|x|0")
+        check("an unknown remembered attempt is ignored", unknown == plan)
+
+        check("language-not-supported tries the next way", VoicePlan.tryNext(12) && VoicePlan.tryNext(13))
+        check("a broken recogniser tries the next way", VoicePlan.tryNext(5) && VoicePlan.tryNext(11) && VoicePlan.tryNext(VoicePlan.CODE_STUCK) && VoicePlan.tryNext(VoicePlan.CODE_FAILED))
+        check("silence / no match / busy / permission are the user's own outcome", listOf(6, 7, 8, 9, 3).none { VoicePlan.tryNext(it) })
+        check("network trouble retries offline once", VoicePlan.offlineRetry(plan.first(), 2) == plan.first().copy(offline = true) && VoicePlan.offlineRetry(plan.first().copy(offline = true), 2) == null)
+        check("a language error does not trigger an offline retry", VoicePlan.offlineRetry(plan.first(), 12) == null)
+        check("the system dialog is the last way for service failures", VoicePlan.dialogWorthIt(12) && VoicePlan.dialogWorthIt(VoicePlan.CODE_UNAVAILABLE) && !VoicePlan.dialogWorthIt(7) && !VoicePlan.dialogWorthIt(2))
+
+        check("the connection error wins", VoicePlan.bestError(listOf(12, 2, 12)) == 2)
+        check("a missing language pack beats not supported", VoicePlan.bestError(listOf(12, 13)) == 13)
+        check("not supported alone", VoicePlan.bestError(listOf(12, 12)) == 12)
+        check("something else: the last one", VoicePlan.bestError(listOf(5, 4)) == 4)
+        check("no error at all", VoicePlan.bestError(emptyList()) == VoicePlan.CODE_FAILED)
+        check("attempt labels are readable", plan.first().label == "google ar-EG online" && plan[3].label == "com.vendor.speech ar-EG online") { plan.first().label + " / " + plan[3].label }
+    }
+
+    // ------------------------------------------------------------------ coloured send: colour codes, the preview's send button, the picture's card
+
+    private fun colourSend() {
+        val red = 0xFFFF0000.toInt()
+        val blue = 0xFF2979FF.toInt()
+        check("a format is found by its id", ColorCodes.Format.of("ff") == ColorCodes.Format.FREEFIRE && ColorCodes.Format.of("discord") == ColorCodes.Format.DISCORD && ColorCodes.Format.of("???") == ColorCodes.Format.NONE && ColorCodes.Format.of(null) == ColorCodes.Format.NONE)
+        check("no format leaves the text alone", ColorCodes.wrap("hello", ColorCodes.Format.NONE) { red } == "hello")
+        check("Free Fire code goes before the text", ColorCodes.wrap("hello", ColorCodes.Format.FREEFIRE) { red } == "[FF0000]hello")
+        check("one colour over several words is one code", ColorCodes.wrap("hello world", ColorCodes.Format.FREEFIRE) { red } == "[FF0000]hello world")
+        check("Arabic text gets the same treatment", ColorCodes.wrap("مرحبا بيك", ColorCodes.Format.FREEFIRE) { blue } == "[2979FF]مرحبا بيك")
+        check("Unity tags", ColorCodes.wrap("hi", ColorCodes.Format.UNITY) { red } == "<color=#FF0000>hi</color>")
+        check("BBCode tags", ColorCodes.wrap("hi", ColorCodes.Format.BBCODE) { blue } == "[color=#2979FF]hi[/color]")
+        check("HTML tags", ColorCodes.wrap("hi", ColorCodes.Format.HTML) { red } == "<font color=\"#FF0000\">hi</font>")
+        check("alpha is ignored", ColorCodes.wrap("a", ColorCodes.Format.FREEFIRE) { 0x80FF0000.toInt() } == "[FF0000]a")
+        val rb = ColorCodes.wrap("abc", ColorCodes.Format.FREEFIRE) { n -> listOf(0xFF0000, 0x00FF00, 0x0000FF)[n % 3] }
+        check("the rainbow colours every letter", rb == "[FF0000]a[00FF00]b[0000FF]c") { rb }
+        check("spaces never start a code", ColorCodes.wrap("a b", ColorCodes.Format.UNITY) { n -> if (n == 0) 0xFF0000 else 0x00FF00 } == "<color=#FF0000>a </color><color=#00FF00>b</color>")
+        check("leading blanks stay outside", ColorCodes.wrap("  hi", ColorCodes.Format.FREEFIRE) { red } == "  [FF0000]hi")
+        check("only blanks: nothing to colour", ColorCodes.wrap("   ", ColorCodes.Format.FREEFIRE) { red } == "   ")
+        check("emoji are not split", ColorCodes.wrap("😀a", ColorCodes.Format.FREEFIRE) { n -> if (n == 0) 0xFF0000 else 0x00FF00 } == "[FF0000]😀[00FF00]a")
+        check("Minecraft red", ColorCodes.minecraftCode(0xFF1744) == 'c' && ColorCodes.minecraftCode(0x000000) == '0' && ColorCodes.minecraftCode(0xFFFFFF) == 'f')
+        check("Minecraft picks the nearest colour", ColorCodes.minecraftCode(0x2979FF) == '9')
+        check("Minecraft text", ColorCodes.wrap("hi", ColorCodes.Format.MINECRAFT) { 0xFFFF1744.toInt() } == "&chi")
+        check("Discord red and blue", ColorCodes.discordCode(0xFF0000) == 31 && ColorCodes.discordCode(0x2979FF) == 34)
+        val dc = ColorCodes.wrap("hi", ColorCodes.Format.DISCORD) { red }
+        check("Discord ansi block", dc == "```ansi\n\u001B[1;31mhi\u001B[0m\n```") { dc.replace("\u001B", "ESC") }
+
+        // the picture's card keeps the text readable
+        check("light colours get a dark card", ColorPicRenderer.cardFor(0xFFFFEA00.toInt(), false, false) == 0xFF16161F.toInt())
+        check("dark colours get a white card", ColorPicRenderer.cardFor(0xFF1A237E.toInt(), false, false) == 0xFFFFFFFF.toInt())
+        check("the rainbow gets a dark card", ColorPicRenderer.cardFor(blue, true, false) == 0xFF16161F.toInt())
+        check("the highlighter pen colours the card", ColorPicRenderer.cardFor(red, false, true) == red)
+
+        // the send button of a picture preview
+        val dm = 3f
+        fun node(id: Int, label: String, viewId: String, l: Int, t: Int, r: Int, b: Int, act: Boolean = true, desc: String = "") =
+            UiNode(id, -1, 0, label, desc, viewId, "android.widget.ImageButton", "com.whatsapp", l, t, r, b, clickable = act, actionable = act)
+        fun scr(vararg n: UiNode) = Screen("com.whatsapp", 1080, 2400, dm, n.toList())
+        val send = node(1, "", "com.whatsapp:id/send", 900, 2150, 1030, 2280, desc = "إرسال")
+        val caption = UiNode(2, -1, 0, "", "", "com.whatsapp:id/caption", "android.widget.EditText", "com.whatsapp", 100, 2150, 880, 2280, editable = true)
+        val close = node(3, "", "com.whatsapp:id/cancel", 20, 100, 150, 230, desc = "إغلاق")
+        val crop = node(4, "", "com.whatsapp:id/crop", 800, 100, 930, 230, desc = "قص")
+        check("the preview's send button is found by id and label", PreviewSendFinder.find(scr(close, crop, caption, send))?.id == 1)
+        val byLabel = node(5, "", "x:id/btn", 900, 2150, 1030, 2280, desc = "Send")
+        check("or by label alone", PreviewSendFinder.find(scr(close, byLabel))?.id == 5)
+        check("no send button: nothing is pressed", PreviewSendFinder.find(scr(close, crop, caption)) == null)
+        check("the microphone is never taken for send", PreviewSendFinder.find(scr(node(6, "", "x:id/voice_note_btn", 900, 2150, 1030, 2280, desc = "Send voice message"))) == null)
+        check("a disabled button is not pressed", PreviewSendFinder.find(Screen("p", 1080, 2400, dm, listOf(send.copy(enabled = false)))) == null)
+        val chatSend = node(7, "", "com.whatsapp:id/send", 900, 1500, 1030, 1630, desc = "إرسال")
+        check("with two matches the lower one (the preview's own) wins", PreviewSendFinder.find(scr(chatSend, send))?.id == 1)
     }
 }

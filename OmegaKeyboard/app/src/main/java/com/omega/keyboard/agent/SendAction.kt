@@ -178,7 +178,7 @@ object SendAction {
     }
 
     /** Clicks the node (or the closest clickable parent), else touches its centre. Returns how, or null. */
-    private fun tap(svc: ScreenAgentService, snap: Snapshot, ui: UiNode): String? {
+    internal fun tap(svc: ScreenAgentService, snap: Snapshot, ui: UiNode): String? {
         var cur: AccessibilityNodeInfo? = snap.node(ui.id)
         var hops = 0
         while (cur != null && hops < 4) {

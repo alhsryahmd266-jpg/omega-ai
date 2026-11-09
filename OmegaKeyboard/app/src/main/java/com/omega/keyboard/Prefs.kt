@@ -47,6 +47,10 @@ class Prefs private constructor(ctx: Context) {
     var textColor by I("text_color", 0xFF2979FF.toInt())  // colour of the text you type; 0 = the field's own colour
     var textRainbow by B("text_rainbow", false)           // every letter in the next colour of the rainbow
     var textHighlight by B("text_highlight", false)       // highlighter pen: the colour goes behind the text
+    var colourOnSend by B("colour_on_send", true)         // the send key of a chat box sends the text as a coloured picture / colour codes
+    var picAutoSend by B("pic_auto_send", true)           // presses the app's own "send" on the picture preview (needs the accessibility service)
+    var picStyle by S("pic_style", "clean")               // clean | neon
+    var colorCodes by S("color_codes", "none")            // how colour travels where pictures are refused (games): see ColorCodes.Format
     var keyColor by I("c_key", 0)
     var fnColor by I("c_fn", 0)
     var accentColor by I("c_accent", 0)
@@ -97,6 +101,7 @@ class Prefs private constructor(ctx: Context) {
     // ---- voice
     var voiceLang by S("voice_lang", "auto")
     var voiceOffline by B("voice_offline", false)
+    var voiceGood by S("voice_good", "")                 // the recogniser + language that worked last time: tried first from now on
 
     // ---- local model
     var modelPath by S("model_path", "")

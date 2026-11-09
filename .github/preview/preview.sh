@@ -178,7 +178,30 @@ scenario kb-voice s:theme=light s:last_lang=ar
 focus
 $KB tool voice 2>&1 | tee -a "$LOG"; sleep 3; shot kb-voice
 
-# --- the neon picture: see below (moved after the other screens)
+# --- the coloured pictures "send in colour" puts into a chat box: drawn by the keyboard, pulled off the phone
+scenario kb-pics s:theme=light s:last_lang=ar
+focus
+pic() {   # pic <name> <text> <colour> <rainbow> <marker> <style>
+  local name="$1" text="$2" color="$3" rainbow="$4" marker="$5" style="$6"
+  local b64; b64="$(printf '%s' "$text" | base64 -w0)"
+  adb logcat -c
+  adb shell am broadcast -a com.omega.keyboard.DEBUG_PIC --es b64 "$b64" --ei color "$color" --ez rainbow "$rainbow" --ez marker "$marker" --es style "$style" > /dev/null
+  sleep 1.5
+  local f; f="$(adb logcat -d -s OmegaPic:D | grep -o 'file=[A-Za-z0-9_.-]*' | tail -1 | cut -d= -f2)"
+  if [ -n "$f" ]; then
+    adb exec-out run-as $PKG cat "cache/neon/$f" > "$OUT/$name.png"
+    say "picture $name = $f ($(stat -c %s "$OUT/$name.png") bytes)"
+  else
+    say "picture $name: nothing was drawn"
+  fi
+}
+pic pic-blue-ar    "مرحبا بيك يا صاحبي، عامل إيه؟" 0xFF2979FF false false clean
+pic pic-red-short  "اه" 0xFFFF1744 false false clean
+pic pic-yellow     "Good morning everybody" 0xFFFFEA00 false false clean
+pic pic-rainbow-ar "قوس قزح بالعربي" 0xFF2979FF true false clean
+pic pic-marker     "المستند مهم جدا" 0xFFFFEA00 false true clean
+pic pic-long       "ده كلام طويل شوية عشان نشوف الصورة بتتصرف إزاي لما الجملة تبقى كبيرة وتحتاج أكتر من سطر ونص وتتحط في كارت واحد مرتب" 0xFF00C853 false false clean
+pic pic-neon       "نيون مضيء" 0xFFFF2BD6 false false neon
 
 # --- resizing by hand: handles, drag the top edge up, the right edge in, the left edge in, done, then typing in the new size
 scenario kb-resize s:theme=light s:last_lang=ar

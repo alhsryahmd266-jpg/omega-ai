@@ -170,6 +170,112 @@ object NeonRenderer {
 }
 
 /**
+ * The plain version of the coloured picture: the text exactly as it was typed (same colours, same highlighter), big and bold, on a
+ * card that keeps it readable whatever the chat background is. Light colours get a dark card, dark colours a white one, the
+ * highlighter pen turns the card itself into the marker colour.
+ */
+object ColorPicRenderer {
+
+    private const val MAX_W = 1080
+    private const val MIN_W = 380
+    private const val PAD = 72
+    private const val MAX_CHARS = 600
+    private const val DEFAULT_INK = 0xFF2979FF.toInt()
+    private const val DARK_CARD = 0xFF16161F.toInt()
+    private const val LIGHT_CARD = 0xFFFFFFFF.toInt()
+
+    private fun paintFor(size: Float): TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = size
+        typeface = Typeface.DEFAULT_BOLD
+    }
+
+    private fun layoutFor(text: CharSequence, p: TextPaint, width: Int): StaticLayout =
+        StaticLayout.Builder.obtain(text, 0, text.length, p, width)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setLineSpacing(0f, 1.18f)
+            .setIncludePad(false)
+            .build()
+
+    /** every letter gets the colour [colorAt] gives it (counting letters, not spaces) */
+    private fun coloured(text: String, colorAt: (Int) -> Int): SpannableString {
+        val sp = SpannableString(text)
+        var i = 0
+        var n = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            val len = Character.charCount(cp)
+            if (!Character.isWhitespace(cp)) {
+                sp.setSpan(ForegroundColorSpan(colorAt(n)), i, i + len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                n++
+            }
+            i += len
+        }
+        return sp
+    }
+
+    /** the card colour for a text colour (pure: also used by the tests) */
+    fun cardFor(ink: Int, rainbow: Boolean, marker: Boolean): Int = when {
+        marker -> ColorMath.opaque(ink)
+        rainbow || ColorMath.luminance(ink) >= 0.22f -> DARK_CARD
+        else -> LIGHT_CARD
+    }
+
+    fun render(raw: String, color: Int, rainbow: Boolean, highlight: Boolean): Bitmap {
+        val text = raw.trim().let { if (it.length > MAX_CHARS) it.take(MAX_CHARS - 1) + "…" else it }
+        val ink = if (color == 0) DEFAULT_INK else ColorMath.opaque(color)
+        val marker = highlight && !rainbow && color != 0
+        val card = cardFor(ink, rainbow, marker)
+        val letter: (Int) -> Int = when {
+            marker -> { _ -> ColorMath.onColor(ink) }
+            rainbow -> { n -> ColorMath.rainbow(n) }
+            else -> { _ -> ink }
+        }
+        val styled = coloured(text, letter)
+
+        // the biggest letters that still fit: a short sentence is large, a long one shrinks to a few lines
+        val maxText = MAX_W - 2 * PAD
+        var size = 150f
+        var probe = layoutFor(styled, paintFor(size), maxText)
+        while ((probe.lineCount > 9 || probe.height > 1600) && size > 40f) {
+            size -= 6f
+            probe = layoutFor(styled, paintFor(size), maxText)
+        }
+        var textW = 0
+        for (i in 0 until probe.lineCount) textW = maxOf(textW, Math.ceil(probe.getLineWidth(i).toDouble()).toInt())
+        val w = (textW + 2 * PAD).coerceIn(MIN_W, MAX_W)
+        val inner = w - 2 * PAD
+        val layout = layoutFor(styled, paintFor(size), inner)
+        val h = layout.height + 2 * PAD
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = card }
+        c.drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 64f, 64f, bg)
+        c.save()
+        c.translate(PAD.toFloat(), PAD.toFloat())
+        layout.draw(c)
+        c.restore()
+        return bmp
+    }
+
+    /** Draws the picture and saves it next to the neon ones (old pictures are cleaned up). @return the PNG file */
+    fun renderToFile(ctx: Context, text: String, color: Int, rainbow: Boolean, highlight: Boolean): File {
+        val d = NeonRenderer.dir(ctx)
+        val f = File(d, "pic_${System.currentTimeMillis()}.png")
+        val bmp = render(text, color, rainbow, highlight)
+        try {
+            FileOutputStream(f).use { out -> bmp.compress(Bitmap.CompressFormat.PNG, 100, out) }
+        } finally {
+            bmp.recycle()
+        }
+        d.listFiles { x -> x.isFile && x.name.endsWith(".png") }
+            ?.sortedByDescending { it.lastModified() }
+            ?.drop(12)
+            ?.forEach { it.delete() }
+        return f
+    }
+}
+
+/**
  * Hands the neon pictures to other apps. The app that receives the picture gets a temporary read grant for that one file
  * (the provider is not exported and shares nothing else).
  */

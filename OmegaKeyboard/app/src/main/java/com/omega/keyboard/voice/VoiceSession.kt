@@ -8,8 +8,11 @@ import com.omega.keyboard.AppLog
 import com.omega.keyboard.Prefs
 
 /**
- * Dictation through the phone's own recogniser: the keyboard's microphone listens once and types what was said.
+ * Dictation through the phone's own recognisers: the keyboard's microphone listens once and types what was said.
  * (There are no spoken orders any more; autonomous mode is a single button.) Main thread only.
+ *
+ * When none of the phone's recognisers can be used silently (see [VoicePlan]) the system's own voice dialog is opened as the
+ * last way; [onDialogResult] brings its answer back.
  */
 object VoiceSession {
 
@@ -25,6 +28,7 @@ object VoiceSession {
     private var sink: Sink? = null
     private var lastPartial = ""
     private var stopping = false
+    private var dialogMessage: String? = null       // the error to show if the system dialog turns out not to exist
     private val main = Handler(Looper.getMainLooper())
     private val forceStop = Runnable { finishNow() }
 
@@ -75,10 +79,24 @@ object VoiceSession {
         val wasActive = active
         reset()
         c?.cancel()
+        dialogMessage = null
         if (wasActive) sink?.onVoiceState(false, "", false)
     }
 
     fun detach(s: Sink) { if (sink === s) { sink = null } }
+
+    /** What the system's voice dialog came back with. [opened]: the dialog really existed on this phone. */
+    fun onDialogResult(text: String?, opened: Boolean) {
+        val msg = dialogMessage
+        dialogMessage = null
+        val s = sink ?: return
+        val said = text?.trim().orEmpty()
+        when {
+            said.isNotEmpty() -> s.onDictation(said)
+            !opened -> s.onVoiceState(false, msg ?: VoiceController.errorText(VoiceController.CODE_UNAVAILABLE), true)
+            else -> s.onVoiceState(false, "ما سمعتش كلام", true)
+        }
+    }
 
     private fun resolveLang(pref: String, hint: String): String = when {
         pref != "auto" && pref.isNotBlank() -> pref
@@ -90,11 +108,13 @@ object VoiceSession {
     private fun begin(ctx: Context, langHint: String) {
         val app = ctx.applicationContext
         val prefs = Prefs.get(app)
+        val lang = resolveLang(prefs.voiceLang, langHint)
         val c = VoiceController(app)
         controller = c
         active = true
         stopping = false
         lastPartial = ""
+        dialogMessage = null
         sink?.onVoiceState(true, "بسمعك...", false)
         c.start(object : VoiceController.Callback {
             override fun onReady() { if (active && !stopping) sink?.onVoiceState(true, "اتكلم دلوقتي...", false) }
@@ -127,9 +147,17 @@ object VoiceSession {
                     s?.onDictation(heard)
                     return
                 }
+                if (!wasStopping && !needsPermission && VoicePlan.dialogWorthIt(code)) {
+                    // no recogniser of this phone worked quietly: let the system's own voice dialog try
+                    AppLog.d("voice", "opening the system voice dialog (after code $code)")
+                    dialogMessage = message
+                    s?.onVoiceState(false, "", false)
+                    ActionActivity.recognize(app, lang)
+                    return
+                }
                 s?.onVoiceState(false, if (wasStopping) "" else message, !wasStopping)
                 if (needsPermission) ActionActivity.requestPermissions(app, arrayOf(Manifest.permission.RECORD_AUDIO))
             }
-        }, resolveLang(prefs.voiceLang, langHint), prefs.voiceOffline)
+        }, lang, prefs.voiceOffline)
     }
 }
