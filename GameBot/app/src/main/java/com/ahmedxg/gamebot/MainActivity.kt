@@ -60,6 +60,16 @@ class MainActivity : Activity() {
     private lateinit var cbHealth: CheckBox
     private lateinit var etHealthColor: EditText
     private lateinit var etHealthTol: EditText
+    private lateinit var cbCalib: CheckBox
+    private lateinit var cbCalibEvery: CheckBox
+    private lateinit var cbAllyMap: CheckBox
+    private lateinit var etAllyColor: EditText
+    private lateinit var etAllyTol: EditText
+    private lateinit var cbEnemyMap: CheckBox
+    private lateinit var etEnemyColor: EditText
+    private lateinit var etEnemyTol: EditText
+    private lateinit var cbSquad: CheckBox
+    private lateinit var etFov: EditText
     private lateinit var etLabels: EditText
     private lateinit var etConf: EditText
     private lateinit var etThreads: EditText
@@ -225,7 +235,7 @@ class MainActivity : Activity() {
         col.addView(cbGpu)
 
         col.addView(title("5) التحكم"))
-        spBackend = spinner(listOf("AUTO (Shizuku ثم Accessibility)", "Shizuku", "Accessibility"), cfg.backend.ordinal)
+        spBackend = spinner(listOf("AUTO (Shell مدمج ثم Shizuku ثم Accessibility)", "Shizuku", "Accessibility", "Shell مدمج"), cfg.backend.ordinal)
         col.addView(spBackend)
         col.addView(btn("تعديل أماكن أزرار اللعبة (فوق اللعبة)") { editLayout() })
         col.addView(btn("اختبار حقن اللمس (لازم ينجح قبل التشغيل)") { startActivity(Intent(this, TouchTestActivity::class.java)) })
@@ -332,6 +342,49 @@ class MainActivity : Activity() {
         col.addView(cbHeading)
         col.addView(note("حدّد مستطيل الخريطة بالعلامتين الصفرا (mapTL و mapBR) في 'تعديل أماكن الأزرار'. الـ HUD بيكتب 'zone ?' لو ما قراش الحلقة: غيّر اللون أو التسامح."))
 
+        col.addView(title("10) اكتشاف الأزرار والخريطة"))
+        cbCalib = CheckBox(this)
+        cbCalib.text = "اكتشف العصا وزرار النار تلقائي (البوت بيحرّك الكاميرا 10 ثواني أول ما يبدأ)"
+        cbCalib.setTextColor(Color.WHITE)
+        cbCalib.isChecked = cfg.autoCalibrate
+        col.addView(cbCalib)
+        cbCalibEvery = CheckBox(this)
+        cbCalibEvery.text = "كرّر الاكتشاف في كل تشغيل (لو أماكن الأزرار بتتغير)"
+        cbCalibEvery.setTextColor(Color.WHITE)
+        cbCalibEvery.isChecked = cfg.calibrateEveryRun
+        col.addView(cbCalibEvery)
+        cbAllyMap = CheckBox(this)
+        cbAllyMap.text = "الأصدقاء من الخريطة (دواير مرقمة أو نقط خضرا)"
+        cbAllyMap.setTextColor(Color.WHITE)
+        cbAllyMap.isChecked = cfg.allyMapEnabled
+        col.addView(cbAllyMap)
+        etAllyColor = field("لون علامة الصديق RRGGBB (00A2FF)", cfg.allyColor, false)
+        col.addView(etAllyColor)
+        etAllyTol = field("تسامح لون الصديق (45)", cfg.allyTol.toString(), true)
+        col.addView(etAllyTol)
+        cbEnemyMap = CheckBox(this)
+        cbEnemyMap.text = "الأعداء من الخريطة (نقط حمرا)"
+        cbEnemyMap.setTextColor(Color.WHITE)
+        cbEnemyMap.isChecked = cfg.enemyMapEnabled
+        col.addView(cbEnemyMap)
+        etEnemyColor = field("لون نقطة العدو RRGGBB (FF2D2D)", cfg.enemyMapColor, false)
+        col.addView(etEnemyColor)
+        etEnemyTol = field("تسامح لون العدو (55)", cfg.enemyMapTol.toString(), true)
+        col.addView(etEnemyTol)
+        cbSquad = CheckBox(this)
+        cbSquad.text = "ارجع للفريق لو بعيد ومفيش عدو قدامه"
+        cbSquad.setTextColor(Color.WHITE)
+        cbSquad.isChecked = cfg.squadFollow
+        col.addView(cbSquad)
+        etFov = field("زاوية الرؤية الأفقية بالدرجات (80)", cfg.fovDeg.toString(), true)
+        col.addView(etFov)
+        col.addView(note("مستطيل الخريطة = العلامتين الصفرا mapTL/mapBR في 'تعديل أماكن الأزرار' (الافتراضي أعلى اليمين). الرقم جوّه علامة الصديق مابيتقراش؛ بيتعرف عليها من لونها ومكانها، فاكتب لون خلفية العلامة."))
+
+        col.addView(title("11) تفعيل الشل المدمج (اختياري: أسرع، مرة واحدة)"))
+        col.addView(note("من غير Shizuku ومن غير كمبيوتر. 1) Developer options ← Wireless debugging (شغّله، لازم Wi-Fi) ← Pair device with pairing code. 2) اضغط 'ابدأ الاقتران' وسيب شاشة الاقتران مفتوحة، واكتب الكود في إشعار GameBot. بعدها التطبيق بيتصل لوحده."))
+        col.addView(btn("ابدأ الاقتران (مرة واحدة)") { startPairing() })
+        col.addView(btn("اختبار الشل") { testShell() })
+
         col.addView(title("السجل"))
         logTv = TextView(this)
         logTv.textSize = 10f
@@ -340,8 +393,41 @@ class MainActivity : Activity() {
         col.addView(btn("تصدير السجل (مشاركة)") { shareLog() })
     }
 
+    /** the bot (auto-calibration) and the layout editor save the layout from other components: pick it up */
+    private fun reloadSharedState() {
+        val fresh = Config.load(this)
+        cfg.layout.load(fresh.layout.toJson())
+        cfg.layoutCalibrated = fresh.layoutCalibrated
+        if (fresh.modelFile.isNotEmpty()) cfg.modelFile = fresh.modelFile
+        if (fresh.labelsFile.isNotEmpty()) cfg.labelsFile = fresh.labelsFile
+    }
+
+    private fun startPairing() {
+        try {
+            val i = Intent(this, PairingService::class.java)
+            i.action = PairingService.ACTION_START
+            startForegroundService(i)
+            toast("افتح Wireless debugging ← Pair device with pairing code، واكتب الكود في إشعار GameBot")
+            startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+        } catch (t: Throwable) {
+            toast("افتح خيارات المطوّر يدويًا: ${t.javaClass.simpleName}")
+        }
+    }
+
+    private fun testShell() {
+        toast("بيجرّب الشل...")
+        Thread {
+            val s = AdbShellInput(this)
+            val e = s.prepare()
+            s.close()
+            Logger.i("shell test: ${e ?: "OK"}")
+            runOnUiThread { toast(if (e == null) "الشل شغّال ✔" else e) }
+        }.start()
+    }
+
     override fun onResume() {
         super.onResume()
+        reloadSharedState()
         refresh()
         ui.post(tick)
     }
@@ -392,6 +478,7 @@ class MainActivity : Activity() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         val model = if (cfg.modelFile.isNotEmpty() && File(cfg.modelFile).exists()) File(cfg.modelFile).name else "—"
         return "Shizuku: ${shizukuState()}\n" +
+            "Shell مدمج: ${if (ShellState.paired(this)) "✔ مقترن" else "✖ مش مفعّل (اختياري)"}\n" +
             "Accessibility: ${mark(BotAccessibilityService.instance != null)}\n" +
             "الظهور فوق التطبيقات: ${mark(Settings.canDrawOverlays(this))}\n" +
             "Usage access: ${mark(hasUsage())}\n" +
@@ -469,6 +556,16 @@ class MainActivity : Activity() {
             cfg.healthEnabled = cbHealth.isChecked
             cfg.healthColor = etHealthColor.text.toString().trim().removePrefix("#").ifEmpty { "00FF00" }
             cfg.healthTol = etHealthTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 50
+            cfg.autoCalibrate = cbCalib.isChecked
+            cfg.calibrateEveryRun = cbCalibEvery.isChecked
+            cfg.allyMapEnabled = cbAllyMap.isChecked
+            cfg.allyColor = etAllyColor.text.toString().trim().removePrefix("#").ifEmpty { "00A2FF" }
+            cfg.allyTol = etAllyTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 45
+            cfg.enemyMapEnabled = cbEnemyMap.isChecked
+            cfg.enemyMapColor = etEnemyColor.text.toString().trim().removePrefix("#").ifEmpty { "FF2D2D" }
+            cfg.enemyMapTol = etEnemyTol.text.toString().trim().toIntOrNull()?.coerceIn(5, 160) ?: 55
+            cfg.squadFollow = cbSquad.isChecked
+            cfg.fovDeg = etFov.text.toString().trim().toIntOrNull()?.coerceIn(30, 150) ?: 80
         } catch (t: Throwable) {
             Logger.i("collect failed: ${t.message}")
         }

@@ -38,6 +38,7 @@ class BotService : Service() {
         const val ACTION_TOGGLE = "com.ahmedxg.gamebot.TOGGLE"
         const val EXTRA_CODE = "code"
         const val EXTRA_DATA = "data"
+        const val CALIB_MS = 10_000L
 
         @Volatile
         var running = false
@@ -56,6 +57,15 @@ class BotService : Service() {
     private var zoneNav: ZoneNav? = null
     private var hitDetector: HitDetector? = null
     private var healthReader: HealthReader? = null
+    private var mapReader: AllyMapReader? = null
+
+    // auto-calibration of the HUD buttons
+    private var calibStart = 0L
+    private var calibDone = true
+    private var lastCalibSample = 0L
+    private var calibGw = 0
+    private var calibGh = 0
+    private val calibFrames = ArrayList<IntArray>()
     private var backend: InputBackend? = null
     private var controller: Controller? = null
     private var policy: Policy? = null
@@ -205,7 +215,12 @@ class BotService : Service() {
                 toast("مفيش نموذج — هيشتغل Monkey")
             }
         }
-        val tactics = Tactics(cfg.tacticSneak, cfg.tacticAmbush, cfg.tacticDodge, cfg.tacticJump, cfg.tacticCrouch, cfg.style)
+        val tactics = Tactics(
+            sneak = cfg.tacticSneak, ambush = cfg.tacticAmbush, dodge = cfg.tacticDodge, jump = cfg.tacticJump,
+            crouch = cfg.tacticCrouch, style = cfg.style, mapAllies = cfg.allyMapEnabled, squad = cfg.squadFollow,
+            fovDeg = cfg.fovDeg.toFloat(), mapEnemies = cfg.enemyMapEnabled
+        )
+        if (cfg.allyMapEnabled || cfg.enemyMapEnabled) mapReader = AllyMapReader(cfg)
         if (detector != null && cfg.tacticDodge) hitDetector = HitDetector(cfg.hitSensitivity)
         if (cfg.healthEnabled) healthReader = HealthReader(cfg)
         val base: Policy = if (detector != null) {
@@ -253,6 +268,7 @@ class BotService : Service() {
         fpsT = startedAt
         armed = cfg.autoStart
         activeFrom = if (armed) startedAt + cfg.startDelaySec * 1000L else Long.MAX_VALUE
+        calibDone = !(cfg.autoCalibrate && (!cfg.layoutCalibrated || cfg.calibrateEveryRun))
         hud?.setArmed(armed)
         status = "running"
         Logger.i(
@@ -411,6 +427,12 @@ class BotService : Service() {
         val inMacro = now < macroUntil
         framesTotal++
 
+        // auto-calibration: the bot moves the camera for a few seconds and finds the stick / fire buttons
+        if (active && inGame && !inMacro && !calibDone) {
+            runCalibration(bmp, w, h, now)
+            return
+        }
+
         // soak: frozen / static screen -> restart macro
         if (cfg.soakEnabled && active && inGame && !inMacro && now - lastSigAt >= 400L) {
             lastSigAt = now
@@ -476,8 +498,14 @@ class BotService : Service() {
         }
         lastHealth = health
 
+        var marks: MapMarks? = null
+        val mr = mapReader
+        if (mr != null && active && inGame && !inMacro) marks = mr.read(bmp, w, h)
+
         val act: Action = if (active && inGame && !inMacro) {
-            policy?.decide(Perception(now, dets, scrW, scrH, hit, health), now) ?: Action.idle()
+            policy?.decide(
+                Perception(now, dets, scrW, scrH, hit, health, marks?.allies ?: emptyList(), marks?.enemies ?: emptyList()), now
+            ) ?: Action.idle()
         } else {
             Action.idle()
         }
@@ -515,6 +543,73 @@ class BotService : Service() {
                 fpsSamples++
             }
         }
+    }
+
+    private fun runCalibration(bmp: Bitmap, w: Int, h: Int, now: Long) {
+        if (calibStart == 0L) {
+            calibStart = now
+            calibFrames.clear()
+            Logger.i("auto-calibration: moving the camera for ${CALIB_MS / 1000}s to find the HUD buttons")
+        }
+        if (now - lastCalibSample >= 150L) {
+            lastCalibSample = now
+            sampleCalib(bmp, w, h)
+        }
+        val t = now - calibStart
+        val wig = Action()
+        wig.lookDx = (24.0 * Math.sin(t / 2200.0 * 2.0 * Math.PI)).toFloat()
+        wig.moveY = 0.6f
+        wig.state = "CALIBRATING"
+        controller?.apply(wig, now, scrW, scrH)
+        state = "CALIBRATING " + ((CALIB_MS - t) / 1000 + 1) + "s"
+        if (t >= CALIB_MS) finishCalibration()
+    }
+
+    /** luma thumbnail (4 samples per cell so thin outlines survive the downscale) */
+    private fun sampleCalib(bmp: Bitmap, w: Int, h: Int) {
+        val gw = 160
+        val gh = LayoutDetect.gridHeight(gw, w, h)
+        val arr = IntArray(gw * gh)
+        for (j in 0 until gh) {
+            for (i in 0 until gw) {
+                var s = 0
+                for (dj in 0..1) {
+                    for (di in 0..1) {
+                        val x = (((i + 0.25f + 0.5f * di) * w) / gw).toInt().coerceIn(0, bmp.width - 1)
+                        val y = (((j + 0.25f + 0.5f * dj) * h) / gh).toInt().coerceIn(0, bmp.height - 1)
+                        s += LayoutDetect.lumaOf(bmp.getPixel(x, y))
+                    }
+                }
+                arr[j * gw + i] = s / 4
+            }
+        }
+        calibGw = gw
+        calibGh = gh
+        calibFrames.add(arr)
+    }
+
+    private fun finishCalibration() {
+        calibDone = true
+        controller?.releaseAll()
+        val frames = ArrayList<IntArray>(calibFrames)
+        calibFrames.clear()
+        val res = try { LayoutDetect.detect(frames, calibGw, calibGh) } catch (t: Throwable) { null }
+        val stick = res?.points?.get("stick")
+        val fire = res?.points?.get("fire")
+        if (res != null && stick != null && fire != null && stick.size >= 3 && fire.size >= 3 && stick[2] >= 0.07f && fire[2] >= 0.045f) {
+            cfg.layout.points["stick"] = floatArrayOf(stick[0], stick[1])
+            cfg.layout.stickRadius = (stick[2] * 0.85f).coerceIn(0.04f, 0.2f)
+            cfg.layout.points["fire"] = floatArrayOf(fire[0], fire[1])
+            cfg.layoutCalibrated = true
+            cfg.save(this)
+            Logger.i("auto-calibration OK: stick=(${stick[0]}, ${stick[1]}) fire=(${fire[0]}, ${fire[1]})")
+            toast("اكتشفت العصا وزرار النار تلقائي")
+        } else {
+            Logger.i("auto-calibration failed (${res?.note ?: "error"}) -> keeping the saved layout")
+            toast("ما قدرتش أكتشف الأزرار تلقائي، هستخدم الأماكن المحفوظة")
+        }
+        policy?.reset()
+        prevSig = null
     }
 
     private fun saveFrame(bmp: Bitmap, w: Int, h: Int) {

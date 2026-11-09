@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 enum class Mode { MONKEY, AI }
-enum class Backend { AUTO, SHIZUKU, ACCESSIBILITY }
+enum class Backend { AUTO, SHIZUKU, ACCESSIBILITY, SHELL }
 
 /** Positions of the game's on-screen controls, normalized 0..1 of the display. */
 class ControlLayout {
@@ -20,9 +20,9 @@ class ControlLayout {
 
     fun reset() {
         points.clear()
-        points["stick"] = floatArrayOf(0.17f, 0.68f)
+        points["stick"] = floatArrayOf(0.16f, 0.72f)
         points["look"] = floatArrayOf(0.72f, 0.50f)
-        points["fire"] = floatArrayOf(0.88f, 0.62f)
+        points["fire"] = floatArrayOf(0.86f, 0.70f)
         points["jump"] = floatArrayOf(0.93f, 0.80f)
         points["crouch"] = floatArrayOf(0.82f, 0.86f)
         points["reload"] = floatArrayOf(0.70f, 0.84f)
@@ -37,8 +37,8 @@ class ControlLayout {
         points["hpTL"] = floatArrayOf(0.30f, 0.93f)
         points["hpBR"] = floatArrayOf(0.50f, 0.96f)
         // minimap rectangle corners (for zone navigation)
-        points["mapTL"] = floatArrayOf(0.03f, 0.05f)
-        points["mapBR"] = floatArrayOf(0.17f, 0.32f)
+        points["mapTL"] = floatArrayOf(0.845f, 0.012f)
+        points["mapBR"] = floatArrayOf(0.995f, 0.27f)
         stickRadius = 0.10f
         lookRadius = 0.14f
     }
@@ -108,6 +108,17 @@ class Config {
     var healthEnabled = false      // read the HUD health bar (retreat / heal when low)
     var healthColor = "00FF00"     // RRGGBB of the health bar fill
     var healthTol = 50
+    var allyMapEnabled = false     // read teammate markers from the minimap (numbered circles or green dots)
+    var enemyMapEnabled = false    // read red enemy dots from the minimap
+    var enemyMapColor = "FF2D2D"
+    var enemyMapTol = 55
+    var allyColor = "00A2FF"       // RRGGBB of the teammate markers
+    var allyTol = 45
+    var squadFollow = false
+    var fovDeg = 80
+    var autoCalibrate = true       // find the stick / fire buttons by itself (needs the camera to move)
+    var calibrateEveryRun = true   // redo it on every start, so moved buttons are found again
+    var layoutCalibrated = false
     var hitSensitivity = 25        // red-edge flash threshold used to detect "I got hit"
     val layout = ControlLayout()
 
@@ -164,6 +175,17 @@ class Config {
         o.put("healthEnabled", healthEnabled)
         o.put("healthColor", healthColor)
         o.put("healthTol", healthTol)
+        o.put("allyMapEnabled", allyMapEnabled)
+        o.put("enemyMapEnabled", enemyMapEnabled)
+        o.put("enemyMapColor", enemyMapColor)
+        o.put("enemyMapTol", enemyMapTol)
+        o.put("allyColor", allyColor)
+        o.put("allyTol", allyTol)
+        o.put("squadFollow", squadFollow)
+        o.put("fovDeg", fovDeg)
+        o.put("autoCalibrate", autoCalibrate)
+        o.put("calibrateEveryRun", calibrateEveryRun)
+        o.put("layoutCalibrated", layoutCalibrated)
         o.put("hitSensitivity", hitSensitivity)
         o.put("layout", layout.toJson())
         return o
@@ -210,6 +232,17 @@ class Config {
         healthEnabled = o.optBoolean("healthEnabled", healthEnabled)
         healthColor = o.optString("healthColor", healthColor)
         healthTol = o.optInt("healthTol", healthTol)
+        allyMapEnabled = o.optBoolean("allyMapEnabled", allyMapEnabled)
+        enemyMapEnabled = o.optBoolean("enemyMapEnabled", enemyMapEnabled)
+        enemyMapColor = o.optString("enemyMapColor", enemyMapColor)
+        enemyMapTol = o.optInt("enemyMapTol", enemyMapTol)
+        allyColor = o.optString("allyColor", allyColor)
+        allyTol = o.optInt("allyTol", allyTol)
+        squadFollow = o.optBoolean("squadFollow", squadFollow)
+        fovDeg = o.optInt("fovDeg", fovDeg)
+        autoCalibrate = o.optBoolean("autoCalibrate", autoCalibrate)
+        calibrateEveryRun = o.optBoolean("calibrateEveryRun", calibrateEveryRun)
+        layoutCalibrated = o.optBoolean("layoutCalibrated", layoutCalibrated)
         hitSensitivity = o.optInt("hitSensitivity", hitSensitivity)
         layout.load(o.optJSONObject("layout"))
     }

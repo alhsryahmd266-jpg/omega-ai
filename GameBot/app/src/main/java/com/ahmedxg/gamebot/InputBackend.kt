@@ -22,7 +22,12 @@ object Backends {
         val order = when (pref) {
             Backend.SHIZUKU -> listOf(Backend.SHIZUKU)
             Backend.ACCESSIBILITY -> listOf(Backend.ACCESSIBILITY)
-            Backend.AUTO -> listOf(Backend.SHIZUKU, Backend.ACCESSIBILITY)
+            Backend.SHELL -> listOf(Backend.SHELL)
+            Backend.AUTO -> if (ShellState.paired(ctx)) {
+                listOf(Backend.SHELL, Backend.SHIZUKU, Backend.ACCESSIBILITY)
+            } else {
+                listOf(Backend.SHIZUKU, Backend.ACCESSIBILITY)
+            }
         }
         val errs = ArrayList<String>()
         for (b in order) {
@@ -31,6 +36,11 @@ object Backends {
                     val s = ShizukuInput()
                     val e = s.prepare()
                     if (e == null) return Pair(s, "Shizuku") else errs.add("Shizuku: $e")
+                }
+                Backend.SHELL -> {
+                    val s = AdbShellInput(ctx)
+                    val e = s.prepare()
+                    if (e == null) return Pair(s, "Shell") else errs.add("Shell: $e")
                 }
                 Backend.ACCESSIBILITY -> {
                     if (BotAccessibilityService.instance != null) return Pair(AccessibilityInput(), "Accessibility")

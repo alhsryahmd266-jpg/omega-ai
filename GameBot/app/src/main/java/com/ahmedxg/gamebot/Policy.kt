@@ -191,6 +191,14 @@ class TacticalPolicy(
             if (covers(al, crossX, crossY) || (have && covers(al, tx, ty))) { friendly = true; break }
         }
 
+        // minimap friend-or-foe: a teammate marker in the direction of the target means "do not shoot"
+        if (!friendly && tactics.mapAllies && have && p.allyMarks.isNotEmpty()) {
+            val bearing = (tx - crossX) * tactics.fovDeg
+            for (m in p.allyMarks) {
+                if (m.dist <= 0.6f && abs(MapMath.angleDiff(m.angleDeg, bearing)) <= 12f) { friendly = true; break }
+            }
+        }
+
         val wasAmbush = now < ambushUntil
         if (have) {
             if (firstSeen == 0L || now - lastSeen > 400L) firstSeen = now
@@ -274,6 +282,42 @@ class TacticalPolicy(
                 a.lookDx = if (lastDirX >= 0f) 12f else -12f
                 a.state = "SWEEP"
                 return a
+            }
+            // squad: nobody around and the team is far -> walk back to the nearest teammate
+            if (tactics.squad && p.allyMarks.isNotEmpty()) {
+                var nearest: MapMark? = null
+                for (m in p.allyMarks) {
+                    val cur = nearest
+                    if (cur == null || m.dist < cur.dist) nearest = m
+                }
+                val nm = nearest
+                if (nm != null && nm.dist > 0.6f) {
+                    a.lookDx = (nm.angleDeg * 2.2f * aimScale).coerceIn(-90f, 90f)
+                    a.moveY = if (abs(nm.angleDeg) < 30f) 1f else 0.3f
+                    a.state = "REGROUP"
+                    return a
+                }
+            }
+            // a red enemy dot on the minimap: turn toward it (or slip away when playing the survivor plan)
+            if (tactics.mapEnemies && p.enemyMarks.isNotEmpty()) {
+                var near: MapMark? = null
+                for (m in p.enemyMarks) {
+                    val cur = near
+                    if (cur == null || m.dist < cur.dist) near = m
+                }
+                val em = near
+                if (em != null && em.dist <= 0.7f) {
+                    if (style.avoidFar) {
+                        a.lookDx = (-em.angleDeg * 1.2f * aimScale).coerceIn(-60f, 60f)
+                        a.moveY = 0.6f
+                        a.state = "AVOID"
+                    } else {
+                        a.lookDx = (em.angleDeg * 2.2f * aimScale).coerceIn(-90f, 90f)
+                        a.moveY = if (abs(em.angleDeg) < 25f) 0.5f else 0f
+                        a.state = "SCAN"
+                    }
+                    return a
+                }
             }
             firstSeen = 0L
             burstOn = false

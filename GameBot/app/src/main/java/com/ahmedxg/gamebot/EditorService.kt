@@ -147,6 +147,7 @@ class EditorService : Service() {
             row.orientation = LinearLayout.HORIZONTAL
             row.setBackgroundColor(0xCC000000.toInt())
             row.addView(bar("حفظ") {
+                c.layoutCalibrated = true
                 c.save(this)
                 Toast.makeText(this, "تم الحفظ", Toast.LENGTH_SHORT).show()
                 hideEditor()

@@ -2,7 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- No INTERNET permission on purpose: everything runs locally on the phone. -->
+    <!-- INTERNET / multicast are used ONLY for the built-in ADB shell (loopback connection to the phone's own
+         wireless-debugging daemon + mDNS discovery of its port). The bot never goes online. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -19,6 +23,7 @@
     </queries>
 
     <application
+        android:name=".App"
         android:allowBackup="false"
         android:label="GameBot"
         android:icon="@android:drawable/sym_def_app_icon"
@@ -47,6 +52,10 @@
 
         <service
             android:name=".EditorService"
+            android:exported="false" />
+
+        <service
+            android:name=".PairingService"
             android:exported="false" />
 
         <service

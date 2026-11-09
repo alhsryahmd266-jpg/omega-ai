@@ -13,8 +13,8 @@ android {
         // targetSdk 31 on purpose: sideloaded tool, avoids Android 14 foreground-service-type and
         // per-session MediaProjection enforcement. Runs on Android 11-15.
         targetSdk = 31
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
         ndk {
             abiFilters.add("arm64-v8a")
         }
@@ -47,4 +47,8 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
+    // built-in ADB (wireless debugging) client: one-time pairing, no Shizuku needed
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("com.github.MuntashirAkon:sun-security-android:1.1")
+    implementation("androidx.annotation:annotation:1.8.2")
 }

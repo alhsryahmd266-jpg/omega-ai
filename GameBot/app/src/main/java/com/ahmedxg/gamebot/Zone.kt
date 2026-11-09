@@ -127,7 +127,7 @@ class ZoneNav(private val cfg: Config) {
  * Wraps another policy: when the minimap says we are outside the safe zone (and not in a fight),
  * turn toward the zone center and run to it. Needs a heading-up minimap (player icon fixed at the center).
  */
-private val FIGHT_STATES = setOf("FIRE", "TRACK", "REACT", "STALK", "STRIKE", "DUEL", "DODGE", "AMBUSH", "SWEEP", "RETREAT", "AVOID", "HEAL")
+private val FIGHT_STATES = setOf("FIRE", "TRACK", "REACT", "STALK", "STRIKE", "DUEL", "DODGE", "AMBUSH", "SWEEP", "RETREAT", "AVOID", "HEAL", "SCAN")
 
 class ZonePolicy(
     private val inner: Policy,

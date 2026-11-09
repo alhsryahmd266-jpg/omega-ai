@@ -20,8 +20,8 @@ private class Run(val skill: Skill, val tactics: Tactics = Tactics()) {
     val log = ArrayList<Pair<Long, Action>>()
     var t0 = now
 
-    fun step(dets: List<Det>, hit: Boolean = false, hp: Float = -1f): Action {
-        val a = pol.decide(Perception(now, dets, 1920, 1080, hit, hp), now)
+    fun step(dets: List<Det>, hit: Boolean = false, hp: Float = -1f, marks: List<MapMark> = emptyList(), enemyMarks: List<MapMark> = emptyList()): Action {
+        val a = pol.decide(Perception(now, dets, 1920, 1080, hit, hp, marks, enemyMarks), now)
         log.add(Pair(now - t0, a))
         now += 33
         return a
@@ -199,6 +199,93 @@ fun main() {
         e2n[0] = 0.375f; e2n[1] = 0.3125f; e2n[2] = 0.625f; e2n[3] = 0.6875f; e2n[4] = 0.9f; e2n[5] = 1f
         val d3 = YoloDecode.decode(e2n, intArrayOf(1, 300, 6), inW, inH, scale, padX, padY, srcW, srcH, labels, 0.35f, 0.5f)
         check("yolo26: normalized coordinates handled", d3.size == 1 && d3[0].label == "enemy_head" && Math.abs(d3[0].cx - 0.5f) < 0.01f)
+    }
+
+    // 12) HUD button detection: static rings over a moving scene
+    run {
+        val gw = 160; val gh = 90
+        val rnd = java.util.Random(7)
+        val frames = ArrayList<IntArray>()
+        fun ring(f: IntArray, cx: Int, cy: Int, r: Int, add: Int) {
+            for (y in 0 until gh) for (x in 0 until gw) {
+                val d = Math.sqrt(((x - cx) * (x - cx) + (y - cy) * (y - cy)).toDouble())
+                if (Math.abs(d - r) < 1.2) f[y * gw + x] = Math.min(255, f[y * gw + x] + add)
+            }
+        }
+        for (t in 0 until 70) {
+            val f = IntArray(gw * gh) { 40 + rnd.nextInt(120) }       // the 3D scene: changes every frame
+            ring(f, 26, 66, 15, 90)    // move stick (bottom-left)
+            ring(f, 136, 50, 10, 90)   // fire (right, biggest)
+            ring(f, 149, 72, 7, 90)    // jump (right-bottom)
+            ring(f, 128, 76, 5, 90)    // crouch
+            frames.add(f)
+        }
+        val res = LayoutDetect.detect(frames, gw, gh)
+        fun near(name: String, x: Float, y: Float): Boolean {
+            val p = res.points[name] ?: return false
+            return Math.abs(p[0] - x / gw) < 0.04f && Math.abs(p[1] - y / gh) < 0.06f
+        }
+        check("hud: finds round buttons (" + res.circles.size + ")", res.circles.size >= 3)
+        check("hud: move stick located", near("stick", 26f, 66f))
+        check("hud: fire located (biggest on the right)", near("fire", 136f, 50f))
+        check("hud: jump located", near("jump", 149f, 72f))
+
+        // a still camera gives no information
+        val still = ArrayList<IntArray>()
+        val base = IntArray(gw * gh) { 100 }
+        for (t in 0 until 20) still.add(base.copyOf())
+        check("hud: refuses to guess when nothing moves", LayoutDetect.detect(still, gw, gh).points.isEmpty())
+    }
+
+    // 13) teammates from the minimap: friend-or-foe by bearing, regroup, blob math
+    run {
+        val tac = Tactics(mapAllies = true, squad = true, fovDeg = 80f)
+        // enemy slightly right of the crosshair (0.1 * 80deg = 8deg); a near teammate marker at 10deg -> hold fire
+        val r = Run(Skill.PRO, tac)
+        repeat(60) { r.step(listOf(enemy(0.6f, 0.5f, 0.35f)), marks = listOf(MapMark(10f, 0.4f))) }
+        check("map allies: no fire when a teammate marker lines up with the target", r.log.none { it.second.fire })
+        val r2 = Run(Skill.PRO, tac)
+        repeat(60) { r2.step(listOf(enemy(0.5f, 0.5f, 0.35f)), marks = listOf(MapMark(-70f, 0.4f))) }
+        check("map allies: fires when the teammate is elsewhere", r2.log.any { it.second.fire })
+        val r3 = Run(Skill.PRO, tac)
+        repeat(60) { r3.step(listOf(enemy(0.5f, 0.5f, 0.35f)), marks = listOf(MapMark(0f, 0.9f))) }
+        check("map allies: a far teammate does not block fire", r3.log.any { it.second.fire })
+        val r4 = Run(Skill.NORMAL, tac)
+        repeat(30) { r4.step(emptyList(), marks = listOf(MapMark(90f, 0.8f))) }
+        check("squad: regroups toward a far teammate", r4.states().contains("REGROUP"))
+        check("squad: turns toward the teammate (right) and walks", r4.log.filter { it.second.state == "REGROUP" }.all { it.second.lookDx > 0f && it.second.moveY > 0f })
+        val r5 = Run(Skill.NORMAL, tac)
+        repeat(30) { r5.step(emptyList(), marks = listOf(MapMark(90f, 0.3f))) }
+        check("squad: stays put-ish when the team is near", !r5.states().contains("REGROUP"))
+
+        // blob math: two teammate dots on a 100x100 minimap, player icon in the middle
+        val rw = 100; val rh = 100
+        val mask = BooleanArray(rw * rh)
+        fun dot(cx: Int, cy: Int, rad: Int) { for (y in cy - rad..cy + rad) for (x in cx - rad..cx + rad) if (x in 0 until rw && y in 0 until rh) mask[y * rw + x] = true }
+        dot(50, 50, 3)     // own icon
+        dot(80, 50, 3)     // teammate to the right
+        dot(50, 20, 3)     // teammate straight ahead (up)
+        val marks = MapMath.marks(MapMath.blobs(mask, rw, rh, 6, 800), rw, rh)
+        check("blobs: own icon ignored, two teammates found", marks.size == 2)
+        check("blobs: right teammate is at about +90deg", marks.any { Math.abs(it.angleDeg - 90f) < 4f })
+        check("blobs: forward teammate is at about 0deg", marks.any { Math.abs(it.angleDeg) < 4f })
+        check("angleDiff wraps around", Math.abs(MapMath.angleDiff(350f, 10f) + 20f) < 0.01f)
+    }
+
+    // 14) red enemy dots on the minimap: turn toward them; survivor slips away
+    run {
+        val r = Run(Skill.NORMAL, Tactics(mapEnemies = true))
+        repeat(30) { r.step(emptyList(), enemyMarks = listOf(MapMark(70f, 0.4f))) }
+        check("enemy dot: scans toward it (right)", r.states().contains("SCAN") && r.log.filter { it.second.state == "SCAN" }.all { it.second.lookDx > 0f })
+        val far = Run(Skill.NORMAL, Tactics(mapEnemies = true))
+        repeat(30) { far.step(emptyList(), enemyMarks = listOf(MapMark(70f, 0.95f))) }
+        check("enemy dot: ignores a far one", !far.states().contains("SCAN"))
+        val sv = Run(Skill.NORMAL, Tactics(style = Style.SURVIVOR, mapEnemies = true))
+        repeat(30) { sv.step(emptyList(), enemyMarks = listOf(MapMark(70f, 0.4f))) }
+        check("enemy dot: survivor avoids (turns away)", sv.log.filter { it.second.state == "AVOID" }.all { it.second.lookDx < 0f } && sv.states().contains("AVOID"))
+        val off = Run(Skill.NORMAL, Tactics(mapEnemies = false))
+        repeat(30) { off.step(emptyList(), enemyMarks = listOf(MapMark(70f, 0.4f))) }
+        check("enemy dot: off when disabled", !off.states().contains("SCAN"))
     }
 
     println(if (failures == 0) "\nALL POLICY CHECKS PASSED" else "\n$failures CHECK(S) FAILED")
