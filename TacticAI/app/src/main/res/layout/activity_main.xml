@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topBar" android:layout_width="match_parent" android:layout_height="?attr/actionBarSize"
+        app:title="TacticAI" app:titleTextColor="?attr/colorOnSurface"
+        android:background="?attr/colorSurface" app:layout_scrollFlags="scroll|enterAlways" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:layout_marginTop="?attr/actionBarSize" android:clipToPadding="false">
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp">
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:text="بوت اختبار محلي بيلعب بدالك — بدون إنترنت، وبدون أي تعديل في اللعبة"
+            android:textColor="?attr/colorOnSurfaceVariant" android:textSize="13sp" android:lineSpacingExtra="2dp" />
+
+        <!-- step 1: overlay permission -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" app:cardBackgroundColor="?attr/colorSurfaceVariant"
+            app:cardCornerRadius="16dp" app:cardElevation="0dp" app:strokeWidth="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="16dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="1 · إظهار الزرار فوق الشاشات التانية"
+                        android:textColor="?attr/colorOnSurface" android:textSize="15sp" android:textStyle="bold" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipOverlay" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="غير مفعّل" app:chipBackgroundColor="?attr/colorErrorContainer"
+                        android:textColor="?attr/colorOnErrorContainer" app:chipMinHeight="28dp"
+                        app:chipStartPadding="10dp" app:chipEndPadding="10dp" android:clickable="false" android:focusable="false" />
+                </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOverlayPermission" style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" android:text="افتح الإعدادات" app:icon="@drawable/ic_overlay"
+                    app:cornerRadius="12dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- step 2: accessibility -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp" app:cardBackgroundColor="?attr/colorSurfaceVariant"
+            app:cardCornerRadius="16dp" app:cardElevation="0dp" app:strokeWidth="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="16dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="2 · تفعيل خدمة الوصول"
+                        android:textColor="?attr/colorOnSurface" android:textSize="15sp" android:textStyle="bold" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipAccess" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="غير مفعّلة" app:chipBackgroundColor="?attr/colorErrorContainer"
+                        android:textColor="?attr/colorOnErrorContainer" app:chipMinHeight="28dp"
+                        app:chipStartPadding="10dp" app:chipEndPadding="10dp" android:clickable="false" android:focusable="false" />
+                </LinearLayout>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp" android:text="دي اللي بتسمح للبوت يشوف الشاشة ويلمس بدالك"
+                    android:textColor="?attr/colorOnSurfaceVariant" android:textSize="12sp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAccessibilitySettings" style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" android:text="افتح الإعدادات" app:icon="@drawable/ic_accessibility"
+                    app:cornerRadius="12dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLaunchOverlay"
+            android:layout_width="match_parent" android:layout_height="56dp"
+            android:text="شغّل الزرار العائم" android:enabled="false" android:textSize="15sp"
+            app:icon="@drawable/ic_play" app:cornerRadius="16dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnTerminal" style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:text="Shell / تيرمنال التشخيص"
+            app:icon="@drawable/ic_terminal" app:cornerRadius="12dp" />
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="24dp" android:gravity="center"
+            android:text="بعد الزرين، افتح لعبتك ودوس على الزرار العائم عشان تشغّل/توقف البوت"
+            android:textColor="?attr/colorOnSurfaceVariant" android:textSize="12sp" />
+    </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

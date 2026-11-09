@@ -1,8 +1,0 @@
-<resources>
-    <color name="bg">#0D0D1F</color>
-    <color name="accent">#8B5CF6</color>
-    <color name="accentOn">#10B981</color>
-    <color name="accentOff">#6B7280</color>
-    <color name="textMain">#F1F5F9</color>
-    <color name="textDim">#94A3B8</color>
-</resources>

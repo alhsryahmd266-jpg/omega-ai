@@ -1,0 +1,35 @@
+<resources>
+    <!-- Material 3 colour roles — one deliberately dark palette (this is a technical/dev-tool style app,
+         like many of Google's own internal tooling, not a DayNight-switching consumer app). -->
+    <color name="md_primary">#A78BFA</color>
+    <color name="md_onPrimary">#1E1033</color>
+    <color name="md_primaryContainer">#4C3A7A</color>
+    <color name="md_onPrimaryContainer">#E9DDFF</color>
+
+    <color name="md_secondary">#34D399</color>
+    <color name="md_onSecondary">#003826</color>
+    <color name="md_secondaryContainer">#00513A</color>
+    <color name="md_onSecondaryContainer">#8FF3C9</color>
+
+    <color name="md_error">#F87171</color>
+    <color name="md_onError">#4A0E0E</color>
+    <color name="md_errorContainer">#7A1F1F</color>
+    <color name="md_onErrorContainer">#FFDAD6</color>
+
+    <color name="md_background">#0B0B18</color>
+    <color name="md_onBackground">#EAE6F5</color>
+    <color name="md_surface">#15152B</color>
+    <color name="md_onSurface">#EAE6F5</color>
+    <color name="md_surfaceVariant">#1E1E38</color>
+    <color name="md_onSurfaceVariant">#B8B3CC</color>
+    <color name="md_outline">#39395C</color>
+    <color name="md_outlineVariant">#272745</color>
+
+    <!-- legacy aliases kept so earlier code referencing these still resolves -->
+    <color name="bg">@color/md_background</color>
+    <color name="accent">@color/md_primary</color>
+    <color name="accentOn">@color/md_secondary</color>
+    <color name="accentOff">#6B6B85</color>
+    <color name="textMain">@color/md_onBackground</color>
+    <color name="textDim">@color/md_onSurfaceVariant</color>
+</resources>

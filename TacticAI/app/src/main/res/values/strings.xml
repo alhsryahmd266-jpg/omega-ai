@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">TacticAI</string>
+    <string name="accessibility_service_description">تستخدمها TacticAI لالتقاط صورة الشاشة ولإرسال لمسات بديلة أثناء اختبار لعبتك، فقط وانت ضاغط على الزر العائم. مفيش قراءة لمحتوى أي تطبيق تاني.</string>
+    <string name="overlay_off">إيقاف</string>
+    <string name="overlay_on">شغّال</string>
+    <string name="notif_channel">حالة TacticAI</string>
+    <string name="notif_running">TacticAI شغّال — دوس على الفقاعة للإيقاف</string>
+</resources>
