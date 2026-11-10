@@ -60,6 +60,23 @@ jobs:
           echo "::notice title=litertlm::using $V; available: $ALL"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
+      # The public classes of the model library, printed once per build so the code that calls it is written against the real
+      # signatures (images, speculative decoding ...) and not against guesses. Never fails the build.
+      - name: Show the LiteRT-LM API
+        continue-on-error: true
+        run: |
+          V=${{ steps.lite.outputs.version }}
+          curl -fsSL "https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/$V/litertlm-android-$V.aar" -o "$RUNNER_TEMP/lm.aar"
+          mkdir -p "$RUNNER_TEMP/lm"
+          cd "$RUNNER_TEMP/lm"
+          unzip -qo ../lm.aar classes.jar
+          echo "=== classes ==="
+          unzip -l classes.jar | awk '{print $4}' | grep '^com/google/ai/edge/litertlm/' | grep -v '\$[0-9]' | sed 's/\.class$//' | head -200
+          echo "=== signatures ==="
+          for c in $(unzip -l classes.jar | awk '{print $4}' | grep '^com/google/ai/edge/litertlm/' | grep -v '\$[0-9]' | sed 's/\.class$//; s#/#.#g' | grep -E 'EngineConfig|\.Engine$|Backend|Content|Conversation|Experimental|\.Message|Sampler|Thinking|Session|Benchmark'); do
+            javap -p -classpath classes.jar "$c"
+          done 2>&1 | head -700
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14.3'

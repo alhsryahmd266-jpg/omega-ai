@@ -16,6 +16,7 @@ import android.graphics.Shader
 import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.text.Layout
@@ -276,6 +277,134 @@ object ColorPicRenderer {
 }
 
 /**
+ * The "sticker" version for chats that take stickers (WhatsApp): the words in their colour on a transparent background, no card,
+ * so in the conversation they stand there like coloured writing instead of a picture. A thin outline in a contrasting colour keeps
+ * them readable on both a light and a dark chat background. 512 x 512 WebP with transparency, which is what WhatsApp asks of a
+ * sticker (and well under its 100 KB limit).
+ */
+object StickerRenderer {
+
+    /** WhatsApp's own sticker type: a box that lists it takes the picture as a sticker */
+    const val MIME = "image/webp.wasticker"
+
+    const val SIDE = 512
+    private const val PAD = 26
+    private const val MAX_CHARS = 220
+    private const val LIMIT_BYTES = 100 * 1024
+
+    /** the outline colour that stands out from the letters: dark round light ink, white round dark ink */
+    fun outlineFor(ink: Int): Int = if (ColorMath.luminance(ink) >= 0.45f) 0xFF15151D.toInt() else 0xFFFFFFFF.toInt()
+
+    private fun paintFor(size: Float): TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = size
+        typeface = Typeface.DEFAULT_BOLD
+    }
+
+    private fun layoutFor(text: CharSequence, p: TextPaint, width: Int): StaticLayout =
+        StaticLayout.Builder.obtain(text, 0, text.length, p, width)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setLineSpacing(0f, 1.12f)
+            .setIncludePad(false)
+            .build()
+
+    fun render(raw: String, color: Int, rainbow: Boolean, highlight: Boolean): Bitmap {
+        val text = raw.trim().let { if (it.length > MAX_CHARS) it.take(MAX_CHARS - 1) + "…" else it }
+        val ink = if (color == 0) 0xFF2979FF.toInt() else ColorMath.opaque(color)
+        val marker = highlight && !rainbow && color != 0
+        val letter: (Int) -> Int = when {
+            marker -> { _ -> ColorMath.onColor(ink) }
+            rainbow -> { n -> ColorMath.rainbow(n) }
+            else -> { _ -> ink }
+        }
+        val styled = SpannableString(text)
+        var i = 0
+        var n = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            val len = Character.charCount(cp)
+            if (!Character.isWhitespace(cp)) {
+                styled.setSpan(ForegroundColorSpan(letter(n)), i, i + len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                n++
+            }
+            i += len
+        }
+
+        // the biggest letters that still fit the square
+        val inner = SIDE - 2 * PAD - if (marker) 40 else 0
+        var size = 210f
+        var layout = layoutFor(styled, paintFor(size), inner)
+        while (layout.height > inner && size > 24f) {
+            size -= 6f
+            layout = layoutFor(styled, paintFor(size), inner)
+        }
+        var textW = 0
+        for (l in 0 until layout.lineCount) textW = maxOf(textW, Math.ceil(layout.getLineWidth(l).toDouble()).toInt())
+
+        val bmp = Bitmap.createBitmap(SIDE, SIDE, Bitmap.Config.ARGB_8888)      // starts fully transparent
+        val c = Canvas(bmp)
+        val left = (SIDE - inner) / 2f
+        val top = (SIDE - layout.height) / 2f
+        if (marker) {
+            // the highlighter pen: a rounded band of the colour behind the lines
+            val bandW = textW + 44f
+            val band = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = ink }
+            c.drawRoundRect(RectF((SIDE - bandW) / 2f, top - 18f, (SIDE + bandW) / 2f, top + layout.height + 18f), 30f, 30f, band)
+        } else {
+            // outline first (the same lines, drawn as a thick stroke in the contrasting colour), the letters on top
+            val plain = layoutFor(text, paintFor(size).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = (size * 0.13f).coerceIn(5f, 16f)
+                strokeJoin = Paint.Join.ROUND
+                strokeCap = Paint.Cap.ROUND
+                this.color = outlineFor(if (rainbow) 0xFF808080.toInt() else ink)
+            }, inner)
+            c.save()
+            c.translate(left, top)
+            plain.draw(c)
+            c.restore()
+        }
+        c.save()
+        c.translate(left, top)
+        layout.draw(c)
+        c.restore()
+        return bmp
+    }
+
+    /** Writes the WebP (lossless where the phone can, smaller and lossy when it must be). @return false when it stays above the limit */
+    @Suppress("DEPRECATION")
+    private fun save(bmp: Bitmap, f: File): Boolean {
+        val tries: List<Pair<Bitmap.CompressFormat, Int>> =
+            if (Build.VERSION.SDK_INT >= 30) listOf(
+                Bitmap.CompressFormat.WEBP_LOSSLESS to 100, Bitmap.CompressFormat.WEBP_LOSSY to 90, Bitmap.CompressFormat.WEBP_LOSSY to 70
+            ) else listOf(
+                Bitmap.CompressFormat.WEBP to 92, Bitmap.CompressFormat.WEBP to 75, Bitmap.CompressFormat.WEBP to 55
+            )
+        for ((fmt, q) in tries) {
+            FileOutputStream(f).use { out -> bmp.compress(fmt, q, out) }
+            if (f.length() in 1..LIMIT_BYTES.toLong()) return true
+        }
+        return false
+    }
+
+    /** Draws the sticker and saves it next to the other pictures (old ones are cleaned up). @return the WebP file */
+    fun renderToFile(ctx: Context, text: String, color: Int, rainbow: Boolean, highlight: Boolean): File {
+        val d = NeonRenderer.dir(ctx)
+        val f = File(d, "stk_${System.currentTimeMillis()}.webp")
+        val bmp = render(text, color, rainbow, highlight)
+        try {
+            if (!save(bmp, f)) throw java.io.IOException("the sticker is bigger than ${LIMIT_BYTES / 1024} KB")
+        } finally {
+            bmp.recycle()
+        }
+        d.listFiles { x -> x.isFile && x.name.endsWith(".webp") }
+            ?.sortedByDescending { it.lastModified() }
+            ?.drop(12)
+            ?.forEach { it.delete() }
+        return f
+    }
+}
+
+/**
  * Hands the neon pictures to other apps. The app that receives the picture gets a temporary read grant for that one file
  * (the provider is not exported and shares nothing else).
  */
@@ -293,12 +422,12 @@ class NeonProvider : ContentProvider() {
     private fun fileFor(uri: Uri): File? {
         val ctx = context ?: return null
         val name = uri.lastPathSegment ?: return null
-        if (!Regex("[A-Za-z0-9_.-]+\\.png").matches(name)) return null
+        if (!Regex("[A-Za-z0-9_.-]+\\.(png|webp)").matches(name)) return null
         val f = File(NeonRenderer.dir(ctx), name)
         return if (f.isFile) f else null
     }
 
-    override fun getType(uri: Uri): String? = "image/png"
+    override fun getType(uri: Uri): String? = if (uri.lastPathSegment?.endsWith(".webp") == true) "image/webp" else "image/png"
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
         val f = fileFor(uri) ?: throw FileNotFoundException(uri.toString())
