@@ -192,6 +192,7 @@ class MainActivity : Activity() {
         col.addView(run)
         col.addView(note("بعد الموافقة على تسجيل الشاشة هيفتح اللعبة، ادخل الماتش واضغط ▶ START على الـ HUD اللي فوق الشاشة. ⏸ PAUSE بيوقّف مؤقتًا و■ STOP بينهي ويطلّع تقرير."))
         col.addView(btn("عرض آخر تقرير") { showReport() })
+        col.addView(btn("تشخيص المشاكل (ابعتلي النتيجة)") { showDiagnostics() })
 
         col.addView(title("1) الصلاحيات"))
         col.addView(btn("Shizuku (التحكم باللمس - الأفضل)") { askShizuku() })
@@ -223,6 +224,7 @@ class MainActivity : Activity() {
         col.addView(btn("استيراد نموذج .tflite") { pickFile(REQ_MODEL) })
         col.addView(btn("استيراد ملف labels.txt (اختياري)") { pickFile(REQ_LABELS) })
         col.addView(btn("قياس سرعة النموذج على جهازك") { benchmark() })
+        col.addView(btn("تصنيف اللقطات على الهاتف (لتدريب نموذجك)") { startActivity(Intent(this, LabelActivity::class.java)) })
         etLabels = field("أسماء الكلاسات مفصولة بفاصلة", cfg.labels, false)
         col.addView(etLabels)
         etConf = field("حدّ الثقة (0.35)", cfg.conf.toString(), true)
@@ -403,6 +405,32 @@ class MainActivity : Activity() {
         cfg.layoutCalibrated = fresh.layoutCalibrated
         if (fresh.modelFile.isNotEmpty()) cfg.modelFile = fresh.modelFile
         if (fresh.labelsFile.isNotEmpty()) cfg.labelsFile = fresh.labelsFile
+    }
+
+    private fun showDiagnostics() {
+        toast("بيفحص كل حاجة (ممكن ياخد 15 ثانية)...")
+        Thread {
+            val text = try { Diagnostics.collect(this) } catch (t: Throwable) { "diagnostics failed: " + t.javaClass.simpleName + " " + t.message }
+            runOnUiThread {
+                val tv = TextView(this)
+                tv.text = text
+                tv.textSize = 11f
+                tv.setPadding(dp(12), dp(8), dp(12), dp(8))
+                val sv = ScrollView(this)
+                sv.addView(tv)
+                AlertDialog.Builder(this)
+                    .setTitle("تشخيص GameBot")
+                    .setView(sv)
+                    .setPositiveButton("مشاركة") { _, _ ->
+                        val i = Intent(Intent.ACTION_SEND)
+                        i.type = "text/plain"
+                        i.putExtra(Intent.EXTRA_TEXT, text)
+                        startActivity(Intent.createChooser(i, "GameBot diagnostics"))
+                    }
+                    .setNegativeButton("إغلاق", null)
+                    .show()
+            }
+        }.start()
     }
 
     private fun startPairing() {

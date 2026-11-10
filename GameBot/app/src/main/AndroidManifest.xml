@@ -50,6 +50,12 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
 
+        <activity
+            android:name=".LabelActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="sensorLandscape" />
+
         <service
             android:name=".BotService"
             android:exported="false"

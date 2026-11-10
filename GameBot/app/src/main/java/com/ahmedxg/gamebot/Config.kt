@@ -74,7 +74,7 @@ class Config {
     var backend = Backend.AUTO
     var modelFile = ""
     var labelsFile = ""
-    var labels = "enemy,enemy_head"
+    var labels = "enemy,enemy_head,ally"
     var conf = 0.35f
     var iou = 0.5f
     var threads = 4
