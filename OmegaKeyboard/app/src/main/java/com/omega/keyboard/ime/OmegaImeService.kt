@@ -556,6 +556,23 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         main.post { try { requestHideSelf(0) } catch (_: Throwable) {} }
     }
 
+    /** Brings the keyboard back after screen translation, when a field is still waiting for text. Safe from any thread. */
+    fun showKeyboard() {
+        main.post {
+            try {
+                if (currentInputConnection == null) return@post
+                if (Build.VERSION.SDK_INT >= 28) {
+                    requestShowSelf(InputMethodManager.SHOW_IMPLICIT)
+                } else {
+                    @Suppress("DEPRECATION")
+                    (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                        .showSoftInputFromInputMethod(window.window?.attributes?.token, InputMethodManager.SHOW_IMPLICIT)
+                }
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ keys
 
     override fun onKey(kind: KeyKind, key: Key) {
@@ -1115,6 +1132,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val text = raw.trim()
         if (text.isEmpty()) { flash("اكتب الكلام الأول وبعدين دوس زرار اللون", true); return }
         val fmt = codeFormat()
+        android.util.Log.d("OmegaPic", "send: field=${editor?.packageName} takesPictures=${takesPictures()} types=${acceptedImageTypes(editor).toList()} codes=$fmt")
         if (!takesPictures() && fmt != ColorCodes.Format.NONE) { sendWithCodes(text, wasSelection, fmt); return }
         sendAsPicture(text, wasSelection)
     }
@@ -1169,6 +1187,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
                 AppLog.e("colourpic", "the field refused the picture", t)
                 false
             }
+            android.util.Log.d("OmegaPic", "commitContent accepted=$ok")
             if (ok) {
                 if (prefs.picAutoSend && PreviewSend.canPress()) {
                     flash("اتحوّلت لصورة ملونة وبتتبعت ✓")

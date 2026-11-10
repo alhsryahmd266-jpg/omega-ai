@@ -203,6 +203,17 @@ pic pic-marker     "المستند مهم جدا" 0xFFFFEA00 false true clean
 pic pic-long       "ده كلام طويل شوية عشان نشوف الصورة بتتصرف إزاي لما الجملة تبقى كبيرة وتحتاج أكتر من سطر ونص وتتحط في كارت واحد مرتب" 0xFF00C853 false false clean
 pic pic-neon       "نيون مضيء" 0xFFFF2BD6 false false neon
 
+# --- coloured send end to end: type in colour, press the round colour button, a picture lands in a box that takes pictures
+scenario kb-csend s:theme=light s:last_lang=en i:text_color=0xFFFF1744
+focus
+$KB type "good morning" 2>&1 | tee -a "$LOG"; sleep 1.2
+shot kb-csend-1
+adb logcat -c
+$KB strip csend 2>&1 | tee -a "$LOG"; sleep 3.5
+shot kb-csend-2
+say "csend log: $(adb logcat -d -s OmegaPic:D OmegaSend:D 2>/dev/null | tr -d '\r' | tail -4 | tr '\n' ' ')"
+say "csend field after: [$($KB text 2>/dev/null)]"
+
 # --- resizing by hand: handles, drag the top edge up, the right edge in, the left edge in, done, then typing in the new size
 scenario kb-resize s:theme=light s:last_lang=ar
 focus
@@ -231,7 +242,7 @@ check() {
 check type-normal "اعمل كل اللي قلتلك عليه" s:theme=light s:last_lang=ar
 check type-tall   "اضغط على حرف يطلع حرف تاني" s:theme=light s:last_lang=ar i:height_pct=165
 check type-short  "ضصثقفغعهخحج شسيبلاتنمكط ذءؤرىةوزظد" s:theme=light s:last_lang=ar i:height_pct=60
-check type-narrow-left  "hello world how are you" s:theme=light s:last_lang=en i:width_pct=65 i:kb_offset=0
+check type-narrow-left  "Hello world how are you" s:theme=light s:last_lang=en i:width_pct=65 i:kb_offset=0
 check type-narrow-right "اللوحة فيها غلط" s:theme=light s:last_lang=ar i:width_pct=65 i:kb_offset=100
 
 # --- landscape (last: it turns the phone sideways)

@@ -189,6 +189,19 @@ def cmd_tool(name):
     return 1
 
 
+def cmd_strip(name):
+    """taps a button of the suggestion strip by its tag (csend, toggle, t:<tool> ...)"""
+    for _attempt in range(3):
+        _k, strip, _t = ask_dump()
+        pos = strip.get(name)
+        if pos:
+            adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+            return 0
+        time.sleep(1.0)
+    print(f"strip button {name} not found", file=sys.stderr)
+    return 1
+
+
 def cmd_tab(index):
     """taps tab <index> of the appearance sheet (0 colours, 1 themes, 2 size and effects)"""
     _k, _s, sheet = wait_dump(need="sheet")
@@ -258,6 +271,8 @@ def main(argv):
         return cmd_pos(argv[2])
     if cmd == "tool":
         return cmd_tool(argv[2])
+    if cmd == "strip":
+        return cmd_strip(argv[2])
     if cmd == "tab":
         return cmd_tab(argv[2])
     if cmd == "target":

@@ -309,11 +309,26 @@ object CoreTests {
         val sys = LlmPrompts.replySystem("عفوي ومختصر")
         check("system prompt carries my style", sys.contains("عفوي ومختصر"))
         check("system prompt: I am the owner and every message gets an answer",
-            sys.contains("You are me") && sys.contains("Always answer the latest message") && !sys.contains(LlmPrompts.NO_REPLY)) { sys }
+            sys.contains("You are me") && sys.contains("Answer what they actually wrote") && !sys.contains(LlmPrompts.NO_REPLY)) { sys }
+        check("system prompt: stays on topic, never invents, length follows the message",
+            sys.contains("Never change the subject") && sys.contains("Do not invent facts") && sys.contains("match what they wrote") &&
+                sys.contains("Never cut an answer short")) { sys }
+        check("system prompt: the old 'short' default is not asked for any more",
+            !LlmPrompts.replySystem(LlmPrompts.DEFAULT_PERSONA).contains("ومختصر") &&
+                !LlmPrompts.replySystem("أسلوبي عفوي ومحترم ومختصر، وبرد بنفس لهجة اللي بيكلمني.").contains("ومختصر")) { sys }
         val msgs = listOf(ChatMessage("Hi", Side.THEM, 0, 1, 0), ChatMessage("Where are you?", Side.THEM, 2, 3, 1), ChatMessage("home", Side.ME, 4, 5, 2))
         val user = LlmPrompts.replyUser(msgs)
         check("consecutive messages are merged into one turn", user.contains("Them: Hi\nWhere are you?") && user.contains("Me: home")) { user }
         check("reply prompt asks for the next message", LlmPrompts.replyUser(msgs).trimEnd().endsWith("Write my next message."))
+        val asked = listOf(
+            ChatMessage("Hi", Side.THEM, 0, 1, 0), ChatMessage("Hi, tell me", Side.ME, 2, 3, 1),
+            ChatMessage("عندك طماطم؟", Side.THEM, 4, 5, 2), ChatMessage("وبكام الكيلو؟", Side.THEM, 6, 7, 3)
+        )
+        val askedPrompt = LlmPrompts.replyUser(asked)
+        check("their newest message is repeated on its own at the end, and the reply is asked for last",
+            askedPrompt.contains("Them: عندك طماطم؟\nوبكام الكيلو؟") &&
+                askedPrompt.substringAfter("Their latest message").contains("عندك طماطم؟\nوبكام الكيلو؟") &&
+                askedPrompt.trimEnd().endsWith("Write my reply now.")) { askedPrompt }
         val longMsg = "سؤال " + "كلام ".repeat(200) + "هل انت جاي؟"
         val longPrompt = LlmPrompts.replyUser(listOf(ChatMessage(longMsg, Side.THEM, 0, 1, 0)))
         check("a long message keeps its beginning and its end", longPrompt.contains("سؤال") && longPrompt.contains("هل انت جاي؟")) { longPrompt.takeLast(120) }

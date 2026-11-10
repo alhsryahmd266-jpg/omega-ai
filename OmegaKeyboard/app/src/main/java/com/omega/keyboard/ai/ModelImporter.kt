@@ -51,14 +51,13 @@ object ModelImporter {
         val dir = modelsDir(app)
         val free = try { StatFs(dir.path).availableBytes } catch (_: Throwable) { Long.MAX_VALUE }
         if (total in 1 until ModelStore.MIN_BYTES) return "الملف ده صغير أوي (${mb(total)}) ومش شكله ملف نموذج"
-        // the old copy is deleted after the new one is complete, so both must fit; the old one can be removed first if it is the only way
-        val old = dir.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
-        if (total > 0 && free + old < total + 64L * 1024 * 1024) {
-            return "المساحة مش كفاية. محتاج ${mb(total)} فاضيين، والمتاح ${mb(free + old)}. امسح حاجات من التليفون أو استخدم الملف من التنزيلات بدون نسخ."
+        // the models that are already here stay (the user switches between them): the new one needs room of its own
+        if (total > 0 && free < total + 64L * 1024 * 1024) {
+            return "المساحة مش كفاية. محتاج ${mb(total)} فاضيين، والمتاح ${mb(free)}. احذف نموذج من قايمة النماذج، أو امسح حاجات من التليفون، أو استخدم الملف من التنزيلات بدون نسخ."
         }
         cancelFlag = false
         state = State(true, 0, total, null, false, name)
-        val t = Thread({ copy(app, uri, name, total, free < total + 64L * 1024 * 1024) }, "omega-model-copy")
+        val t = Thread({ copy(app, uri, name, total) }, "omega-model-copy")
         t.isDaemon = true
         t.start()
         return null
@@ -66,15 +65,11 @@ object ModelImporter {
 
     fun cancel() { cancelFlag = true }
 
-    private fun copy(app: Context, uri: Uri, name: String, total: Long, mustDeleteOldFirst: Boolean) {
+    private fun copy(app: Context, uri: Uri, name: String, total: Long) {
         val dir = modelsDir(app)
         val dest = File(dir, name)
         val part = File(dir, "$name.part")
         try {
-            if (mustDeleteOldFirst) {
-                // not enough room for two copies: the current model goes first
-                dir.listFiles()?.filter { it.isFile && it.name != part.name }?.forEach { it.delete() }
-            }
             val input = app.contentResolver.openInputStream(uri) ?: throw java.io.IOException("مقدرتش أفتح الملف")
             var done = 0L
             input.use { ins ->
@@ -101,7 +96,6 @@ object ModelImporter {
             if (total > 0 && done != total) throw java.io.IOException("النسخ ما اكتملش (${mb(done)} من ${mb(total)})")
             if (dest.exists()) dest.delete()
             if (!part.renameTo(dest)) throw java.io.IOException("مقدرتش أنقل الملف لمكانه النهائي")
-            dir.listFiles()?.filter { it.isFile && it.name != dest.name }?.forEach { it.delete() }
             Prefs.get(app).modelPath = dest.absolutePath
             Llm.unload()      // the next use loads the new file
             AppLog.d("model", "imported ${dest.name} (${mb(done)})")

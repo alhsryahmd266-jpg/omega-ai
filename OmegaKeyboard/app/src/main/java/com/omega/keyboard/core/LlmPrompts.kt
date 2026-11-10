@@ -3,51 +3,84 @@ package com.omega.keyboard.core
 /** Prompt builders and output parsers for the local model. Pure, so the parsing rules are unit-tested. */
 object LlmPrompts {
     const val NO_REPLY = "NO_REPLY"
-    const val DEFAULT_PERSONA = "أسلوبي عفوي ومحترم ومختصر، وبرد بنفس لهجة اللي بيكلمني."
+    const val DEFAULT_PERSONA = "عفوي ومحترم، وبرد بنفس لهجة اللي بيكلمني."
+
+    /** what the setting held before replies were allowed to be as long as the question needs; still read as "no style chosen" */
+    private const val OLD_DEFAULT_PERSONA = "أسلوبي عفوي ومحترم ومختصر، وبرد بنفس لهجة اللي بيكلمني."
 
     // ------------------------------------------------------------------ chat replies
 
     /**
      * The model is "me": it writes the next message of the phone's owner in his own chat. Every message gets an answer
      * (a person who chats all day answers everything), so there is no "say nothing" option.
+     *
+     * The rules aim at the two ways a small model goes wrong in a chat: it drifts off the topic into friendly filler
+     * (so: answer what was asked, never change the subject) and it clips every answer to a few words (so: the length follows
+     * the message, and a real question gets a full answer).
      */
     fun replySystem(persona: String): String {
+        val about = persona.trim().let { if (it == OLD_DEFAULT_PERSONA) DEFAULT_PERSONA else it }
         val sb = StringBuilder()
         sb.append("You are me, the owner of this phone, chatting on my own account. Write the next message I would send, as myself, in the first person.\n")
-        sb.append("Rules:\n")
-        sb.append("- Reply in the same language and dialect the other person writes in (for example Egyptian Arabic in Arabic script).\n")
-        sb.append("- Sound like a real person texting: short (usually one or two sentences), natural, no lists, no markdown, no quotation marks around the message.\n")
-        sb.append("- Always answer the latest message, whatever it is (a question, a greeting, an emoji, \"ok\", a thank-you): a short natural reply that keeps the conversation going, the way a real person would. A short question back is fine when it fits.\n")
+        sb.append("In the conversation, \"Them\" is the person I am chatting with and \"Me\" is what I already wrote.\n")
+        sb.append("How to reply:\n")
+        sb.append("- Answer what they actually wrote, on their topic. If they asked something, answer it directly in the first sentence; if they asked several things, answer every one of them; if they told me news or a feeling, react to that specifically. Never change the subject and never bring up something nobody mentioned.\n")
+        sb.append("- Use what is in the conversation (names, numbers, places, times, what was said before) so the reply fits it.\n")
+        sb.append("- Do not invent facts, prices, addresses, plans or promises that are not in the conversation or in the notes about me below. If the answer needs something I do not know, say so naturally, or ask one short, specific question about exactly that.\n")
+        sb.append("- Write in the same language and dialect they use (Egyptian Arabic in Arabic script for Egyptian Arabic, English for English, and so on), without mixing languages.\n")
+        sb.append("- Length: match what they wrote. A greeting, \"ok\", a thank-you or an emoji gets one short line. A real question, a story or a long message gets a complete, helpful answer of two to five sentences. Never cut an answer short just to be brief.\n")
+        sb.append("- Sound like a real person texting: natural and warm, no lists, no markdown, no quotation marks around the message, no sign-off.\n")
         sb.append("- Never say you are an AI, a model, a bot or an assistant, never say that someone else is writing for me, and never explain what you are doing.\n")
-        sb.append("- Do not invent facts, plans, prices, addresses or promises that are not in the conversation. If you do not know, answer briefly and honestly or ask one short question.\n")
         sb.append("- Output ONLY the message text.\n")
-        if (persona.isNotBlank()) sb.append("\nMy style: ").append(persona.trim()).append('\n')
+        if (about.isNotBlank()) sb.append("\nAbout me and how I write (notes from me, to be used as they are): ").append(about).append('\n')
         return sb.toString()
     }
 
+    private fun shorten(text: String, max: Int): String =
+        if (text.length > max) text.take(max / 3) + " … " + text.takeLast(max - max / 3) else text
+
     /** The conversation as the model reads it: consecutive messages of one side merged into one turn, newest last. */
-    private fun conversation(messages: List<ChatMessage>): String {
-        val turns = ArrayList<Pair<Side, StringBuilder>>()
-        for (m in messages.takeLast(24)) {
+    private fun foldTurns(messages: List<ChatMessage>): List<Pair<Side, String>> {
+        val folded = ArrayList<Pair<Side, StringBuilder>>()
+        for (m in messages.takeLast(30)) {
             val side = if (m.side == Side.UNKNOWN) Side.THEM else m.side
-            val full = m.text.trim()
-            val t = if (full.length > 500) full.take(200) + " … " + full.takeLast(300) else full
-            if (turns.isNotEmpty() && turns.last().first == side) turns.last().second.append('\n').append(t)
-            else turns.add(side to StringBuilder(t))
+            val t = shorten(m.text.trim(), 500)
+            if (folded.isNotEmpty() && folded.last().first == side) folded.last().second.append('\n').append(t)
+            else folded.add(side to StringBuilder(t))
         }
+        return folded.map { it.first to it.second.toString() }
+    }
+
+    private fun transcript(turns: List<Pair<Side, String>>): String {
         val sb = StringBuilder("Conversation so far (oldest first):\n")
         var used = 0
         val kept = ArrayList<String>()
         for (t in turns.asReversed()) {
             val line = (if (t.first == Side.ME) "Me: " else "Them: ") + t.second
-            if (used + line.length > 2200 && kept.isNotEmpty()) break
+            if (used + line.length > 3200 && kept.isNotEmpty()) break
             kept.add(line); used += line.length
         }
         kept.asReversed().forEach { sb.append(it).append('\n') }
         return sb.toString()
     }
 
-    fun replyUser(messages: List<ChatMessage>): String = conversation(messages) + "\nWrite my next message.\n"
+    /**
+     * The conversation, then their newest message once more on its own: a small model keeps to a topic far better when the
+     * thing to answer is the last thing it reads.
+     */
+    fun replyUser(messages: List<ChatMessage>): String {
+        val turns = foldTurns(messages)
+        val sb = StringBuilder(transcript(turns))
+        val last = turns.lastOrNull()
+        if (last != null && last.first == Side.THEM) {
+            sb.append("\nTheir latest message. This is what I am answering now, so my reply must respond to it:\n")
+            sb.append(shorten(last.second, 600)).append('\n')
+            sb.append("\nWrite my reply now.\n")
+        } else {
+            sb.append("\nWrite my next message.\n")
+        }
+        return sb.toString()
+    }
 
     private val LABEL_PREFIX = Regex("^\\s*(?:me|reply|my reply|message|أنا|انا|الرد|رد)\\s*[:：]\\s*", RegexOption.IGNORE_CASE)
     private val STOP_AT = Regex("(?m)^\\s*(?:them|me|أنا|انا|هو|هي)\\s*[:：]", RegexOption.IGNORE_CASE)

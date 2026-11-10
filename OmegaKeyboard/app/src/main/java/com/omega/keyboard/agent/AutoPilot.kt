@@ -405,14 +405,17 @@ object AutoPilot {
                     if (Llm.loading) publish("النموذج بيتحمّل، ثواني...")
                     val system = LlmPrompts.replySystem(prefs.apPersona)
                     val user = LlmPrompts.replyUser(parsed.messages)
+                    // what the model is given, so a reply that misses the point can be traced to what it read
+                    AppLog.d("autopilot", "reading: " + user.replace('\n', '⏎').takeLast(500))
                     var tries = 0
                     var modelFailed = false
                     while (reply == null && tries < 3 && !stopFlag) {
                         tries++
                         val raw = try {
+                            // a calm temperature keeps a small model on the subject; the retries loosen up only if the first try was unusable
                             Llm.generate(
-                                ctx, system, user, maxTokens = 180, temperature = if (tries == 1) 0.8f else 1.0f,
-                                topK = 40, topP = 0.95f, timeoutMs = 150_000
+                                ctx, system, user, maxTokens = 320, temperature = if (tries == 1) 0.6f else 0.85f,
+                                topK = 40, topP = 0.9f, timeoutMs = 240_000
                             )
                         } catch (e: Exception) {
                             if (stopFlag) break

@@ -18,12 +18,24 @@ import java.io.File
  */
 object ModelDownloader {
 
+    /** a model that can be downloaded in the app; [approxBytes] is only used to check the free space before the real size is known */
+    class Entry(val title: String, val note: String, val sizeText: String, val repo: String, val file: String, val approxBytes: Long) {
+        val repoUrl: String get() = "https://huggingface.co/$repo"
+        val fileUrl: String get() = "$repoUrl/resolve/main/$file"
+    }
+
+    val E2B = Entry("Gemma 4 E2B", "الأسرع", "٢.٦ جيجا", "litert-community/gemma-4-E2B-it-litert-lm", "gemma-4-E2B-it.litertlm", 2_600_000_000L)
+    val E4B = Entry("Gemma 4 E4B", "أذكى وأبطأ شوية", "٣.٧ جيجا", "litert-community/gemma-4-E4B-it-litert-lm", "gemma-4-E4B-it.litertlm", 3_700_000_000L)
+    val CATALOG = listOf(E2B, E4B)
+
+    /** the entry a download of this file name belongs to */
+    fun entryFor(fileName: String): Entry =
+        CATALOG.firstOrNull { fileName.startsWith(it.file.removeSuffix(".litertlm")) } ?: E2B
+
     const val REPO_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm"
     const val FILE_NAME = "gemma-4-E2B-it.litertlm"
     const val FILE_URL = "$REPO_URL/resolve/main/$FILE_NAME"
 
-    /** the file is about 2.59 GB; this is only used to check the free space before the real size is known */
-    private const val APPROX_BYTES = 2_600_000_000L
     private const val SPARE_BYTES = 200L * 1024 * 1024
 
     enum class Kind { NONE, WAITING, RUNNING, PAUSED, FAILED, DONE }
@@ -43,8 +55,8 @@ object ModelDownloader {
     private fun freeBytes(dir: File): Long = try { StatFs(dir.path).availableBytes } catch (_: Throwable) { Long.MAX_VALUE }
 
     /** a file name that does not clash with the model that is in use right now */
-    private fun pickName(prefs: Prefs, dir: File): String {
-        val names = listOf(FILE_NAME, "gemma-4-E2B-it-2.litertlm")
+    private fun pickName(prefs: Prefs, dir: File, entry: Entry): String {
+        val names = listOf(entry.file, entry.file.removeSuffix(".litertlm") + "-2.litertlm")
         for (n in names) if (!File(dir, n).exists()) return n
         // both are taken: the one that is not the active model is an old leftover
         val victim = names.firstOrNull { File(dir, it).absolutePath != prefs.modelPath } ?: names[1]
@@ -53,7 +65,7 @@ object ModelDownloader {
     }
 
     /** @return an error text, or null when the download has been queued */
-    fun start(ctx: Context, wifiOnly: Boolean): String? {
+    fun start(ctx: Context, wifiOnly: Boolean, entry: Entry = E2B): String? {
         val app = ctx.applicationContext
         val prefs = Prefs.get(app)
         val m = manager(app) ?: return "مدير التنزيلات مش شغال على التليفون ده. افتح الصفحة ونزّل الملف من المتصفح."
@@ -64,18 +76,18 @@ object ModelDownloader {
             return null
         }
         val dir = dir(app) ?: return "مساحة التخزين مش متاحة دلوقتي"
-        if (freeBytes(dir) < APPROX_BYTES + SPARE_BYTES) {
-            return "المساحة مش كفاية. محتاج حوالي ٣ جيجا فاضيين عشان النموذج يتنزّل. امسح حاجات من التليفون وجرّب تاني."
+        if (freeBytes(dir) < entry.approxBytes + SPARE_BYTES) {
+            return "المساحة مش كفاية. محتاج حوالي ${entry.sizeText} فاضيين عشان ${entry.title} يتنزّل. احذف نموذج من قايمة النماذج أو امسح حاجات من التليفون وجرّب تاني."
         }
         // a failed attempt is cleaned up first (this also deletes its half-written file)
         if (prefs.dlId >= 0) {
             try { m.remove(prefs.dlId) } catch (_: Throwable) {}
             prefs.dlId = -1L
         }
-        val name = pickName(prefs, dir)
+        val name = pickName(prefs, dir, entry)
         return try {
-            val req = DownloadManager.Request(Uri.parse(FILE_URL))
-                .setTitle("نموذج Omega (Gemma)")
+            val req = DownloadManager.Request(Uri.parse(entry.fileUrl))
+                .setTitle("نموذج Omega (${entry.title})")
                 .setDescription("تنزيل نموذج الذكاء الاصطناعي للكيبورد")
                 .setMimeType("application/octet-stream")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
@@ -165,9 +177,7 @@ object ModelDownloader {
             AppLog.d("model", "downloaded file is not usable: $err")
             return false
         }
-        // older copies are not needed any more: earlier downloads in this folder and files that were copied in
-        dir.listFiles()?.filter { it.isFile && it.name.endsWith(".litertlm", true) && it.absolutePath != f.absolutePath }?.forEach { it.delete() }
-        if (!ModelImporter.state.running) ModelImporter.modelsDir(app).listFiles()?.filter { it.isFile }?.forEach { it.delete() }
+        // the other models stay: the user switches between them in the model screen and deletes what he does not want
         prefs.dlId = -1L
         AppLog.d("model", "downloaded model is active: ${f.name}")
         return true

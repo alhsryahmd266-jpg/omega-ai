@@ -11,11 +11,15 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.text.InputType
+import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
+import android.graphics.BitmapFactory
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.ai.ModelDownloader
 import com.omega.keyboard.ai.ModelStore
@@ -51,7 +55,19 @@ class MainActivity : BaseActivity() {
         // typing test
         col.addView(UiKit.section(this, p, "جرّب الكيبورد"))
         val test = UiKit.card(this, p)
-        val field = EditText(this).apply {
+        // the picture the keyboard's coloured send hands over lands here (the box takes pictures like a chat box does)
+        val gotNote = UiKit.label(this, "", 13f, p.ok, true).apply { visibility = View.GONE; setPadding(0, 0, 0, dp(6)) }
+        val gotPic = ImageView(this).apply {
+            visibility = View.GONE
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_START
+            maxHeight = dp(110)
+            setPadding(0, 0, 0, dp(8))
+        }
+        test.addView(gotNote)
+        test.addView(gotPic, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val field = PictureField(this).apply {
+            onPicture = { uri, mime -> showPicture(uri, mime, gotNote, gotPic) }
             hint = "اكتب هنا..."
             setHintTextColor(p.sub)
             setTextColor(p.text)
@@ -76,6 +92,7 @@ class MainActivity : BaseActivity() {
         tip("ترجمة الشاشة", "زر \"الشاشة\" بيخفي الكيبورد ويترجم كل نص على الشاشة من أي لغة للعربي (أو أي لغة تختارها من الإعدادات). يدوي: دوس مرة وهيترجم اللي ظاهر، ولو مرّرت لحاجة جديدة دوس \"ترجم\" على الشريط الصغير تاني.")
         tip("ترجمة اللي بتكتبه", "زر \"ترجم\": اكتب بالعربي واضغط \"ترجم\" والنص يتحوّل للغة اللي تختارها. فيه زر تراجع.")
         tip("الصوت", "زر الميكروفون على الكيبورد بيكتب اللي بتقوله (إملاء). مفيش أوامر صوتية.")
+        tip("الكتابة الملونة", "اختار لون من زرار \"المظهر\"، اكتب، وبعدين دوس الدايرة الملوّنة فوق الكيبورد (مش زرار الإرسال بتاع التطبيق). الكلام بيتحوّل لصورة ملونة بتتحط في المحادثة وبتتبعت، وبتوصل للطرف التاني ملونة. التطبيقات بتمسح لون النص العادي، عشان كده اللون بيوصل كصورة مش كنص. لو التطبيق مبيقبلش صور، الكيبورد بيفتح قايمة المشاركة. الألعاب اللي بتفهم أكواد الألوان ليها اختيار في الإعدادات.")
         col.addView(how)
 
         col.addView(UiKit.group(
@@ -92,6 +109,23 @@ class MainActivity : BaseActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handlePage(intent)
+    }
+
+    /** a picture arrived in the test box: shown above it, and logged so the emulator test can tell */
+    private fun showPicture(uri: Uri, mime: String, note: TextView, view: ImageView): Boolean {
+        val bmp = try {
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+        } catch (t: Throwable) {
+            Log.e("OmegaPic", "could not read the picture", t)
+            null
+        }
+        if (bmp == null) return false
+        view.setImageBitmap(bmp)
+        view.visibility = View.VISIBLE
+        note.text = "وصلت صورة ملونة ✓ (${bmp.width}×${bmp.height})"
+        note.visibility = View.VISIBLE
+        Log.d("OmegaPic", "received $mime ${bmp.width}x${bmp.height}")
+        return true
     }
 
     private fun handlePage(i: Intent?) {

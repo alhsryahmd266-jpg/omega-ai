@@ -135,6 +135,19 @@ class ModelActivity : BaseActivity() {
         ))
         h.addView(status)
 
+        // ---- the models on the phone: switch between them or delete one
+        val models = ModelStore.installed(this)
+        if (models.size >= 2) {
+            h.addView(UiKit.section(this, p, "النماذج اللي على تليفونك"))
+            h.addView(UiKit.group(this, p, *models.map { f ->
+                val active = f.absolutePath == prefs.modelPath
+                UiKit.valueRow(this, p, ModelStore.title(f), if (active) "شغّال ✓" else "استخدمه", "${ModelImporter.mb(f.length())} — ${f.name}") { modelActions(f) }
+            }.toTypedArray()))
+            h.addView(UiKit.label(this, "E2B أسرع وبياخد ذاكرة أقل. E4B أذكى وبيفهم السياق أحسن بس أبطأ شوية. جرّب الاتنين واختار اللي يريحك.", 12.5f, p.sub).apply {
+                setPadding(dp(24), dp(8), dp(24), 0)
+            })
+        }
+
         // ---- copy in progress
         if (copy.running) {
             val c = UiKit.card(this, p)
@@ -291,7 +304,7 @@ class ModelActivity : BaseActivity() {
             }
             failed -> {
                 c.addView(UiKit.statusRow(this, p, -1, "التنزيل ما اتمّش", st.message))
-                c.addView(buttonRow(true, "حاول تاني" to { confirmDownload() }, "إلغاء" to {
+                c.addView(buttonRow(true, "حاول تاني" to { confirmDownload(ModelDownloader.entryFor(prefs.dlName)) }, "إلغاء" to {
                     ModelDownloader.cancel(this)
                     lastDl = ModelDownloader.Kind.NONE
                     render()
@@ -299,9 +312,14 @@ class ModelActivity : BaseActivity() {
             }
             else -> {
                 c.addView(UiKit.label(
-                    this, "نزّل النموذج (Gemma 4 E2B، حوالي ٢.٦ جيجا) جوه التطبيق مباشرةً من غير ما تدوّر على ملفات. يفضّل واي فاي.", 13.5f, p.sub
+                    this, "نزّل النموذج جوه التطبيق مباشرةً من غير ما تدوّر على ملفات. يفضّل واي فاي. اللي نزّلته قبل كده بيفضل موجود وتبدّل بينهم.", 13.5f, p.sub
                 ))
-                c.addView(UiKit.button(this, p, if (hasModel) "تنزيل تاني" else "تنزيل النموذج") { confirmDownload() })
+                val have = ModelStore.installed(this).map { it.name.lowercase() }
+                for ((i, e) in ModelDownloader.CATALOG.withIndex()) {
+                    c.addView(UiKit.spacer(this, 8f))
+                    val label = "${e.title} — ${e.note} (${e.sizeText})" + if (have.contains(e.file.lowercase())) "  ✓ موجود" else ""
+                    c.addView(UiKit.button(this, p, label, filled = !hasModel && i == 0) { confirmDownload(e) })
+                }
             }
         }
         // the link: to send to somebody else, or to download in a browser
@@ -317,22 +335,22 @@ class ModelActivity : BaseActivity() {
         h.addView(c)
     }
 
-    private fun confirmDownload() {
+    private fun confirmDownload(entry: ModelDownloader.Entry = ModelDownloader.E2B) {
         AlertDialog.Builder(this)
-            .setTitle("تنزيل النموذج")
-            .setMessage("الملف حوالي ٢.٦ جيجا (Gemma 4 E2B من Hugging Face). بينزل في الخلفية ومعاه إشعار، وبيتفعّل لوحده لما يخلص. يفضّل واي فاي عشان باقة النت.")
-            .setPositiveButton("واي فاي بس") { _, _ -> startDownload(true) }
-            .setNeutralButton("أي شبكة") { _, _ -> startDownload(false) }
+            .setTitle("تنزيل ${entry.title}")
+            .setMessage("الملف حوالي ${entry.sizeText} (${entry.title} من Hugging Face). بينزل في الخلفية ومعاه إشعار، وبيتفعّل لوحده لما يخلص. يفضّل واي فاي عشان باقة النت.")
+            .setPositiveButton("واي فاي بس") { _, _ -> startDownload(true, entry) }
+            .setNeutralButton("أي شبكة") { _, _ -> startDownload(false, entry) }
             .setNegativeButton("إلغاء", null)
             .show()
     }
 
-    private fun startDownload(wifiOnly: Boolean) {
-        val err = ModelDownloader.start(this, wifiOnly)
+    private fun startDownload(wifiOnly: Boolean, entry: ModelDownloader.Entry = ModelDownloader.E2B) {
+        val err = ModelDownloader.start(this, wifiOnly, entry)
         if (err != null) {
             AlertDialog.Builder(this).setTitle("مش هينفع").setMessage(err)
                 .setPositiveButton("تمام", null)
-                .setNeutralButton("فتح الصفحة") { _, _ -> openLink(ModelDownloader.REPO_URL) }
+                .setNeutralButton("فتح الصفحة") { _, _ -> openLink(entry.repoUrl) }
                 .show()
         } else {
             Toast.makeText(this, "بدأ التنزيل", Toast.LENGTH_SHORT).show()
@@ -420,6 +438,40 @@ class ModelActivity : BaseActivity() {
                 .setItems(files.map { "${it.name}  (${ModelImporter.mb(it.length())})" }.toTypedArray()) { _, i -> applyInPlace(files[i]) }
                 .setNegativeButton("إلغاء", null).show()
         }
+    }
+
+    /** tapped a model of the list: switch to it, or delete it (only a file the app keeps itself: the user's own files stay) */
+    private fun modelActions(f: File) {
+        val active = f.absolutePath == prefs.modelPath
+        val items = ArrayList<Pair<String, () -> Unit>>()
+        if (!active) items.add("استخدم النموذج ده" to { applyInPlace(f) })
+        if (ModelStore.isOurs(this, f)) items.add("احذفه من التليفون" to { confirmDelete(f) })
+        if (items.isEmpty()) return
+        AlertDialog.Builder(this).setTitle(ModelStore.title(f))
+            .setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
+            .setNegativeButton("إلغاء", null).show()
+    }
+
+    private fun confirmDelete(f: File) {
+        AlertDialog.Builder(this).setTitle("حذف النموذج؟")
+            .setMessage("${f.name} (${ModelImporter.mb(f.length())}) هيتمسح من التليفون وتقدر تضيفه أو تنزّله تاني.")
+            .setPositiveButton("احذف") { _, _ -> deleteModel(f) }
+            .setNegativeButton("إلغاء", null).show()
+    }
+
+    private fun deleteModel(f: File) {
+        val wasActive = f.absolutePath == prefs.modelPath
+        val gone = try { f.delete() } catch (_: Throwable) { false }
+        if (!gone) {
+            Toast.makeText(this, "مقدرتش أمسح الملف", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (wasActive) {
+            // another model takes over when there is one
+            prefs.modelPath = ModelStore.installed(this).firstOrNull()?.absolutePath ?: ""
+            Bg.io { Llm.unload() }
+        }
+        render()
     }
 
     private fun applyInPlace(f: File) {

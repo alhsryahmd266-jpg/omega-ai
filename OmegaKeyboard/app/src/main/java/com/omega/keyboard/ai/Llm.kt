@@ -32,6 +32,41 @@ object ModelStore {
     }
 
     fun sizeMb(ctx: Context): Long = path(ctx)?.let { File(it).length() / (1024 * 1024) } ?: 0L
+
+    /**
+     * Every model file the app can use right now: the ones copied in, the ones downloaded in the app, and the one the user
+     * pointed at where it is (Downloads, say). The active one comes first. A download that is still running is not listed.
+     */
+    fun installed(ctx: Context): List<File> {
+        val app = ctx.applicationContext
+        val prefs = Prefs.get(app)
+        val found = LinkedHashMap<String, File>()
+        val dl = ModelDownloader.dir(app)
+        val unfinished = if (prefs.dlId >= 0L && prefs.dlName.isNotBlank() && dl != null) File(dl, prefs.dlName).absolutePath else ""
+        fun add(f: File?) {
+            if (f == null || !f.isFile || !f.canRead() || f.length() <= MIN_BYTES) return
+            if (f.name.endsWith(".part", true) || f.absolutePath == unfinished) return
+            if (!found.containsKey(f.absolutePath)) found[f.absolutePath] = f
+        }
+        if (prefs.modelPath.isNotBlank()) add(File(prefs.modelPath))
+        ModelImporter.modelsDir(app).listFiles()?.sortedBy { it.name }?.forEach { add(it) }
+        dl?.listFiles()?.sortedBy { it.name }?.forEach { if (it.name.endsWith(".litertlm", true)) add(it) }
+        return found.values.toList()
+    }
+
+    /** a model file inside the app's own folders: deleting it from the app is safe (a file somewhere else belongs to the user) */
+    fun isOurs(ctx: Context, f: File): Boolean {
+        val app = ctx.applicationContext
+        val dir = f.parentFile?.absolutePath ?: return false
+        return dir == ModelImporter.modelsDir(app).absolutePath || dir == ModelDownloader.dir(app)?.absolutePath
+    }
+
+    /** a short name for a model file: what it is and what it is good for */
+    fun title(f: File): String = when {
+        f.name.contains("E4B", true) -> "Gemma 4 E4B (أذكى)"
+        f.name.contains("E2B", true) -> "Gemma 4 E2B (أسرع)"
+        else -> f.name
+    }
 }
 
 /**
