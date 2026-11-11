@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'GameBot/**'
+      - '!GameBot/training/**'
+      - '!GameBot/*.md'
+      - '!GameBot/tools/**'
       - '.github/workflows/build_gamebot.yml'
   workflow_dispatch:
 
