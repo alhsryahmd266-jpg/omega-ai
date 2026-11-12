@@ -74,10 +74,55 @@ jobs:
           cp "$APK" "GameBot-1.4.${{ github.run_number }}.apk"
           echo "APK_PATH=GameBot-1.4.${{ github.run_number }}.apk" >> "$GITHUB_ENV"
 
+      - name: Pack the training kit
+        run: |
+          (cd GameBot && zip -qr ../GameBot-training.zip training README.md)
+          ls -la GameBot-training.zip
+
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "gamebot-v1.4.${{ github.run_number }}"
           name: "GameBot v1.4.${{ github.run_number }}"
-          body: "GameBot - on-device screen-reading game bot (own-game QA). See GameBot/README.md for setup."
-          files: ${{ env.APK_PATH }}
+          body: |
+            GameBot - on-device screen-reading game bot (own-game QA). See GameBot/README.md for setup.
+            APK mirror: https://huggingface.co/datasets/ahmedxg/gvr-chat-app/resolve/main/GameBot.apk
+            Training kit mirror: https://huggingface.co/datasets/ahmedxg/gvr-chat-app/resolve/main/GameBot-training.zip
+          files: |
+            ${{ env.APK_PATH }}
+            GameBot-training.zip
+
+      - name: Mirror to HuggingFace (second download link)
+        continue-on-error: true
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install -q huggingface_hub
+          python3 - <<'PYEOF' 2>&1 | tee hf_gamebot_result.txt
+          import os
+          from huggingface_hub import HfApi
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          repo = "ahmedxg/gvr-chat-app"
+          try:
+              api.create_repo(repo, repo_type="dataset", exist_ok=True)
+          except Exception as e:
+              print("create_repo:", e)
+          api.upload_file(path_or_fileobj=os.environ["APK_PATH"], path_in_repo="GameBot.apk", repo_id=repo, repo_type="dataset")
+          api.upload_file(path_or_fileobj="GameBot-training.zip", path_in_repo="GameBot-training.zip", repo_id=repo, repo_type="dataset")
+          print("UPLOADED GameBot.apk + GameBot-training.zip to", repo)
+          PYEOF
+
+      - name: Push final log (gradle + HuggingFace result)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          rm -rf /tmp/lg && mkdir /tmp/lg && cp gamebot_gradle.log /tmp/lg/
+          [ -f hf_gamebot_result.txt ] && cp hf_gamebot_result.txt /tmp/lg/
+          cd /tmp/lg
+          git init -q -b gamebot-logs
+          git add -A
+          git -c user.email=bot@gvr.local -c user.name="GVR Bot" commit -qm "gamebot final log run ${{ github.run_number }}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" gamebot-logs
+          exit 0
