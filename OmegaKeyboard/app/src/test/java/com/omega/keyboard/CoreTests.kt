@@ -2,6 +2,7 @@ package com.omega.keyboard
 
 import com.omega.keyboard.core.*
 import com.omega.keyboard.ime.ColorPicRenderer
+import com.omega.keyboard.ime.StickerRenderer
 import com.omega.keyboard.voice.VoicePlan
 
 /**
@@ -20,7 +21,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -744,5 +745,187 @@ object CoreTests {
         check("a disabled button is not pressed", PreviewSendFinder.find(Screen("p", 1080, 2400, dm, listOf(send.copy(enabled = false)))) == null)
         val chatSend = node(7, "", "com.whatsapp:id/send", 900, 1500, 1030, 1630, desc = "إرسال")
         check("with two matches the lower one (the preview's own) wins", PreviewSendFinder.find(scr(chatSend, send))?.id == 1)
+    }
+
+    // ------------------------------------------------------------------ replies that are not short and stupid
+
+    private fun replyCraft() {
+        fun th(t: String) = ChatMessage(t, Side.THEM, 0, 1, 0)
+        fun me(t: String) = ChatMessage(t, Side.ME, 0, 1, 0)
+        fun planOf(vararg ms: ChatMessage, game: Boolean = false, persona: String = "") = ReplyCraft.plan(ms.toList(), game, persona)
+
+        // what kind of message is being answered
+        check("kind: greeting", planOf(th("صباح الخير")).kind == ReplyCraft.Kind.GREETING)
+        check("kind: how are you is a greeting", planOf(th("ازيك يا باشا عامل ايه")).kind == ReplyCraft.Kind.GREETING)
+        check("kind: english greeting", planOf(th("Hey, how are you?")).kind == ReplyCraft.Kind.GREETING)
+        check("kind: a greeting with a real question is a question", planOf(th("صباح الخير، هتيجي النهارده؟")).kind == ReplyCraft.Kind.QUESTION)
+        check("kind: thanks", planOf(th("شكرا اوي على مساعدتك")).kind == ReplyCraft.Kind.THANKS)
+        check("kind: emoji only", planOf(th("😂😂")).kind == ReplyCraft.Kind.EMOJI)
+        check("kind: a one word message", planOf(th("تمام")).kind == ReplyCraft.Kind.ACK)
+        check("kind: one question", planOf(th("عندك طماطم؟")).kind == ReplyCraft.Kind.QUESTION)
+        val two = planOf(th("عندك طماطم؟ وبكام الكيلو؟"))
+        check("kind: two questions", two.kind == ReplyCraft.Kind.QUESTIONS && two.questions == 2) { "${two.kind} ${two.questions}" }
+        check("kind: a question without a mark", planOf(th("امتى هتيجي")).kind == ReplyCraft.Kind.QUESTION)
+        check("kind: a request", planOf(th("ابعتلي العنوان لو سمحت")).kind == ReplyCraft.Kind.REQUEST)
+        check("kind: news", planOf(th("النهارده الشغل كان تقيل جدا والمدير زعقلي قدام الناس كلها")).kind == ReplyCraft.Kind.STATEMENT)
+        check("kind: a long message", planOf(th("كلام ".repeat(40))).kind == ReplyCraft.Kind.LONG)
+        check("kind: the newest message of theirs counts, not mine", planOf(th("هتيجي؟"), me("اه"), th("طيب تمام")).kind != ReplyCraft.Kind.QUESTION)
+        check("kind: a game line is read without the player's name", planOf(th("Ahmed: gg"), game = true).kind == ReplyCraft.Kind.GAME)
+        check("questions are counted", ReplyCraft.countQuestions("ايه ده؟؟؟") == 1 && ReplyCraft.countQuestions("what time? and where?") == 2 &&
+            ReplyCraft.countQuestions("وفين المكان") == 1 && ReplyCraft.countQuestions("انا جاي") == 0)
+
+        // language
+        check("script: arabic, latin, arabizi, emoji",
+            ReplyCraft.scriptOf("هتيجي النهارده؟") == ReplyCraft.Script.ARABIC && ReplyCraft.scriptOf("Are you coming?") == ReplyCraft.Script.LATIN &&
+                ReplyCraft.scriptOf("ezayak 3amel eh") == ReplyCraft.Script.OTHER && ReplyCraft.scriptOf("😂") == ReplyCraft.Script.OTHER &&
+                ReplyCraft.scriptOf("see you on the 3rd of May") == ReplyCraft.Script.LATIN)
+
+        // what the model is told
+        check("note: a question is answered first, in arabic script",
+            planOf(th("هتيجي النهارده؟ ولو جاي هتيجي الساعة كام؟")).note.let { it.contains("Answer every one") && it.contains("Arabic script") }) { two.note }
+        check("note: a single question", planOf(th("هتيجي النهارده يا باشا؟")).note.contains("answer it directly"))
+        check("note: a latin chat is answered in its language", planOf(th("Are you coming tonight?")).note.contains("not Arabic"))
+        check("length: two questions need more than a few words", two.minLetters >= 30 && two.sentences == "3 to 5")
+        check("length: a greeting may be short", planOf(th("صباح الخير")).minLetters <= 8)
+        check("length: a plain question wants a real sentence", planOf(th("هتيجي النهارده يا باشا؟")).minLetters >= 14)
+        check("my own style notes may ask for short replies",
+            ReplyCraft.wantsBrief("عفوي ومختصر") && !ReplyCraft.wantsBrief("مش مختصر بحب التفاصيل") && !ReplyCraft.wantsBrief(LlmPrompts.DEFAULT_PERSONA) &&
+                planOf(th("عندك طماطم؟ وبكام الكيلو؟"), persona = "عفوي ومختصر").minLetters < two.minLetters)
+
+        // is the reply good enough
+        val q = listOf(th("هتيجي النهارده؟ ولو جاي هتيجي الساعة كام؟"))
+        val pq = ReplyCraft.plan(q)
+        fun judge(reply: String?, msgs: List<ChatMessage> = q, p: ReplyCraft.Plan = pq) = ReplyCraft.judge(reply, msgs, p)
+        check("judge: a full answer passes", judge("إن شاء الله جاي. غالبا هبقى عندك الساعة سبعة، وهبعتلك لو حصل أي تغيير.").ok)
+        val shortV = judge("أيوه جاي")
+        check("judge: too short for two questions", shortV.flaw == ReplyCraft.Flaw.TOO_SHORT && shortV.fix!!.contains("أيوه جاي") && shortV.fix!!.contains("3 to 5")) { shortV.fix ?: "" }
+        check("judge: nothing", judge(null).flaw == ReplyCraft.Flaw.EMPTY && judge("   ").flaw == ReplyCraft.Flaw.EMPTY)
+        check("judge: wrong language", judge("Yes I am coming tonight around seven, I will let you know if anything changes.").flaw == ReplyCraft.Flaw.WRONG_SCRIPT)
+        check("judge: help-desk talk in arabic", judge("أهلا بيك! كيف يمكنني مساعدتك النهارده؟").flaw == ReplyCraft.Flaw.ASSISTANT)
+        check("judge: help-desk talk in english",
+            ReplyCraft.judge("Hello! How can I help you today?", listOf(th("Are you coming tonight?")), ReplyCraft.plan(listOf(th("Are you coming tonight?")))).flaw == ReplyCraft.Flaw.ASSISTANT)
+        check("judge: a parrot", judge("هتيجي النهارده؟ ولو جاي هتيجي الساعة كام؟").flaw == ReplyCraft.Flaw.ECHO)
+        check("judge: leaked guidance", judge("[Reply guidance, not part of the chat: x] تمام يا صاحبي هجيلك").flaw == ReplyCraft.Flaw.LEAK)
+        val withMine = listOf(th("مساء الخير"), me("مساء النور يا صاحبي عامل ايه النهارده"), th("هتيجي النهارده؟ ولو جاي هتيجي الساعة كام؟"))
+        check("judge: the same thing I already wrote",
+            judge("مساء النور يا صاحبي عامل ايه النهارده", withMine, ReplyCraft.plan(withMine)).flaw == ReplyCraft.Flaw.REPEAT)
+        val gm = listOf(th("صباح الخير"))
+        check("judge: answering a greeting with a greeting is fine", ReplyCraft.judge("صباح الخير", gm, ReplyCraft.plan(gm)).ok)
+        val ack = listOf(th("تمام"))
+        check("judge: a short answer to a short message is fine", ReplyCraft.judge("تمام", ack, ReplyCraft.plan(ack)).ok)
+        val em = listOf(th("😂😂"))
+        check("judge: an emoji answers an emoji", ReplyCraft.judge("😂", em, ReplyCraft.plan(em)).ok)
+        val game = listOf(th("Ahmed: who has the flag?"))
+        val pg = ReplyCraft.plan(game, game = true)
+        check("judge: a quick game reply is fine", ReplyCraft.judge("I have it, covering the left side", game, pg).ok)
+        check("judge: but not help-desk talk in a game", ReplyCraft.judge("How can I help you?", game, pg).flaw == ReplyCraft.Flaw.ASSISTANT)
+        check("judge: a game reply may be in any language", ReplyCraft.judge("معايا العلم يا شباب", game, pg).ok)
+        val best = ReplyCraft.pickBest(
+            listOf(
+                ReplyCraft.Candidate("أيوه", ReplyCraft.Verdict(ReplyCraft.Flaw.TOO_SHORT, "x")),
+                ReplyCraft.Candidate("أيوه جاي إن شاء الله", ReplyCraft.Verdict(ReplyCraft.Flaw.TOO_SHORT, "x")),
+                ReplyCraft.Candidate("Yes I am coming for sure", ReplyCraft.Verdict(ReplyCraft.Flaw.WRONG_SCRIPT, "y"))
+            )
+        )
+        check("a merely short reply is better than none: the longest of them", best == "أيوه جاي إن شاء الله") { "$best" }
+        check("a bad reply is never sent", ReplyCraft.pickBest(listOf(ReplyCraft.Candidate("How can I help", ReplyCraft.Verdict(ReplyCraft.Flaw.ASSISTANT, "z")))) == null)
+
+        // the chat handed to the model as real turns
+        val chat = listOf(me("أهلا"), th("صباح الخير"), th("عامل ايه"), me("تمام الحمد لله"), th("هتيجي النهارده؟"))
+        val c = ReplyCraft.conversation(chat, ReplyCraft.plan(chat))
+        check("turns: they open with theirs, alternate, and mine come last", !c.history.first().first && c.history.last().first &&
+            c.history.zipWithNext().all { it.first.first != it.second.first }) { c.history.toString() }
+        check("turns: consecutive messages are one turn", c.history[0].second == "صباح الخير\nعامل ايه") { c.history.toString() }
+        check("turns: the message to answer comes last, with its guidance",
+            c.user.startsWith("هتيجي النهارده؟") && c.user.contains("Reply guidance") && c.user.endsWith("]")) { c.user }
+        check("turns: a fix is added to the guidance", ReplyCraft.conversation(chat, ReplyCraft.plan(chat), "Your last draft was too short.").user.contains("too short"))
+        val mineLast = listOf(th("هاي"), me("هاي"))
+        val cm = ReplyCraft.conversation(mineLast, ReplyCraft.plan(mineLast))
+        check("turns: when my message is the last one the next one is asked for", cm.user.startsWith("[Write my next message") && cm.history.size == 2)
+        val many = (1..40).flatMap { listOf(th("سؤال رقم $it " + "كلام ".repeat(40)), me("رد رقم $it " + "كلام ".repeat(40))) } + th("وبعدين؟")
+        val cl = ReplyCraft.conversation(many, ReplyCraft.plan(many))
+        check("turns: a long chat is cut from its start and still opens with theirs",
+            cl.history.sumOf { it.second.length } <= 3200 + 700 && !cl.history.first().first && cl.history.size < 80) { "${cl.history.size} ${cl.history.sumOf { it.second.length }}" }
+
+        // the prompts around it
+        val sysAr = LlmPrompts.replySystem("عفوي", ReplyCraft.Script.ARABIC)
+        check("system prompt: arabic examples show the length and tone", sysAr.contains("صباح النور") && sysAr.contains("never the words or the facts") && sysAr.contains("customer-support"))
+        check("system prompt: english examples for latin chats", LlmPrompts.replySystem("x", ReplyCraft.Script.LATIN).contains("Pretty good, thanks"))
+        check("system prompt: no examples unless asked", !LlmPrompts.replySystem("x").contains("Examples of the length"))
+        val gs = LlmPrompts.replySystemForGame("x")
+        check("game prompt: a real answer, not a few words", gs.contains("text chat inside a game") && gs.contains("one or two short sentences") && !gs.contains("a few words,"))
+        val up = LlmPrompts.replyUser(listOf(th("عندك طماطم؟")), "NOTE-X")
+        check("transcript prompt: the guidance comes before the request to write",
+            up.contains("Guidance for my reply: NOTE-X") && up.trimEnd().endsWith("Write my reply now."))
+        check("transcript prompt without guidance is unchanged", !LlmPrompts.replyUser(listOf(th("عندك طماطم؟"))).contains("Guidance for my reply"))
+    }
+
+    // ------------------------------------------------------------------ games
+
+    private fun gameChat() {
+        fun th(t: String) = ChatMessage(t, Side.THEM, 0, 1, 0)
+        fun me(t: String) = ChatMessage(t, Side.ME, 0, 1, 0)
+        fun near(a: IntArray, vararg b: Int) = a.size == b.size && a.indices.all { kotlin.math.abs(a[it] - b[it]) <= 1 }
+
+        // the taught places
+        val r = FRect.fromPx(100f, 800f, 700f, 400f, 1000, 2000)
+        check("a frame drawn from two corners in any order", near(r.px(1000, 2000), 100, 400, 700, 800)) { r.px(1000, 2000).toList().toString() }
+        check("a frame survives another screen size", FRect.decode(r.encode())?.px(500, 1000)?.let { near(it, 50, 200, 350, 400) } == true)
+        check("a frame that is too small is not a frame", FRect.decode("0.1,0.1,0.11,0.11") == null && FRect.decode("junk") == null)
+        val pt = FPoint.fromPx(540f, 1200f, 1080, 2400)
+        check("a spot round trips", FPoint.decode(pt.encode())?.let { kotlin.math.abs(it.pxX(1080) - 540f) <= 1f && kotlin.math.abs(it.pxY(2400) - 1200f) <= 1f } == true)
+        check("a spot is kept inside the screen", FPoint.fromPx(-5f, 9999f, 100, 100) == FPoint(0f, 1f))
+        val gp = GameProfile(FRect(0.1f, 0.2f, 0.7f, 0.4f), FPoint(0.5f, 0.9f), FPoint(0.95f, 0.9f))
+        val back = GameProfile.decode(gp.encode())
+        check("a taught game is kept as text and read back", back.taught && back.chat != null && back.input != null && back.send != null) { gp.encode() }
+        check("an untaught game", !GameProfile().taught && !GameProfile.decode("").taught)
+        check("only the frame taught", GameProfile.decode(GameProfile(FRect(0.1f, 0.1f, 0.9f, 0.5f)).encode()).let { it.chat != null && it.input == null && it.send == null })
+        check("one profile per game and orientation", GameProfile.key("com.x", true) != GameProfile.key("com.x", false) && GameProfile.key("com.x", true).startsWith("com.x"))
+
+        // reading names and lines
+        check("a name is split from its message", GameChat.splitName("Ahmed: gg wp") == ("Ahmed" to "gg wp"))
+        check("a clock time is not a name", GameChat.splitName("5:30 left") == null)
+        check("a web address is not a name", GameChat.splitName("https://x.com") == null)
+        check("a sentence is not a name", GameChat.splitName("this is a long sentence with many words: yes") == null)
+        check("the same line read twice matches", GameChat.same("  Hello,   World! ", "hello world") && GameChat.same("هتيجي النهارده امتي", "هتيجي النهارده امتى"))
+        check("a misread letter still matches", GameChat.same("when are you coming today", "when are you comming today"))
+        check("different lines do not", !GameChat.same("when are you coming today", "who has the flag now please") && !GameChat.same("a", "b"))
+        check("my name in front marks my line", GameChat.isMine("Omar", "gg", "Omar", emptyList()) && GameChat.isMine("VIP Omar", "hi", "Omar", emptyList()))
+        check("another name does not", !GameChat.isMine("Ahmed", "gg", "Omar", emptyList()))
+        check("the text I sent a moment ago is mine", GameChat.isMine(null, "On my way to the flag", "", listOf("on my way to the flag!")))
+
+        // the model's copy of the chat
+        val raw = "Here are the messages:\nAhmed: who has the flag?\nOmar: I do, covering left\nSara: cool\n"
+        val ms = GameChat.parseTranscript(raw, "Omar", emptyList())
+        check("the preamble is skipped", ms.size == 3) { ms.toString() }
+        check("others keep their name, mine is bare",
+            ms[0].text == "Ahmed: who has the flag?" && ms[0].side == Side.THEM && ms[1].text == "I do, covering left" && ms[1].side == Side.ME && ms[2].side == Side.THEM)
+        check("NONE means no messages", GameChat.parseTranscript("NONE", "", emptyList()).isEmpty() && GameChat.parseTranscript("", "", emptyList()).isEmpty())
+        check("list marks and quotes are removed",
+            GameChat.parseTranscript("- \"Ahmed: hi there\"\n2) Sara: yo", "", emptyList()).map { it.text } == listOf("Ahmed: hi there", "Sara: yo"))
+        check("what I typed is recognised without a name", GameChat.parseTranscript("Ahmed: hi\nOn my way", "", listOf("on my way")).last().side == Side.ME)
+
+        // does the last line need an answer
+        check("a new line of theirs needs an answer", GameChat.decide(listOf(th("Ahmed: where are you?")), emptyList()).reply)
+        check("my own last line never does", !GameChat.decide(listOf(th("Ahmed: hi"), me("hi")), emptyList()).reply)
+        check("an answered line is left alone, even read a little differently",
+            !GameChat.decide(listOf(th("Ahmed: where are you now")), listOf("Ahmed: where are you now")).reply &&
+                !GameChat.decide(listOf(th("Ahmed: where are you nwo")), listOf("Ahmed: where are you now")).reply)
+        check("no lines, nothing to answer", !GameChat.decide(emptyList(), emptyList()).reply)
+
+        // noticing that the chat changed
+        val a = IntArray(1024) { 100 }
+        check("a still chat changes no cell", GameChat.changedCells(a, a.copyOf()) == 0)
+        check("a new line changes some cells", GameChat.changedCells(a, IntArray(1024) { if (it < 40) 200 else 100 }) == 40)
+        check("small noise is not a change", GameChat.changedCells(a, IntArray(1024) { 110 }) == 0)
+        check("pictures of different sizes count as changed", GameChat.changedCells(IntArray(4), IntArray(8)) == 4)
+
+        // the prompt that makes the model copy the chat
+        val vs = GameChat.visionSystem("Omar")
+        check("the copying prompt names me and the empty answer", vs.contains("\"Omar\"") && vs.contains("NONE") && !GameChat.visionSystem("").contains("My own name"))
+
+        // the see-through sticker's outline
+        check("light ink gets a dark outline, dark ink a white one",
+            StickerRenderer.outlineFor(0xFFFFEA00.toInt()) == 0xFF15151D.toInt() && StickerRenderer.outlineFor(0xFF1A237E.toInt()) == 0xFFFFFFFF.toInt())
     }
 }

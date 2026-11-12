@@ -319,5 +319,20 @@ object Overlays {
         hideBar()
     }
 
+    /**
+     * Runs [block] with the control bar invisible, so that a screenshot taken inside it does not show the bar. Waits a moment for
+     * the screen to redraw first: call it from a background thread, never from the main one.
+     */
+    fun <T> withBarHidden(block: () -> T): T {
+        val b = bar ?: return block()
+        Bg.ui { b.visibility = View.INVISIBLE }
+        try { Thread.sleep(170) } catch (_: InterruptedException) {}
+        try {
+            return block()
+        } finally {
+            Bg.ui { b.visibility = View.VISIBLE }
+        }
+    }
+
     val barVisible: Boolean get() = bar != null
 }

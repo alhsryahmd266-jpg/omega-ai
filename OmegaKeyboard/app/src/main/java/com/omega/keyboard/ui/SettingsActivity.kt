@@ -82,6 +82,19 @@ class SettingsActivity : BaseActivity() {
             .setNegativeButton("إلغاء", null).show()
     }
 
+    private fun askName(title: String, current: String, hint: String, onDone: (String) -> Unit) {
+        val et = EditText(this).apply {
+            setText(current)
+            this.hint = hint
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+        }
+        AlertDialog.Builder(this).setTitle(title).setView(et)
+            .setPositiveButton("حفظ") { _, _ -> onDone(et.text.toString().trim()); render() }
+            .setNegativeButton("إلغاء", null).show()
+    }
+
     private fun sw(title: String, sub: String?, value: Boolean, set: (Boolean) -> Unit) = UiKit.switchRow(this, p, title, sub, value, set)
 
     private fun build() {
@@ -136,13 +149,16 @@ class SettingsActivity : BaseActivity() {
 
         // ---------------------------------------------------------------- coloured sending
         h.addView(UiKit.section(this, p, "إرسال الكتابة الملونة"))
-        val picStyles = listOf("clean" to "عادي (كلامك بلونه)", "neon" to "نيون مضيء")
+        val picStyles = listOf("sticker" to "ملصق شفاف (بدون إطار)", "clean" to "كارت عادي (كلامك بلونه)", "neon" to "نيون مضيء")
         val codeChoices = ColorCodes.Format.values().map { it.id to it.label }
         h.addView(UiKit.group(
             this, p,
             sw("زرار الإرسال يبعت ملوّن", "في خانات الدردشة اللي بتقبل صور (واتساب، تليجرام، ماسنجر): الكلام يتحوّل لصورة بلونك ويتبعت. الدايرة الملونة فوق الكيبورد بتعمل نفس الشيء.", prefs.colourOnSend) { prefs.colourOnSend = it },
             sw("إرسال تلقائي", "يدوس \"إرسال\" لوحده في معاينة الصورة (محتاج تفعيل خدمة إمكانية الوصول للكيبورد)", prefs.picAutoSend) { prefs.picAutoSend = it },
-            UiKit.valueRow(this, p, "شكل الصورة", picStyles.firstOrNull { it.first == prefs.picStyle }?.second ?: "عادي") {
+            UiKit.valueRow(
+                this, p, "شكل الصورة", picStyles.firstOrNull { it.first == prefs.picStyle }?.second ?: "ملصق شفاف (بدون إطار)",
+                "في واتساب الكلام بيتبعت ملصق شفاف من غير إطار، وده أقرب حاجة لنص ملوّن. باقي التطبيقات بتاخد الكارت"
+            ) {
                 choose("شكل الصورة الملونة", picStyles, prefs.picStyle) { prefs.picStyle = it }
             },
             UiKit.valueRow(
@@ -180,7 +196,7 @@ class SettingsActivity : BaseActivity() {
         h.addView(UiKit.group(
             this, p,
             UiKit.valueRow(this, p, "أسلوبي في الرد", prefs.apPersona.take(22) + if (prefs.apPersona.length > 22) "…" else "", "بيتبعه النموذج وهو بيكتب بدالك") {
-                askText("أسلوبي في الرد", prefs.apPersona, "مثلًا: عفوي ومختصر وبهزّر مع صحابي") { prefs.apPersona = it.ifBlank { LlmPrompts.DEFAULT_PERSONA } }
+                askText("أسلوبي في الرد", prefs.apPersona, "مثلًا: عفوي وبهزّر مع صحابي، وبرد على كل سؤال بشكل كامل") { prefs.apPersona = it.ifBlank { LlmPrompts.DEFAULT_PERSONA } }
             },
             UiKit.seekRow(this, p, "أقل وقت قبل الرد", 0, 30, prefs.apDelayMinSec, { "$it ث" }) {
                 prefs.apDelayMinSec = it
@@ -191,9 +207,32 @@ class SettingsActivity : BaseActivity() {
                 if (prefs.apDelayMinSec > it) prefs.apDelayMinSec = it
             },
             sw("إرسال تلقائي", "لو مقفول: النموذج بيكتب الرد في الخانة وإنت اللي تبعته", prefs.apAutoSend) { prefs.apAutoSend = it },
+            sw("تفكير قبل الرد (تجريبي)", "النموذج بيفكّر الأول وبعدين يكتب: ردود أذكى لكن أبطأ بكتير. لو الردود بقت بتفشل قفّله", prefs.apThink) { prefs.apThink = it },
             UiKit.valueRow(this, p, "رسايلي بتظهر على", sides.firstOrNull { it.first == prefs.apSide }?.second ?: "تلقائي",
                 "سيبها تلقائي. غيّرها بس لو بيرد على رسايلك إنت أو مش بيرد خالص") {
                 choose("رسايلي بتظهر على", sides, prefs.apSide) { prefs.apSide = it }
+            },
+            sw("الردود بلون كتابتك", "لو اخترت لون كتابة: الرد يتبعت ملوّن (ملصق شفاف في واتساب، وكود ألوان في الألعاب لو اخترت صيغتها)", prefs.apColour) { prefs.apColour = it },
+        ))
+
+        // ---------------------------------------------------------------- games
+        h.addView(UiKit.section(this, p, "الألعاب"))
+        val visions = listOf("auto" to "تلقائي (يقرا الشاشة بالنموذج)", "off" to "مقفول")
+        h.addView(UiKit.group(
+            this, p,
+            UiKit.valueRow(this, p, "قراية شات الألعاب", visions.firstOrNull { it.first == prefs.apVision }?.second ?: "تلقائي",
+                "الألعاب بترسم شاشتها بنفسها فمفيش نص يتقري. الوضع الذاتي بياخد صورة لشات اللعبة والنموذج بيقراها (أبطأ من التطبيقات العادية). محتاج أندرويد ١١ أو أحدث") {
+                choose("قراية شات الألعاب", visions, prefs.apVision) { prefs.apVision = it }
+            },
+            UiKit.valueRow(this, p, "اسمك في اللعبة", prefs.apGameName.ifBlank { "غير محدد" },
+                "عشان الوضع الذاتي ميردّش على رسايلك إنت") {
+                askName("اسمك في اللعبة", prefs.apGameName, "الاسم زي ما بيظهر في الشات") { prefs.apGameName = it }
+            },
+            UiKit.valueRow(this, p, "الألعاب اللي اتعلّمتها", prefs.gameProfileCount().toString(),
+                "مكان الشات وخانة الكتابة لكل لعبة. دوس هنا لمسحها كلها (الضبط بيتعمل من زرار «ضبط» في شريط الوضع الذاتي)") {
+                AlertDialog.Builder(this).setTitle("مسح الألعاب المتعلّمة؟")
+                    .setPositiveButton("امسح") { _, _ -> prefs.clearGameProfiles(); render() }
+                    .setNegativeButton("إلغاء", null).show()
             },
         ))
 
@@ -214,12 +253,17 @@ class SettingsActivity : BaseActivity() {
 
         // ---------------------------------------------------------------- model
         h.addView(UiKit.section(this, p, "النموذج المحلي"))
+        val specs = listOf("auto" to "تلقائي", "on" to "شغّال", "off" to "مقفول")
         val idle = listOf("2" to "بعد ٢ دقيقة", "5" to "بعد ٥ دقايق", "10" to "بعد ١٠ دقايق", "30" to "بعد نص ساعة", "0" to "أبدًا (يفضل في الذاكرة)")
         h.addView(UiKit.group(
             this, p,
             UiKit.valueRow(this, p, "إدارة النموذج", Llm.statusText(this).take(20)) { startActivity(Intent(this, ModelActivity::class.java)) },
             UiKit.valueRow(this, p, "تفريغه من الذاكرة", idle.firstOrNull { it.first == prefs.idleMinutes.toString() }?.second ?: "بعد ١٠ دقايق", "لما ما يكونش بيستعمل") {
                 choose("تفريغ النموذج من الذاكرة", idle, prefs.idleMinutes.toString()) { prefs.idleMinutes = it.toInt() }
+            },
+            UiKit.valueRow(this, p, "تسريع الإجابة", specs.firstOrNull { it.first == prefs.specDecode }?.second ?: "تلقائي",
+                "بيخلّي النموذج يكتب أسرع بنفس الكلام ونفس الذكاء. لو حصلت مشكلة في التحميل اقفله") {
+                choose("تسريع الإجابة", specs, prefs.specDecode) { prefs.specDecode = it }
             },
         ))
 

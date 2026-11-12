@@ -189,8 +189,16 @@ pic() {   # pic <name> <text> <colour> <rainbow> <marker> <style>
   sleep 1.5
   local f; f="$(adb logcat -d -s OmegaPic:D | grep -o 'file=[A-Za-z0-9_.-]*' | tail -1 | cut -d= -f2)"
   if [ -n "$f" ]; then
-    adb exec-out run-as $PKG cat "cache/neon/$f" > "$OUT/$name.png"
-    say "picture $name = $f ($(stat -c %s "$OUT/$name.png") bytes)"
+    local ext="${f##*.}"
+    adb exec-out run-as $PKG cat "cache/neon/$f" > "$OUT/$name.$ext"
+    say "picture $name = $f ($(stat -c %s "$OUT/$name.$ext") bytes)"
+    if [ "$ext" = "webp" ]; then
+      # a sticker is a see-through WebP: a copy flattened on grey is made so that it can be looked at
+      convert "$OUT/$name.webp" -background '#8a8a8a' -flatten "$OUT/$name-flat.png" 2>/dev/null \
+        || dwebp "$OUT/$name.webp" -o "$OUT/$name-flat.png" 2>/dev/null \
+        || python3 -c "from PIL import Image; i=Image.open('$OUT/$name.webp').convert('RGBA'); b=Image.new('RGBA', i.size, (138,138,138,255)); b.alpha_composite(i); b.convert('RGB').save('$OUT/$name-flat.png')" 2>/dev/null \
+        || say "picture $name: no tool here turns the WebP into a PNG"
+    fi
   else
     say "picture $name: nothing was drawn"
   fi
@@ -202,6 +210,9 @@ pic pic-rainbow-ar "قوس قزح بالعربي" 0xFF2979FF true false clean
 pic pic-marker     "المستند مهم جدا" 0xFFFFEA00 false true clean
 pic pic-long       "ده كلام طويل شوية عشان نشوف الصورة بتتصرف إزاي لما الجملة تبقى كبيرة وتحتاج أكتر من سطر ونص وتتحط في كارت واحد مرتب" 0xFF00C853 false false clean
 pic pic-neon       "نيون مضيء" 0xFFFF2BD6 false false neon
+pic sticker-red    "مرحبا بيك يا صاحبي" 0xFFFF1744 false false sticker
+pic sticker-yellow "Good morning everybody" 0xFFFFEA00 false false sticker
+pic sticker-rainbow "قوس قزح" 0xFF2979FF true false sticker
 
 # --- coloured send end to end: type in colour, press the round colour button, a picture lands in a box that takes pictures
 scenario kb-csend s:theme=light s:last_lang=en i:text_color=0xFFFF1744

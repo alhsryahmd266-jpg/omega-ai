@@ -90,8 +90,13 @@ object Llm {
     /** set while the autonomous mode runs: the model then stays in memory, however long nobody wrote to it */
     @Volatile var keepLoaded = false
 
+    /** null = nobody asked yet, true = the loaded model can read pictures (the game screen), false = it cannot */
+    @Volatile var visionOk: Boolean? = null
+        private set
+
     @Volatile private var lastUsed = 0L
     @Volatile private var loadedKey = ""
+    @Volatile private var loadedVision = false
     @Volatile private var app: Context? = null
 
     private class Pending {
@@ -99,6 +104,7 @@ object Llm {
         @Volatile var text: String? = null
         @Volatile var error: String? = null
         @Volatile var info: String? = null
+        @Volatile var vision = false
     }
 
     private val ids = AtomicInteger(1)
@@ -142,7 +148,10 @@ object Llm {
         val p = pending[m.arg1] ?: return
         val b: Bundle? = m.data
         when (m.what) {
-            LlmService.R_OK -> p.info = b?.getString(LlmService.K_INFO)
+            LlmService.R_OK -> {
+                p.info = b?.getString(LlmService.K_INFO)
+                p.vision = b?.getBoolean(LlmService.K_VISION, false) ?: false
+            }
             LlmService.R_RESULT -> p.text = b?.getString(LlmService.K_TEXT).orEmpty()
             LlmService.R_ERROR -> p.error = b?.getString(LlmService.K_ERR) ?: "خطأ غير معروف"
         }
@@ -162,6 +171,7 @@ object Llm {
         loading = false
         backendUsed = ""
         loadedKey = ""
+        loadedVision = false
         failAll("النموذج وقف فجأة (غالبًا الذاكرة خلصت). هيتحمّل تاني في الطلب الجاي.")
         val a = app
         synchronized(bindLock) {
@@ -216,19 +226,33 @@ object Llm {
 
     fun isConfigured(ctx: Context): Boolean = ModelStore.path(ctx) != null
 
-    /** Loads the model if needed. Returns the backend that ended up in use ("cpu" / "gpu"). */
-    fun ensureLoaded(ctx: Context): String {
+    /**
+     * Loads the model if needed. Returns the backend that ended up in use ("cpu" / "gpu").
+     * [vision] = the picture reader is wanted too (the game screen); [visionOk] says afterwards whether it exists.
+     */
+    fun ensureLoaded(ctx: Context, vision: Boolean = false): String {
         checkBackground()
         val a = ctx.applicationContext
         app = a
-        synchronized(serial) { return loadLocked(a) }
+        synchronized(serial) { return loadLocked(a, vision) }
     }
 
-    private fun loadLocked(a: Context): String {
+    /** 1 = speculative decoding on, 2 = off, 0 = whatever the library does. "auto" turns it on where it is known to pay off. */
+    private fun specMode(a: Context): Int {
+        val prefs = Prefs.get(a)
+        return when (prefs.specDecode) {
+            "on" -> 1
+            "off" -> 2
+            else -> if (backendUsed == "gpu" || (ModelStore.path(a) ?: "").contains("E4B", ignoreCase = true)) 1 else 0
+        }
+    }
+
+    private fun loadLocked(a: Context, vision: Boolean = false): String {
         val prefs = Prefs.get(a)
         val path = ModelStore.path(a) ?: throw LlmException("لسه مفيش ملف نموذج. افتح التطبيق واختار الملف.")
         val key = path + "|" + prefs.backend
-        if (loaded && loadedKey == key) return backendUsed
+        if (loaded && loadedKey == key && (!vision || loadedVision || visionOk == false)) return backendUsed
+        if (loadedKey != key) visionOk = null
         loading = true
         val t0 = SystemClock.elapsedRealtime()
         try {
@@ -237,9 +261,12 @@ object Llm {
                 putString(LlmService.K_PATH, path)
                 putString(LlmService.K_BACKEND, prefs.backend)
                 putString(LlmService.K_CACHE, cache)
+                putBoolean(LlmService.K_VISION, vision)
             }, 300_000)
             loaded = true
             loadedKey = key
+            loadedVision = p.vision
+            if (vision) visionOk = p.vision
             backendUsed = p.info ?: prefs.backend
             lastLoadMs = SystemClock.elapsedRealtime() - t0
             lastError = ""
@@ -257,7 +284,8 @@ object Llm {
 
     /**
      * One prompt in, one answer out. A fresh conversation is used each time, so there is no memory between calls;
-     * everything the model needs has to be inside [system] and [user].
+     * everything the model needs has to be inside [system], [history] (the earlier turns: written by me?, text) and [user].
+     * [think] > 0 lets the model think first, for up to that many tokens (slower, usually smarter).
      */
     fun generate(
         ctx: Context,
@@ -268,13 +296,21 @@ object Llm {
         topK: Int = 40,
         topP: Float = 0.95f,
         timeoutMs: Long = 180_000,
+        imagePath: String? = null,
+        visualTokens: Int = 0,
+        history: List<Pair<Boolean, String>>? = null,
+        think: Int = 0,
     ): String {
         checkBackground()
         val a = ctx.applicationContext
         app = a
         synchronized(serial) {
-            loadLocked(a)
+            loadLocked(a, vision = imagePath != null)
+            if (imagePath != null && visionOk != true) {
+                throw LlmException("النموذج ده أو الجهاز ده مش بيقرا صور")
+            }
             try {
+                val spec = specMode(a)
                 val p = request(a, LlmService.OP_GEN, {
                     putString(LlmService.K_SYSTEM, system)
                     putString(LlmService.K_USER, user)
@@ -282,6 +318,16 @@ object Llm {
                     putFloat(LlmService.K_TEMP, temperature)
                     putInt(LlmService.K_TOPK, topK)
                     putFloat(LlmService.K_TOPP, topP)
+                    putInt(LlmService.K_SPEC, spec)
+                    if (!history.isNullOrEmpty()) {
+                        putStringArray(LlmService.K_HTEXT, history.map { it.second }.toTypedArray())
+                        putBooleanArray(LlmService.K_HMINE, history.map { it.first }.toBooleanArray())
+                    }
+                    if (think > 0) putInt(LlmService.K_THINK, think)
+                    if (imagePath != null) {
+                        putString(LlmService.K_IMAGE, imagePath)
+                        putInt(LlmService.K_VTOK, visualTokens)
+                    }
                 }, timeoutMs)
                 lastUsed = SystemClock.elapsedRealtime()
                 lastError = ""
@@ -317,6 +363,8 @@ object Llm {
         }
         loaded = false
         loadedKey = ""
+        loadedVision = false
+        visionOk = null
         backendUsed = ""
         main.removeCallbacks(idleCheck)
         main.post {

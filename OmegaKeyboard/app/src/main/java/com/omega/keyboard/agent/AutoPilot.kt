@@ -2,6 +2,7 @@ package com.omega.keyboard.agent
 
 import android.content.Context
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import com.omega.keyboard.AppLog
 import com.omega.keyboard.Bg
 import com.omega.keyboard.Prefs
@@ -11,6 +12,7 @@ import com.omega.keyboard.core.ArabicText
 import com.omega.keyboard.core.ChatMessage
 import com.omega.keyboard.core.ChatParseResult
 import com.omega.keyboard.core.ChatParser
+import com.omega.keyboard.core.GameProfile
 import com.omega.keyboard.core.LlmPrompts
 import com.omega.keyboard.core.Matchers
 import com.omega.keyboard.core.ReplyPolicy
@@ -44,6 +46,8 @@ object AutoPilot {
         private set
 
     @Volatile private var stopFlag = false
+    /** "ضبط" was pressed on the bar: the next round shows the three teaching steps for the app in front */
+    @Volatile private var teachRequested = false
     @Volatile private var userScrollAt = 0L
     @Volatile private var lastEventWake = 0L
     /** after "كمّل": answer the newest message again even if it counts as answered */
@@ -77,6 +81,7 @@ object AutoPilot {
     private fun barActions(): List<ControlBar.Action> = listOf(
         if (paused) ControlBar.Action("pause", "play_arrow", "كمّل", 0xFF1A73E8.toInt())
         else ControlBar.Action("pause", "pause", "استنى", 0xFFB26A00.toInt()),
+        ControlBar.Action("teach", "touch_app", "ضبط", 0xFF3C4043.toInt()),
         ControlBar.Action("stop", "stop", "إيقاف", 0xFFD93025.toInt()),
     )
 
@@ -98,6 +103,8 @@ object AutoPilot {
         stopFlag = false
         paused = false
         forget = false
+        teachRequested = false
+        GameRound.reset()
         userScrollAt = 0L
         wake.drainPermits()
         Llm.keepLoaded = true          // answers must come fast: the model stays in memory for the whole run
@@ -113,6 +120,7 @@ object AutoPilot {
                 when (id) {
                     "stop" -> stop("وقفته من الزرار")
                     "pause" -> setPaused(!paused)
+                    "teach" -> { teachRequested = true; wake.release() }
                 }
             }
         }
@@ -269,6 +277,68 @@ object AutoPilot {
         else -> "براقب المحادثة..."
     }
 
+    /** what a game round may ask of the loop */
+    private val gameHost = object : GameHost {
+        override fun say(text: String, warn: Boolean) { publish(text, warn) }
+        override fun stopped(): Boolean = stopFlag
+        override fun paused(): Boolean = paused
+        override fun nap(ms: Long): Boolean = this@AutoPilot.nap(ms)
+        override fun replied(text: String) { repliesSent++ }
+    }
+
+    /** one look at a game (or teaching it, when asked), for the app in front */
+    private fun gameTurn(ctx: Context, svc: ScreenAgentService, prefs: Prefs, pkg: String, states: HashMap<String, GameState>, teach: Boolean) {
+        val (w, h) = GameEyes.realSize(svc)
+        val landscape = w > h
+        val g = states.getOrPut(GameProfile.key(pkg, landscape)) { GameState(pkg, landscape) }
+        if (!g.profileLoaded) { g.profile = prefs.gameProfile(GameProfile.key(pkg, landscape)); g.profileLoaded = true }
+        if (teach) GameRound.teach(svc, prefs, g, gameHost) else GameRound.step(ctx, svc, prefs, g, gameHost)
+    }
+
+    /** the reply travels as coloured writing when a colour is chosen and the chat box can carry it; null = send it as plain text */
+    private fun colourReply(svc: ScreenAgentService, pkg: String, text: String, send: Boolean): SendAction.Result? {
+        if (isAiChat(pkg)) return null
+        val ime = OmegaImeService.instance ?: return null
+        if (!ime.colourPossibleFor(pkg)) {
+            // the box has to be attached to our keyboard (which stays hidden): touch it, then wait a moment for it to attach
+            if (ime.liveFieldPackage() != pkg) focusInput(svc)
+            val end = System.currentTimeMillis() + 2500
+            while (ime.liveFieldPackage() != pkg && System.currentTimeMillis() < end && !stopFlag) nap(120)
+            if (!ime.colourPossibleFor(pkg)) return null
+        }
+        val r = ime.autopilotColourSend(text, send) ?: return null
+        AppLog.d("autopilot", "coloured send: ok=${r.ok} how=${r.how}")
+        return when {
+            r.ok -> SendAction.Result(true, "colour-" + r.how, "")
+            r.how == "refused" -> null                       // the box took no picture after all: plain text then
+            else -> SendAction.Result(false, "", "الرسالة الملونة ماتبعتتش (${r.how})")
+        }
+    }
+
+    private fun focusInput(svc: ScreenAgentService) {
+        val snap = ScreenReader.read(svc) ?: return
+        try {
+            val input = ChatParser.findInput(snap.screen) ?: return
+            val node = snap.node(input.id) ?: return
+            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        } finally {
+            snap.release()
+        }
+    }
+
+    /** After a coloured message (a picture or sticker has no text to match): everything on screen now counts as answered. */
+    private fun markAnswered(svc: ScreenAgentService, prefs: Prefs, pkg: String, sent: List<String>, handled: HashMap<String, String>) {
+        try {
+            Thread.sleep(1600)
+            val s = ScreenReader.read(svc) ?: return
+            val p = parseChat(s.screen, prefs, sent)
+            s.release()
+            if (s.screen.pkg == pkg) handled[pkg] = ReplyPolicy.key(p.messages)
+        } catch (_: Throwable) {
+        }
+    }
+
     private const val USER_SCROLL_GRACE_MS = 6000L
     /** a text in the message box that does not change for this long is not being typed any more: the reply replaces it */
     private const val DRAFT_GRACE_MS = 5000L
@@ -283,6 +353,7 @@ object AutoPilot {
         val sentTexts = HashMap<String, ArrayList<String>>()
         val waiting = HashMap<String, Waiting>()
         val noReply = HashMap<String, Int>()
+        val games = HashMap<String, GameState>()
         var modelFailures = 0
         var sendFailures = 0
         var crashes = 0
@@ -316,8 +387,22 @@ object AutoPilot {
                 if (ScreenReader.keyboardVisible(svc)) Keyboards.ensureHidden(svc)
                 if (stopFlag) break
 
+                if (teachRequested) {
+                    teachRequested = false
+                    val fg = ScreenReader.foregroundPackage(svc)
+                    if (fg.isBlank() || fg == ctx.packageName) publish("افتح اللعبة الأول وبعدين دوس «ضبط»", warn = true)
+                    else gameTurn(ctx, svc, prefs, fg, games, teach = true)
+                    continue
+                }
+
                 val snap = ScreenReader.read(svc)
-                if (snap == null) { publish("مش قادر أقرا الشاشة دي. افتح المحادثة"); continue }
+                if (snap == null) {
+                    // a game that gives the accessibility service nothing to read: it is looked at instead
+                    val fg = ScreenReader.foregroundPackage(svc)
+                    if (fg.isNotBlank() && fg != ctx.packageName && GameRound.allowed(prefs)) { gameTurn(ctx, svc, prefs, fg, games, teach = false); continue }
+                    publish("مش قادر أقرا الشاشة دي. افتح المحادثة")
+                    continue
+                }
                 val pkg = snap.screen.pkg
                 if (pkg.isBlank() || pkg == ctx.packageName) { snap.release(); publish("افتح المحادثة وأنا هرد"); continue }
                 val sent = sentTexts[pkg] ?: ArrayList<String>().also { sentTexts[pkg] = it }
@@ -327,6 +412,16 @@ object AutoPilot {
                 snap.release()
 
                 if (!looksLikeChat) {
+                    // a game draws its own screen: no text to read, so it is looked at (and typed into through the keyboard)
+                    val taught = prefs.gameProfile(GameProfile.key(pkg, snap.screen.width > snap.screen.height)).taught
+                    if ((GameRound.opaque(snap.screen) || taught) && GameRound.allowed(prefs)) {
+                        gameTurn(ctx, svc, prefs, pkg, games, teach = false)
+                        continue
+                    }
+                    if (GameRound.opaque(snap.screen) && prefs.apVision != "off" && android.os.Build.VERSION.SDK_INT < 30) {
+                        publish("قراية الألعاب محتاجة أندرويد ١١ أو أحدث", warn = true)
+                        continue
+                    }
                     publish("ده مش شكله تطبيق محادثة. افتح المحادثة وأنا هرد (${appLabel(ctx, pkg)})")
                     continue
                 }
@@ -403,30 +498,12 @@ object AutoPilot {
 
                     // ---- the message to send: written as me, and always an answer
                     if (Llm.loading) publish("النموذج بيتحمّل، ثواني...")
-                    val system = LlmPrompts.replySystem(prefs.apPersona)
-                    val user = LlmPrompts.replyUser(parsed.messages)
-                    // what the model is given, so a reply that misses the point can be traced to what it read
-                    AppLog.d("autopilot", "reading: " + user.replace('\n', '⏎').takeLast(500))
-                    var tries = 0
-                    var modelFailed = false
-                    while (reply == null && tries < 3 && !stopFlag) {
-                        tries++
-                        val raw = try {
-                            // a calm temperature keeps a small model on the subject; the retries loosen up only if the first try was unusable
-                            Llm.generate(
-                                ctx, system, user, maxTokens = 320, temperature = if (tries == 1) 0.6f else 0.85f,
-                                topK = 40, topP = 0.9f, timeoutMs = 240_000
-                            )
-                        } catch (e: Exception) {
-                            if (stopFlag) break
-                            modelFailed = true
-                            AppLog.e("autopilot", "generate failed", e)
-                            null
-                        }
-                        if (raw == null) break
-                        reply = LlmPrompts.cleanReply(raw)
-                    }
+                    // planned from the conversation, written as a turn of the chat and checked: a reply that is too short, in the wrong
+                    // language, a parrot of their message or help-desk talk is thrown away and written again
+                    val written = Replier.write(ctx, prefs, parsed.messages, game = false, stop = { stopFlag }, say = { publish(it) })
                     if (stopFlag) break
+                    val modelFailed = written.modelFailed
+                    reply = written.text
                     if (modelFailed) {
                         // the model process died, ran out of memory or timed out: wait a little, load it afresh, try again. Never quit.
                         modelFailures++
@@ -465,7 +542,8 @@ object AutoPilot {
                 stale = 0
 
                 if (!prefs.apAutoSend) {
-                    val ok = SendAction.typeOnly(svc, text)
+                    val c = if (prefs.apColour) colourReply(svc, pkg, text, send = false) else null
+                    val ok = c?.ok ?: SendAction.typeOnly(svc, text)
                     handled[pkg] = workKey
                     publish(if (ok) "كتبت الرد. ابعته إنت: $text" else "مقدرتش أكتب الرد", warn = !ok)
                     continue
@@ -476,7 +554,9 @@ object AutoPilot {
                 // never be taken for a message from the other side (that would be an endless conversation with myself)
                 if (sent.lastOrNull() != text) sent.add(text)
                 while (sent.size > 12) sent.removeAt(0)
-                val res = SendAction.sendText(svc, text)
+                // with a colour chosen the reply goes out as coloured writing (a see-through sticker / picture, or colour codes)
+                val colourRes = if (prefs.apColour) colourReply(svc, pkg, text, send = true) else null
+                val res = colourRes ?: SendAction.sendText(svc, text)
                 if (res.ok) {
                     sendFailures = 0
                     modelFailures = 0
@@ -485,7 +565,7 @@ object AutoPilot {
                     repliesSent++
                     firstReply = false
                     handled[pkg] = workKey
-                    learnAlignment(svc, prefs, pkg, text)
+                    if (colourRes != null) markAnswered(svc, prefs, pkg, sent, handled) else learnAlignment(svc, prefs, pkg, text)
                     AppLog.d("autopilot", "sent via ${res.how}: ${text.take(60)}")
                     publish("ردّيت $repliesSent مرة. آخر رد: ${text.take(48)}")
                 } else {

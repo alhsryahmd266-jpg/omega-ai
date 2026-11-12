@@ -18,7 +18,7 @@ object LlmPrompts {
      * (so: answer what was asked, never change the subject) and it clips every answer to a few words (so: the length follows
      * the message, and a real question gets a full answer).
      */
-    fun replySystem(persona: String): String {
+    fun replySystem(persona: String, script: ReplyCraft.Script? = null): String {
         val about = persona.trim().let { if (it == OLD_DEFAULT_PERSONA) DEFAULT_PERSONA else it }
         val sb = StringBuilder()
         sb.append("You are me, the owner of this phone, chatting on my own account. Write the next message I would send, as myself, in the first person.\n")
@@ -31,16 +31,30 @@ object LlmPrompts {
         sb.append("- Length: match what they wrote. A greeting, \"ok\", a thank-you or an emoji gets one short line. A real question, a story or a long message gets a complete, helpful answer of two to five sentences. Never cut an answer short just to be brief.\n")
         sb.append("- Sound like a real person texting: natural and warm, no lists, no markdown, no quotation marks around the message, no sign-off.\n")
         sb.append("- Never say you are an AI, a model, a bot or an assistant, never say that someone else is writing for me, and never explain what you are doing.\n")
+        sb.append("- Never answer like a customer-support assistant (\"how can I help you?\", \"is there anything else?\"): I am a normal person, not a help desk.\n")
         sb.append("- Output ONLY the message text.\n")
+        if (script != null) sb.append(ReplyCraft.examples(script))
         if (about.isNotBlank()) sb.append("\nAbout me and how I write (notes from me, to be used as they are): ").append(about).append('\n')
         return sb.toString()
     }
 
-    private fun shorten(text: String, max: Int): String =
+    /**
+     * The same "me", for the text chat inside a game: several players talk at once and every line of the others starts with the name
+     * of the player who wrote it. Quick, the way people type in the middle of a match, but still an answer to what was said.
+     */
+    fun replySystemForGame(persona: String, script: ReplyCraft.Script? = null): String =
+        replySystem(persona, script) +
+            "\nThis conversation is the text chat inside a game. Several players may be talking at the same time, and every line of the others " +
+            "starts with the name of the player who wrote it. Answer the newest message (or the newest one that speaks to me). " +
+            "Write one or two short sentences, the way a player types in the middle of a match: no greeting, no sign-off, no list, " +
+            "but a real answer (a question gets an answer, not just \"lol\" or \"ok\"). " +
+            "Never mention the game's screen, buttons or interface, and never say that you can see a picture.\n"
+
+    internal fun shorten(text: String, max: Int): String =
         if (text.length > max) text.take(max / 3) + " … " + text.takeLast(max - max / 3) else text
 
     /** The conversation as the model reads it: consecutive messages of one side merged into one turn, newest last. */
-    private fun foldTurns(messages: List<ChatMessage>): List<Pair<Side, String>> {
+    fun foldTurns(messages: List<ChatMessage>): List<Pair<Side, String>> {
         val folded = ArrayList<Pair<Side, StringBuilder>>()
         for (m in messages.takeLast(30)) {
             val side = if (m.side == Side.UNKNOWN) Side.THEM else m.side
@@ -68,13 +82,14 @@ object LlmPrompts {
      * The conversation, then their newest message once more on its own: a small model keeps to a topic far better when the
      * thing to answer is the last thing it reads.
      */
-    fun replyUser(messages: List<ChatMessage>): String {
+    fun replyUser(messages: List<ChatMessage>, note: String? = null): String {
         val turns = foldTurns(messages)
         val sb = StringBuilder(transcript(turns))
         val last = turns.lastOrNull()
         if (last != null && last.first == Side.THEM) {
             sb.append("\nTheir latest message. This is what I am answering now, so my reply must respond to it:\n")
             sb.append(shorten(last.second, 600)).append('\n')
+            if (!note.isNullOrBlank()) sb.append("\nGuidance for my reply: ").append(note).append('\n')
             sb.append("\nWrite my reply now.\n")
         } else {
             sb.append("\nWrite my next message.\n")

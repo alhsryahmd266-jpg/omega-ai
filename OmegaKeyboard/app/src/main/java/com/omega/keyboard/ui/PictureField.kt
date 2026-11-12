@@ -24,7 +24,7 @@ class PictureField(ctx: Context) : EditText(ctx) {
         val base = super.onCreateInputConnection(outAttrs) ?: return null
         if (Build.VERSION.SDK_INT < 25) return base
         try {
-            EditorInfo::class.java.getField("contentMimeTypes").set(outAttrs, arrayOf("image/png", "image/gif", "image/jpeg", "image/webp"))
+            EditorInfo::class.java.getField("contentMimeTypes").set(outAttrs, arrayOf("image/png", "image/gif", "image/jpeg", "image/webp", "image/webp.wasticker"))
         } catch (_: Throwable) {
             return base
         }

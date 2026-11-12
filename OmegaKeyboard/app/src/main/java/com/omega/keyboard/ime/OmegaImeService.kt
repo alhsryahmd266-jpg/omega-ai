@@ -122,6 +122,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private var phone = false
     private var plain = false          // password / e-mail / address field: no suggestions, no corrections, no learning
     private var fieldGen = 0
+    @Volatile private var fieldLive = false        // a text box is attached to the keyboard right now (also while the keyboard itself is hidden)
+    @Volatile private var fieldPkg: String? = null // the app that box belongs to
 
     // typing helpers
     private val dicts = ConcurrentHashMap<String, Dictionary>()
@@ -177,8 +179,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
                         val text = String(android.util.Base64.decode(i.getStringExtra("b64") ?: "", android.util.Base64.DEFAULT), Charsets.UTF_8).ifBlank { "hello" }
                         val color = i.getIntExtra("color", 0xFF2979FF.toInt())
                         val rainbow = i.getBooleanExtra("rainbow", false)
-                        val f = if (i.getStringExtra("style") == "neon") NeonRenderer.renderToFile(c, text, color, rainbow)
-                        else ColorPicRenderer.renderToFile(c, text, color, rainbow, i.getBooleanExtra("marker", false))
+                        val marker = i.getBooleanExtra("marker", false)
+                        val f = when (i.getStringExtra("style")) {
+                            "neon" -> NeonRenderer.renderToFile(c, text, color, rainbow)
+                            "sticker" -> StickerRenderer.renderToFile(c, text, color, rainbow, marker)
+                            else -> ColorPicRenderer.renderToFile(c, text, color, rainbow, marker)
+                        }
                         android.util.Log.d("OmegaPic", "file=${f.name}")
                     } catch (t: Throwable) {
                         android.util.Log.e("OmegaPic", "failed", t)
@@ -264,6 +270,14 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         skipCorrectionFor = null
         editor = attribute
         analyseField(attribute)
+        fieldLive = attribute != null && attribute.inputType != EditorInfo.TYPE_NULL
+        fieldPkg = attribute?.packageName
+    }
+
+    override fun onFinishInput() {
+        super.onFinishInput()
+        fieldLive = false
+        fieldPkg = null
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -1099,6 +1113,14 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun takesPictures(): Boolean =
         Build.VERSION.SDK_INT >= 25 && acceptedImageTypes(editor).any { ClipDescription.compareMimeTypes("image/png", it) }
 
+    /** the box lists WhatsApp's sticker type (a picture put there with it is sent as a sticker: see-through, no frame) */
+    private fun stickerType(): Boolean =
+        Build.VERSION.SDK_INT >= 25 && acceptedImageTypes(editor).any { it.equals(StickerRenderer.MIME, ignoreCase = true) }
+
+    private fun takesImages(): Boolean = takesPictures() || stickerType()
+
+    private fun mimeOf(f: File): String = if (f.name.endsWith(".webp")) StickerRenderer.MIME else "image/png"
+
     private fun codeFormat(): ColorCodes.Format = ColorCodes.Format.of(prefs.colorCodes)
 
     /** colour of the n-th letter exactly as typing uses it */
@@ -1113,7 +1135,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val o = editor?.imeOptions ?: 0
         if ((o and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0) return false
         if ((o and EditorInfo.IME_MASK_ACTION) != EditorInfo.IME_ACTION_SEND) return false
-        if (!takesPictures() && codeFormat() == ColorCodes.Format.NONE) return false
+        if (!takesImages() && codeFormat() == ColorCodes.Format.NONE) return false
         val ic = currentInputConnection ?: return false
         return readField(ic).first.isNotBlank()
     }
@@ -1131,85 +1153,127 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val (raw, wasSelection) = readField(ic)
         val text = raw.trim()
         if (text.isEmpty()) { flash("اكتب الكلام الأول وبعدين دوس زرار اللون", true); return }
+        startColoured(text, wasSelection, SendMode.USER, done = null)
+    }
+
+    /** USER: the settings decide whether send is pressed. SEND: always pressed (the autonomous mode). HOLD: never pressed, the result waits for the user. */
+    private enum class SendMode { USER, SEND, HOLD }
+
+    /**
+     * The coloured send itself. [done]: told how it went (true = the message is on its way, or sits ready when send was not pressed).
+     */
+    private fun startColoured(text: String, wasSelection: Boolean, mode: SendMode, done: ((Boolean, String) -> Unit)?) {
         val fmt = codeFormat()
-        android.util.Log.d("OmegaPic", "send: field=${editor?.packageName} takesPictures=${takesPictures()} types=${acceptedImageTypes(editor).toList()} codes=$fmt")
-        if (!takesPictures() && fmt != ColorCodes.Format.NONE) { sendWithCodes(text, wasSelection, fmt); return }
-        sendAsPicture(text, wasSelection)
+        android.util.Log.d("OmegaPic", "send: field=${editor?.packageName} takesPictures=${takesPictures()} sticker=${stickerType()} types=${acceptedImageTypes(editor).toList()} codes=$fmt")
+        if (!takesImages() && fmt != ColorCodes.Format.NONE) { sendWithCodes(text, wasSelection, fmt, mode, done); return }
+        sendAsPicture(text, wasSelection, mode, done)
     }
 
     /** the text becomes a game colour code message ("[FF0000]hello") and is sent */
-    private fun sendWithCodes(text: String, wasSelection: Boolean, fmt: ColorCodes.Format) {
-        val ic = currentInputConnection ?: return
+    private fun sendWithCodes(text: String, wasSelection: Boolean, fmt: ColorCodes.Format, mode: SendMode, done: ((Boolean, String) -> Unit)?) {
+        val ic = currentInputConnection
+        if (ic == null) { done?.invoke(false, "no-field"); return }
         val coded = ColorCodes.wrap(text, fmt) { n -> letterColour(n) }
         if (wasSelection) ic.commitText(coded, 1) else replaceNow(coded)
         undoCorrection = null
         spaceAfterSuggestion = false
-        if (prefs.picAutoSend) { performEnter(); flash("اتبعتت بكود الألوان (${fmt.label.substringBefore("  ")})") }
-        else flash("الكود اتكتب. دوس إرسال")
+        if (mode == SendMode.SEND || (mode == SendMode.USER && prefs.picAutoSend)) {
+            performEnter()
+            flash("اتبعتت بكود الألوان (${fmt.label.substringBefore("  ")})")
+            done?.invoke(true, "codes")
+        } else {
+            flash("الكود اتكتب. دوس إرسال")
+            done?.invoke(true, "codes-draft")
+        }
     }
 
-    private fun sendAsPicture(text: String, wasSelection: Boolean) {
+    private fun sendAsPicture(text: String, wasSelection: Boolean, mode: SendMode, done: ((Boolean, String) -> Unit)?) {
         val color = prefs.textColor
         val rainbow = prefs.textRainbow
         val marker = prefs.textHighlight
-        val neon = prefs.picStyle == "neon"
+        val style = prefs.picStyle
+        val sticker = style == "sticker" && stickerType()
+        // the card picture: wanted when the box takes pictures, and the only way when there is no sticker route
+        val card = takesPictures() || !sticker
         val app = applicationContext
         val target = editor?.packageName
         val gen = fieldGen
-        flash("بجهّز الصورة الملونة...")
+        if (mode == SendMode.USER) flash("بجهّز الصورة الملونة...")
         Bg.io {
-            val file = try {
-                if (neon) NeonRenderer.renderToFile(app, text, color, rainbow) else ColorPicRenderer.renderToFile(app, text, color, rainbow, marker)
-            } catch (t: Throwable) {
-                AppLog.e("colourpic", "could not draw the picture", t)
-                null
+            val files = ArrayList<File>()
+            if (sticker) {
+                try { files.add(StickerRenderer.renderToFile(app, text, color, rainbow, marker)) }
+                catch (t: Throwable) { AppLog.e("colourpic", "could not draw the sticker", t) }
+            }
+            if (card) {
+                try {
+                    files.add(if (style == "neon") NeonRenderer.renderToFile(app, text, color, rainbow) else ColorPicRenderer.renderToFile(app, text, color, rainbow, marker))
+                } catch (t: Throwable) {
+                    AppLog.e("colourpic", "could not draw the picture", t)
+                }
             }
             Bg.ui {
                 when {
-                    file == null -> flash("معرفتش أعمل الصورة", true)
-                    gen != fieldGen -> {}                       // the user went to another box meanwhile
-                    else -> deliverPicture(file, text, wasSelection, target)
+                    files.isEmpty() -> { flash("معرفتش أعمل الصورة", true); done?.invoke(false, "render") }
+                    gen != fieldGen -> done?.invoke(false, "moved")         // the user went to another box meanwhile
+                    else -> deliverPicture(files, text, wasSelection, target, mode, done)
                 }
             }
         }
     }
 
-    private fun deliverPicture(file: File, text: String, wasSelection: Boolean, targetPkg: String?) {
-        val uri = NeonProvider.uriFor(this, file)
+    private fun deliverPicture(files: List<File>, text: String, wasSelection: Boolean, targetPkg: String?, mode: SendMode, done: ((Boolean, String) -> Unit)?) {
         val ic = currentInputConnection
-        if (Build.VERSION.SDK_INT >= 25 && ic != null && takesPictures()) {
+        if (Build.VERSION.SDK_INT >= 25 && ic != null && takesImages()) {
+            val types = acceptedImageTypes(editor)
             // the text is becoming the picture: take it out of the box first (some apps copy the box into the picture's caption)
             if (wasSelection) ic.commitText("", 1) else replaceNow("")
-            val ok = try {
-                val info = InputContentInfo(uri, ClipDescription("colour", arrayOf("image/png")), null)
-                ic.commitContent(info, InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null)
-            } catch (t: Throwable) {
-                AppLog.e("colourpic", "the field refused the picture", t)
-                false
+            var taken: File? = null
+            for (f in files) {
+                val mime = mimeOf(f)
+                val listed = if (mime == StickerRenderer.MIME) types.any { it.equals(mime, ignoreCase = true) } else types.any { ClipDescription.compareMimeTypes(mime, it) }
+                if (!listed) continue
+                val ok = try {
+                    val info = InputContentInfo(NeonProvider.uriFor(this, f), ClipDescription("colour", arrayOf(mime)), null)
+                    ic.commitContent(info, InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null)
+                } catch (t: Throwable) {
+                    AppLog.e("colourpic", "the field refused the picture", t)
+                    false
+                }
+                android.util.Log.d("OmegaPic", "commitContent $mime accepted=$ok")
+                if (ok) { taken = f; break }
             }
-            android.util.Log.d("OmegaPic", "commitContent accepted=$ok")
-            if (ok) {
-                if (prefs.picAutoSend && PreviewSend.canPress()) {
-                    flash("اتحوّلت لصورة ملونة وبتتبعت ✓")
-                    PreviewSend.start(this, targetPkg)
+            val got = taken
+            if (got != null) {
+                val isSticker = mimeOf(got) == StickerRenderer.MIME
+                if (mode == SendMode.SEND || (mode == SendMode.USER && prefs.picAutoSend && PreviewSend.canPress())) {
+                    if (mode == SendMode.USER) flash(if (isSticker) "اتحوّلت لملصق ملون وبتتبعت ✓" else "اتحوّلت لصورة ملونة وبتتبعت ✓")
+                    // a sticker is sent by the chat itself; a picture waits in the app's preview until its send button is pressed
+                    PreviewSend.start(this, targetPkg) { pressed -> if (!isSticker) done?.invoke(pressed, if (pressed) "picture" else "unsent") }
+                    if (isSticker) done?.invoke(true, "sticker")
                 } else {
                     flash("الصورة جاهزة. دوس إرسال في المعاينة")
+                    done?.invoke(true, "draft")
                 }
                 return
             }
-            // refused after all: the words go back into the box
-            currentInputConnection?.commitText(styled(text), 1)
+            // refused after all: the words go back into the box (the autonomous mode types its own plain text)
+            if (mode == SendMode.USER) currentInputConnection?.commitText(styled(text), 1)
         }
+        if (mode != SendMode.USER) { done?.invoke(false, "refused"); return }
         // the box takes no pictures: the share sheet lets the user pick the chat
         try {
-            val send = Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
+            val uri = NeonProvider.uriFor(this, files.first())
+            val send = Intent(Intent.ACTION_SEND).setType(mimeOf(files.first()).let { if (it == StickerRenderer.MIME) "image/webp" else it }).putExtra(Intent.EXTRA_STREAM, uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             send.clipData = ClipData.newRawUri("colour", uri)
             startActivity(Intent.createChooser(send, "ابعت الصورة الملونة").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             flash("التطبيق ده مبيقبلش صور مباشرة. اختار المحادثة من القايمة", true)
+            done?.invoke(true, "share")
         } catch (t: Throwable) {
             AppLog.e("colourpic", "could not open the share sheet", t)
             flash("مقدرتش أفتح المشاركة", true)
+            done?.invoke(false, "share-failed")
         }
     }
 
@@ -1341,6 +1405,79 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun sendNow(): Boolean {
         val ic = currentInputConnection ?: return false
         return ic.performEditorAction(EditorInfo.IME_ACTION_SEND)
+    }
+
+    // ------------------------------------------------------------------ autonomous mode (called from its own thread)
+
+    /** Runs [block] on the main thread and waits for it (the default is returned when it takes longer than [timeoutMs]). Any thread. */
+    private fun <T> onMain(fallback: T, timeoutMs: Long = 3000, block: () -> T): T {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return try { block() } catch (t: Throwable) { AppLog.e("ime", "main task failed", t); fallback }
+        }
+        val latch = CountDownLatch(1)
+        var out = fallback
+        main.post {
+            out = try { block() } catch (t: Throwable) { AppLog.e("ime", "main task failed", t); fallback }
+            latch.countDown()
+        }
+        latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+        return out
+    }
+
+    /** The app whose text box is attached to the keyboard right now (also while the keyboard itself is hidden), or null. */
+    fun liveFieldPackage(): String? = if (fieldLive) fieldPkg else null
+
+    /** What is written in the attached box, or null when none is attached. Any thread. */
+    fun liveFieldText(): String? = onMain<String?>(null) {
+        val ic = currentInputConnection
+        if (ic == null || !fieldLive) null else readField(ic).first
+    }
+
+    /** Presses the box's own action key (send / go / done), or Enter when it has none. Any thread. */
+    fun pressEnter(): Boolean = onMain(false) {
+        if (currentInputConnection == null) false else { performEnter(); true }
+    }
+
+    /** The reply as the autonomous mode types it in a game: in the game's colour codes when a colour and a format are chosen. Any thread. */
+    fun colourForGame(text: String): String {
+        if (!prefs.apColour || !colourActive()) return text
+        val fmt = codeFormat()
+        if (fmt == ColorCodes.Format.NONE) return text
+        return ColorCodes.wrap(text, fmt) { n -> letterColour(n) }
+    }
+
+    /** True when colour can reach the other side from the attached box (it takes pictures / stickers, or a colour-code format is chosen). Any thread. */
+    fun colourPossible(): Boolean = onMain(false) {
+        prefs.apColour && colourActive() && currentInputConnection != null && fieldLive && !plain && !numeric &&
+            (takesImages() || codeFormat() != ColorCodes.Format.NONE)
+    }
+
+    /** [colourPossible] for the box of the app [pkg]: false while another app's box (or none) is attached. Any thread. */
+    fun colourPossibleFor(pkg: String): Boolean = fieldLive && fieldPkg == pkg && colourPossible()
+
+    /** What came of a coloured send made for the autonomous mode: [how] = sticker | picture | codes | draft | unsent | refused ... */
+    class ColourResult(val ok: Boolean, val how: String)
+
+    /**
+     * The autonomous mode sends [text] the way coloured writing travels: a see-through sticker or a picture where the box takes
+     * pictures, colour codes where the user picked a format. With [send] false the result stays in the box for the user to send.
+     * Blocks until it is done. @return null when colour is not possible here (the caller sends plain text then).
+     */
+    fun autopilotColourSend(text: String, send: Boolean, timeoutMs: Long = 16_000): ColourResult? {
+        if (!colourPossible()) return null
+        val latch = CountDownLatch(1)
+        var res: ColourResult? = null
+        main.post {
+            try {
+                startColoured(text, false, if (send) SendMode.SEND else SendMode.HOLD) { ok, how -> res = ColourResult(ok, how); latch.countDown() }
+            } catch (t: Throwable) {
+                AppLog.e("ime", "autonomous coloured send failed", t)
+                res = ColourResult(false, "error")
+                latch.countDown()
+            }
+        }
+        latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+        return res ?: ColourResult(false, "timeout")
     }
 
     private fun applyReplacement(original: String, result: String, wasSelection: Boolean) {

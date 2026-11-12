@@ -157,6 +157,36 @@ object ScreenReader {
         if (Build.VERSION.SDK_INT < 33) try { @Suppress("DEPRECATION") n.recycle() } catch (_: Throwable) {}
     }
 
+    /** The app in front, even when its screen has nothing to read (a game draws its own interface). Empty when unknown. */
+    fun foregroundPackage(service: AccessibilityService): String {
+        var best = ""
+        var bestArea = -1L
+        try {
+            for (w in service.windows) {
+                if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
+                val root = w.root ?: continue
+                val pkg = root.packageName?.toString().orEmpty()
+                recycle(root)
+                if (pkg.isEmpty() || pkg == service.packageName || pkg == "com.android.systemui") continue
+                if (w.isActive || w.isFocused) return pkg
+                val b = Rect()
+                w.getBoundsInScreen(b)
+                val area = b.width().toLong() * b.height().toLong()
+                if (area > bestArea) { best = pkg; bestArea = area }
+            }
+        } catch (_: Throwable) {
+        }
+        if (best.isNotEmpty()) return best
+        return try {
+            val r = service.rootInActiveWindow
+            val pkg = r?.packageName?.toString().orEmpty()
+            if (r != null) recycle(r)
+            if (pkg == service.packageName || pkg == "com.android.systemui") "" else pkg
+        } catch (_: Throwable) {
+            ""
+        }
+    }
+
     /** True while a keyboard window is on screen. */
     fun keyboardVisible(service: AccessibilityService): Boolean = try {
         val minH = (80 * service.resources.displayMetrics.density).toInt()

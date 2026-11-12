@@ -3,6 +3,7 @@ package com.omega.keyboard
 import android.content.Context
 import android.content.SharedPreferences
 import com.omega.keyboard.core.Align
+import com.omega.keyboard.core.GameProfile
 import com.omega.keyboard.core.LlmPrompts
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
@@ -49,7 +50,7 @@ class Prefs private constructor(ctx: Context) {
     var textHighlight by B("text_highlight", false)       // highlighter pen: the colour goes behind the text
     var colourOnSend by B("colour_on_send", true)         // the send key of a chat box sends the text as a coloured picture / colour codes
     var picAutoSend by B("pic_auto_send", true)           // presses the app's own "send" on the picture preview (needs the accessibility service)
-    var picStyle by S("pic_style", "clean")               // clean | neon
+    var picStyle by S("pic_style", "sticker")             // sticker (see-through, no frame: looks like coloured writing) | clean (card) | neon
     var colorCodes by S("color_codes", "none")            // how colour travels where pictures are refused (games): see ColorCodes.Format
     var keyColor by I("c_key", 0)
     var fnColor by I("c_fn", 0)
@@ -97,6 +98,10 @@ class Prefs private constructor(ctx: Context) {
     var apDelayMaxSec by I("ap_delay_max", 6)
     var apAutoSend by B("ap_auto_send", true)
     var apSide by S("ap_side", "auto")                 // auto | left | right: which edge my chat bubbles hug
+    var apColour by B("ap_colour", true)               // the autonomous mode writes in the chosen colour (picture / colour codes) when one is chosen
+    var apVision by S("ap_vision", "auto")             // auto | off: read a game's chat from a picture of the screen
+    var apGameName by S("ap_game_name", "")            // my own name inside games, so my own lines are never answered
+    var apThink by B("ap_think", false)                // the model thinks before it writes a reply: slower, usually smarter (experimental)
 
     // ---- voice
     var voiceLang by S("voice_lang", "auto")
@@ -106,6 +111,7 @@ class Prefs private constructor(ctx: Context) {
     // ---- local model
     var modelPath by S("model_path", "")
     var backend by S("backend", "cpu")                // cpu | gpu
+    var specDecode by S("spec_decode", "auto")         // auto | on | off: speculative decoding (faster answers, same words)
     var idleMinutes by I("idle_minutes", 10)           // 0 = keep loaded
     var llmNoCache by B("llm_nocache", false)         // saves ~GBs of storage, loads slower
     var dlId by L("dl_id", -1L)                        // id of the model download in the phone's download manager, -1 = none
@@ -118,6 +124,20 @@ class Prefs private constructor(ctx: Context) {
     var lastLog by S("last_log", "")
 
     fun langList(): List<String> = langs.split(',').map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("ar", "en") }
+
+    /** what the autonomous mode was taught about a game: where its chat, typing box and send button are (key = [GameProfile.key]) */
+    fun gameProfile(key: String): GameProfile = GameProfile.decode(sp.getString("game_$key", "") ?: "")
+    fun setGameProfile(key: String, p: GameProfile?) {
+        val e = sp.edit()
+        if (p == null || !p.taught) e.remove("game_$key") else e.putString("game_$key", p.encode())
+        e.apply()
+    }
+    fun clearGameProfiles() {
+        val e = sp.edit()
+        for (k in sp.all.keys) if (k.startsWith("game_")) e.remove(k)
+        e.apply()
+    }
+    fun gameProfileCount(): Int = sp.all.keys.count { it.startsWith("game_") }
 
     /** which edge MY chat bubbles stick to in [pkg] (learned after the first message we send) */
     fun align(pkg: String): Align = if (sp.getString("align_$pkg", "R") == "L") Align.LEFT else Align.RIGHT

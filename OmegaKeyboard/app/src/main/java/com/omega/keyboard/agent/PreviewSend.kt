@@ -22,17 +22,22 @@ object PreviewSend {
     /** True when the service that can press buttons is on. */
     fun canPress(): Boolean = ScreenAgentService.instance != null
 
-    /** [pkg]: the app the picture went to; a send button of any other app is never pressed. */
-    fun start(ctx: Context, pkg: String?) {
-        val svc = ScreenAgentService.instance ?: return
-        if (running) return
+    /**
+     * [pkg]: the app the picture went to; a send button of any other app is never pressed.
+     * [onDone]: told (on a background thread) whether the button was pressed.
+     */
+    fun start(ctx: Context, pkg: String?, onDone: ((Boolean) -> Unit)? = null) {
+        val svc = ScreenAgentService.instance
+        if (svc == null || running) { onDone?.invoke(false); return }
         running = true
         Bg.io {
-            try { waitAndPress(svc, pkg) } finally { running = false }
+            var pressed = false
+            try { pressed = waitAndPress(svc, pkg) } finally { running = false }
+            try { onDone?.invoke(pressed) } catch (t: Throwable) { AppLog.e("picsend", "callback failed", t) }
         }
     }
 
-    private fun waitAndPress(svc: ScreenAgentService, pkg: String?) {
+    private fun waitAndPress(svc: ScreenAgentService, pkg: String?): Boolean {
         nap(FIRST_WAIT_MS)
         val end = System.currentTimeMillis() + GIVE_UP_MS
         while (System.currentTimeMillis() < end) {
@@ -45,7 +50,7 @@ object PreviewSend {
                         if (btn != null) {
                             val how = SendAction.tap(svc, snap, btn)
                             AppLog.d("picsend", "pressed '${btn.label}' (${btn.shortId}) -> $how")
-                            if (how != null) return
+                            if (how != null) return true
                         }
                     }
                 } finally {
@@ -55,5 +60,6 @@ object PreviewSend {
             nap(POLL_MS)
         }
         AppLog.d("picsend", "no send button showed up")
+        return false
     }
 }
