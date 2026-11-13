@@ -12,6 +12,7 @@ import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
 import android.os.SystemClock
+import com.omega.keyboard.AppLog
 import com.omega.keyboard.Prefs
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -94,6 +95,14 @@ object Llm {
     @Volatile var visionOk: Boolean? = null
         private set
 
+    /** why the picture reader would not open on this phone, in the library's own words (empty when it opened or nobody asked) */
+    @Volatile var visionWhy = ""
+        private set
+    @Volatile private var visionFailedAt = 0L
+
+    /** the picture reader that would not open is tried again after this long: memory may have been short only for a moment */
+    private const val VISION_RETRY_MS = 3 * 60_000L
+
     @Volatile private var lastUsed = 0L
     @Volatile private var loadedKey = ""
     @Volatile private var loadedVision = false
@@ -105,6 +114,7 @@ object Llm {
         @Volatile var error: String? = null
         @Volatile var info: String? = null
         @Volatile var vision = false
+        @Volatile var visionWhy: String? = null
     }
 
     private val ids = AtomicInteger(1)
@@ -151,6 +161,7 @@ object Llm {
             LlmService.R_OK -> {
                 p.info = b?.getString(LlmService.K_INFO)
                 p.vision = b?.getBoolean(LlmService.K_VISION, false) ?: false
+                p.visionWhy = b?.getString(LlmService.K_VWHY)
             }
             LlmService.R_RESULT -> p.text = b?.getString(LlmService.K_TEXT).orEmpty()
             LlmService.R_ERROR -> p.error = b?.getString(LlmService.K_ERR) ?: "خطأ غير معروف"
@@ -226,15 +237,22 @@ object Llm {
 
     fun isConfigured(ctx: Context): Boolean = ModelStore.path(ctx) != null
 
+    /** The loaded model has its picture reader open right now (nothing has to be loaded to read a picture). */
+    fun visionReady(): Boolean = loaded && loadedVision
+
+    /** What is said when a picture is asked for and the model's picture reader is not there. */
+    fun noVision(): String =
+        "جزء الصور في النموذج مفتحش على الجهاز ده" + if (visionWhy.isNotBlank()) " (${visionWhy.take(160)})" else ""
+
     /**
      * Loads the model if needed. Returns the backend that ended up in use ("cpu" / "gpu").
      * [vision] = the picture reader is wanted too (the game screen); [visionOk] says afterwards whether it exists.
      */
-    fun ensureLoaded(ctx: Context, vision: Boolean = false): String {
+    fun ensureLoaded(ctx: Context, vision: Boolean = false, retryVision: Boolean = false): String {
         checkBackground()
         val a = ctx.applicationContext
         app = a
-        synchronized(serial) { return loadLocked(a, vision) }
+        synchronized(serial) { return loadLocked(a, vision, retryVision) }
     }
 
     /** 1 = speculative decoding on, 2 = off, 0 = whatever the library does. "auto" turns it on where it is known to pay off. */
@@ -247,12 +265,14 @@ object Llm {
         }
     }
 
-    private fun loadLocked(a: Context, vision: Boolean = false): String {
+    private fun loadLocked(a: Context, vision: Boolean = false, again: Boolean = false): String {
         val prefs = Prefs.get(a)
         val path = ModelStore.path(a) ?: throw LlmException("لسه مفيش ملف نموذج. افتح التطبيق واختار الملف.")
         val key = path + "|" + prefs.backend
-        if (loaded && loadedKey == key && (!vision || loadedVision || visionOk == false)) return backendUsed
-        if (loadedKey != key) visionOk = null
+        // a picture reader that would not open is tried again now and then
+        val retry = vision && visionOk == false && loadedKey == key && (again || SystemClock.elapsedRealtime() - visionFailedAt >= VISION_RETRY_MS)
+        if (loaded && loadedKey == key && !retry && (!vision || loadedVision || visionOk == false)) return backendUsed
+        if (loadedKey != key) { visionOk = null; visionWhy = "" }
         loading = true
         val t0 = SystemClock.elapsedRealtime()
         try {
@@ -262,11 +282,22 @@ object Llm {
                 putString(LlmService.K_BACKEND, prefs.backend)
                 putString(LlmService.K_CACHE, cache)
                 putBoolean(LlmService.K_VISION, vision)
+                putBoolean(LlmService.K_FORCE, retry)
             }, 300_000)
             loaded = true
             loadedKey = key
             loadedVision = p.vision
-            if (vision) visionOk = p.vision
+            if (vision) {
+                visionOk = p.vision
+                visionWhy = if (p.vision) "" else p.visionWhy.orEmpty()
+                if (p.vision) {
+                    visionFailedAt = 0L
+                    AppLog.d("model", "the picture reader is open (${p.info})")
+                } else {
+                    visionFailedAt = SystemClock.elapsedRealtime()
+                    AppLog.d("model", "the picture reader did not open: " + visionWhy.ifBlank { "no reason was given" })
+                }
+            }
             backendUsed = p.info ?: prefs.backend
             lastLoadMs = SystemClock.elapsedRealtime() - t0
             lastError = ""
@@ -307,7 +338,7 @@ object Llm {
         synchronized(serial) {
             loadLocked(a, vision = imagePath != null)
             if (imagePath != null && visionOk != true) {
-                throw LlmException("النموذج ده أو الجهاز ده مش بيقرا صور")
+                throw LlmException(noVision())
             }
             try {
                 val spec = specMode(a)
@@ -334,6 +365,13 @@ object Llm {
                 return p.text.orEmpty()
             } catch (e: LlmException) {
                 lastError = e.message ?: ""
+                if (imagePath != null && e.message == LlmService.E_NOVISION) {
+                    // the model's process lost its picture reader meanwhile: the next picture opens it again
+                    loadedVision = false
+                    visionOk = false
+                    visionFailedAt = SystemClock.elapsedRealtime()
+                    AppLog.d("model", "the picture reader was lost while answering")
+                }
                 throw e
             }
         }

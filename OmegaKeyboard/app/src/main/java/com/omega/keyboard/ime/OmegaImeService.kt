@@ -122,8 +122,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private var phone = false
     private var plain = false          // password / e-mail / address field: no suggestions, no corrections, no learning
     private var fieldGen = 0
+    /** every key the user presses counts: a picture's "send" is only pressed for him while he has not typed anything since */
+    @Volatile private var keyPresses = 0
+    private val PREVIEW_HINT = "اكتب وهترجم لوحدها"
     @Volatile private var fieldLive = false        // a text box is attached to the keyboard right now (also while the keyboard itself is hidden)
     @Volatile private var fieldPkg: String? = null // the app that box belongs to
+    @Volatile private var starts = 0               // how many times a box attached itself to the keyboard (a touch that opens one is proven by this going up)
 
     // typing helpers
     private val dicts = ConcurrentHashMap<String, Dictionary>()
@@ -140,6 +144,13 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private var translateBar = false
     private var resizing = false                     // the keyboard is in "drag the edges to resize" mode
     private var typedBusy = false
+
+    // live translation of what is typed (shown in the strip while the translate bar is open; a tap puts it into the box)
+    private var typedPreview = ""
+    private var typedPreviewFor = ""
+    private var typedPreviewNote = PREVIEW_HINT
+    private var previewGen = 0
+    private val previewRunnable = Runnable { startPreview() }
     private var lastReplacement: Triple<String, String, Boolean>? = null   // original, new text, was it a selection
     private var voiceActive = false
     private var voiceText = ""
@@ -264,6 +275,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             translateBar = false
             lastReplacement = null
             typedBusy = false
+            clearPreview()
         }
         undoCorrection = null
         spaceAfterSuggestion = false
@@ -272,6 +284,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         analyseField(attribute)
         fieldLive = attribute != null && attribute.inputType != EditorInfo.TYPE_NULL
         fieldPkg = attribute?.packageName
+        if (fieldLive) starts++
     }
 
     override fun onFinishInput() {
@@ -308,6 +321,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         main.removeCallbacks(refreshRunnable)
         main.postDelayed(refreshRunnable, 30)
+        schedulePreview()
     }
 
     private fun analyseField(info: EditorInfo?) {
@@ -547,7 +561,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val p = langPanel ?: LangPanel(this).also { lp ->
             langPanel = lp
             lp.onClose = { hidePanels() }
-            lp.onPick = { code -> prefs.typedTarget = code; hidePanels(); refreshStrip() }
+            lp.onPick = { code -> prefs.typedTarget = code; hidePanels(); clearPreview(); refreshStrip(); schedulePreview() }
         }
         p.theme = theme
         p.show("ترجم كتابتك إلى", prefs.typedTarget)
@@ -666,6 +680,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     }
 
     override fun onFeedback(kind: KeyKind) {
+        keyPresses++
         aurora?.kick()
         if (prefs.haptic) {
             try {
@@ -732,6 +747,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         updateAutoShift()
         main.removeCallbacks(refreshRunnable)
         main.postDelayed(refreshRunnable, 25)
+        schedulePreview()
     }
 
     private fun commit(s: String) {
@@ -790,6 +806,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     private fun doEnter() {
         if (translateBar && prefs.translateOnSend && !typedBusy) {
+            if (useReadyPreview()) { performEnter(); return }
             translateField(thenEnter = true)
             return
         }
@@ -1013,6 +1030,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val st = strip ?: return
         st.tools = buildTools()
         st.canUndo = translateBar && lastReplacement != null
+        st.preview = if (translateBar) typedPreview else ""
+        st.previewNote = if (translateBar) typedPreviewNote else ""
         st.targetName = Languages.arabicName(prefs.typedTarget)
         st.swatch = if (prefs.textColor == 0) 0xFF2979FF.toInt() else prefs.textColor
         st.swatchRainbow = prefs.textRainbow
@@ -1079,7 +1098,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             "resize" -> if (resizing) stopResize() else startResize()
             "auto" -> if (AutoPilot.running) AutoPilot.stop("وقفته من الكيبورد") else AutoPilot.start(this)
             "screen" -> ScreenTranslateController.toggle(this)
-            "typed" -> { hidePanels(); translateBar = true; refreshStrip() }
+            "typed" -> { hidePanels(); translateBar = true; clearPreview(); refreshStrip(); schedulePreview() }
             "voice" -> startVoice()
             "ai" -> showAi()
             "clip" -> showClipboard()
@@ -1246,11 +1265,17 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             val got = taken
             if (got != null) {
                 val isSticker = mimeOf(got) == StickerRenderer.MIME
-                if (mode == SendMode.SEND || (mode == SendMode.USER && prefs.picAutoSend && PreviewSend.canPress())) {
-                    if (mode == SendMode.USER) flash(if (isSticker) "اتحوّلت لملصق ملون وبتتبعت ✓" else "اتحوّلت لصورة ملونة وبتتبعت ✓")
-                    // a sticker is sent by the chat itself; a picture waits in the app's preview until its send button is pressed
-                    PreviewSend.start(this, targetPkg) { pressed -> if (!isSticker) done?.invoke(pressed, if (pressed) "picture" else "unsent") }
-                    if (isSticker) done?.invoke(true, "sticker")
+                if (isSticker) {
+                    // a sticker is sent by the chat itself and there is no preview with a button to press. Looking for a "send" button
+                    // anyway would find the chat's own one the moment the next message is typed, and send that half-written text
+                    if (mode == SendMode.USER) flash("اتحوّلت لملصق ملون وبتتبعت ✓")
+                    keepBoxEmpty(wasSelection)
+                    done?.invoke(true, "sticker")
+                } else if (mode == SendMode.SEND || (mode == SendMode.USER && prefs.picAutoSend && PreviewSend.canPress())) {
+                    if (mode == SendMode.USER) flash("اتحوّلت لصورة ملونة وبتتبعت ✓")
+                    // a picture waits in the app's preview until its send button is pressed
+                    val presses = keyPresses
+                    PreviewSend.start(this, targetPkg, abortIf = { keyPresses != presses }) { pressed -> done?.invoke(pressed, if (pressed) "picture" else "unsent") }
                 } else {
                     flash("الصورة جاهزة. دوس إرسال في المعاينة")
                     done?.invoke(true, "draft")
@@ -1277,6 +1302,27 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         }
     }
 
+    /**
+     * Right after a picture or sticker went in, some apps put the words that were in the box back (they keep a draft of it). The box is
+     * looked at twice more and emptied again if the typed words came back and the user has not typed anything since.
+     */
+    private fun keepBoxEmpty(wasSelection: Boolean) {
+        if (wasSelection) return
+        val presses = keyPresses
+        val gen = fieldGen
+        for (delay in longArrayOf(500L, 1500L)) {
+            main.postDelayed({
+                if (gen != fieldGen || presses != keyPresses) return@postDelayed
+                val ic = currentInputConnection ?: return@postDelayed
+                try {
+                    if (readField(ic).first.isNotEmpty()) replaceNow("")
+                } catch (t: Throwable) {
+                    AppLog.e("colourpic", "could not empty the box", t)
+                }
+            }, delay)
+        }
+    }
+
     override fun onStatusAction(id: String) {
         when (id) {
             "voice_stop" -> {
@@ -1293,8 +1339,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     override fun onTranslateAction(id: String) {
         when (id) {
-            "close" -> { translateBar = false; lastReplacement = null; refreshStrip() }
-            "go" -> translateField()
+            "close" -> { translateBar = false; lastReplacement = null; clearPreview(); refreshStrip() }
+            "go" -> if (!useReadyPreview()) translateField()
             "lang" -> showTypedLanguages()
             "undo" -> undoReplacement()
         }
@@ -1427,6 +1473,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     /** The app whose text box is attached to the keyboard right now (also while the keyboard itself is hidden), or null. */
     fun liveFieldPackage(): String? = if (fieldLive) fieldPkg else null
 
+    /** How many boxes have attached themselves to the keyboard so far. Any thread. */
+    fun startCount(): Int = starts
+
+    /** The height of the keyboard on screen right now (0 when it is not shown). Any thread. */
+    fun keyboardHeightPx(): Int = root?.takeIf { it.isShown }?.height ?: 0
+
     /** What is written in the attached box, or null when none is attached. Any thread. */
     fun liveFieldText(): String? = onMain<String?>(null) {
         val ic = currentInputConnection
@@ -1507,6 +1559,78 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         lastReplacement = null
         if (!ok) flash("مقدرتش أرجّع النص (اتغيّر)", true) else refreshStrip()
         afterEdit()
+    }
+
+    private fun clearPreview(note: String = PREVIEW_HINT) {
+        previewGen++
+        main.removeCallbacks(previewRunnable)
+        typedPreview = ""
+        typedPreviewFor = ""
+        typedPreviewNote = note
+    }
+
+    /** a moment after the last change of the text, its translation is worked out (quick engine only) */
+    private fun schedulePreview() {
+        if (!translateBar) return
+        if (typedPreview.isNotEmpty()) {
+            // a translation of text that is no longer there is not shown
+            val ic = currentInputConnection
+            val now = if (ic != null) readField(ic).first.trim() else ""
+            if (now != typedPreviewFor) {
+                typedPreview = ""
+                typedPreviewNote = "بترجم..."
+                refreshStrip()
+            }
+        }
+        main.removeCallbacks(previewRunnable)
+        main.postDelayed(previewRunnable, 600)
+    }
+
+    private fun startPreview() {
+        if (!translateBar || typedBusy) return
+        val ic = currentInputConnection ?: return
+        val (text, _) = readField(ic)
+        val t = text.trim()
+        if (t.length < 2) { clearPreview(); refreshStrip(); return }
+        if (t == typedPreviewFor && typedPreview.isNotEmpty()) return   // already shown for this very text
+        val gen = ++previewGen
+        val fgen = fieldGen
+        val target = prefs.typedTarget
+        val app = applicationContext
+        typedPreviewNote = "بترجم..."
+        refreshStrip()
+        Bg.io {
+            var out: Translator.Out? = null
+            try {
+                out = Translator.translateText(app, text, target, fastOnly = true)
+            } catch (_: Exception) {
+            }
+            main.post {
+                if (gen != previewGen || fgen != fieldGen || !translateBar) return@post
+                val o = out
+                typedPreviewFor = t
+                when {
+                    o == null -> { typedPreview = ""; typedPreviewNote = "دوس \"ترجم\"" }
+                    o.engine == "same" || o.engine == "none" -> { typedPreview = ""; typedPreviewNote = "النص ده بـ ${Languages.arabicName(target)} بالفعل" }
+                    o.text.isBlank() -> { typedPreview = ""; typedPreviewNote = "دوس \"ترجم\"" }
+                    else -> { typedPreview = o.text; typedPreviewNote = "" }
+                }
+                refreshStrip()
+            }
+        }
+    }
+
+    /** puts the live translation into the box when it belongs to the text that is there now; false = nothing was done */
+    private fun useReadyPreview(): Boolean {
+        val p = typedPreview
+        if (p.isEmpty()) return false
+        val ic = currentInputConnection ?: return false
+        val (text, sel) = readField(ic)
+        if (text.trim() != typedPreviewFor) return false
+        applyReplacement(text, p, sel)
+        clearPreview()
+        refreshStrip()
+        return true
     }
 
     private fun translateField(thenEnter: Boolean = false) {

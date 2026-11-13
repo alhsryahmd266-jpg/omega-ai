@@ -19,10 +19,12 @@ object ReplyCraft {
      * @param sentences how long the answer should be, for the model ("2 to 3")
      * @param brief my own style notes ask for short replies: the length rules are relaxed
      * @param note the guidance written for the model about this very message
+     * @param checkScript the chat has enough text to be sure of its language, so a reply in another one is rejected
      */
     class Plan(
         val kind: Kind,
         val script: Script,
+        val checkScript: Boolean,
         val questions: Int,
         val minLetters: Int,
         val sentences: String,
@@ -77,6 +79,8 @@ object ReplyCraft {
         "مساء الخير", "مساء النور", "مساء الفل", "تصبح علي خير", "تصبحي علي خير", "اهلا وسهلا", "اهلا بيك", "اهلا", "اهلين", "مرحبا", "هلا", "هاي",
         "ازيك", "ازيكم", "ازيك عامل ايه", "عامل ايه", "عاملين ايه", "عامله ايه", "اخبارك ايه", "اخبارك", "اخباركم", "ايه الاخبار", "ايه اخبارك",
         "كيف حالك", "كيفك", "شلونك", "يا صباح الفل", "نورت", "ايه يا صاحبي",
+        "ezayak", "ezzayak", "ezayek", "ezayyak", "azayak", "3amel eh", "a3mel eh", "3amla eh", "eh el akhbar", "eh el 2akhbar", "salam alaikom",
+        "salam aleikum", "sabah el kheir", "sabah el 5eir", "masa2 el kheir", "ahlan", "ahla",
         "hi", "hello", "hey", "hiya", "yo", "good morning", "good evening", "good afternoon", "good night", "how are you doing",
         "how are you", "how r u", "what's up", "whats up", "sup", "wassup", "how's it going", "hows it going", "how are things"
     )
@@ -139,6 +143,20 @@ object ReplyCraft {
 
     // ------------------------------------------------------------------ the plan
 
+    /** The writing system of the chat as it stands: the newest messages, until there is enough text to tell. */
+    private fun contextScript(messages: List<ChatMessage>, game: Boolean): Pair<Script, Boolean> {
+        if (game) return Script.OTHER to false
+        val sb = StringBuilder()
+        var n = 0
+        for (t in LlmPrompts.foldTurns(messages).asReversed()) {
+            sb.append(t.second).append('\n')
+            n++
+            if (letters(sb.toString()) >= 40 || n >= 6) break
+        }
+        val text = sb.toString()
+        return scriptOf(text) to (letters(text) >= 15)
+    }
+
     /** The message I am answering: the newest turn of the other side (in a game: its newest line, without the player's name). */
     private fun theirNewest(messages: List<ChatMessage>, game: Boolean): String {
         val turns = LlmPrompts.foldTurns(messages)
@@ -151,12 +169,12 @@ object ReplyCraft {
     fun plan(messages: List<ChatMessage>, game: Boolean = false, persona: String = ""): Plan {
         val theirs = theirNewest(messages, game)
         val brief = wantsBrief(persona)
-        val script = if (game) Script.OTHER else scriptOf(theirs)
+        val (script, sure) = contextScript(messages, game)
         val l = letters(theirs)
         val lines = theirs.lines().count { it.isNotBlank() }
         val toks = tokens(theirs)
         val questions = countQuestions(theirs)
-        val long = l >= 140 || lines >= 3
+        val long = l >= 140 || (lines >= 3 && l >= 60)
         val short = l <= 12 && toks.size <= 3
         val kind = when {
             game -> Kind.GAME
@@ -170,7 +188,7 @@ object ReplyCraft {
             long -> Kind.LONG
             else -> Kind.STATEMENT
         }
-        val ar = script == Script.ARABIC
+        val ar = script != Script.LATIN             // only a chat that is surely in a Latin language needs the longer minimum
         var min = when (kind) {
             Kind.EMOJI -> 0
             Kind.ACK, Kind.GAME -> 2
@@ -199,7 +217,7 @@ object ReplyCraft {
             min /= 2
             if (kind != Kind.GAME && sentences != "1") sentences = "1 to 2"
         }
-        return Plan(kind, script, questions, min, sentences, brief, noteFor(kind, questions, sentences, script, brief))
+        return Plan(kind, script, sure, questions, min, sentences, brief, noteFor(kind, questions, sentences, script, brief))
     }
 
     private fun noteFor(kind: Kind, questions: Int, sentences: String, script: Script, brief: Boolean): String {
@@ -328,7 +346,7 @@ object ReplyCraft {
             )
         }
         val game = plan.kind == Kind.GAME
-        if (!game && plan.script != Script.OTHER && letters(r) >= 5) {
+        if (!game && plan.checkScript && plan.script != Script.OTHER && letters(r) >= 5) {
             val ar = ArabicText.arabicRatio(r)
             if ((plan.script == Script.ARABIC && ar < 0.5) || (plan.script == Script.LATIN && ar > 0.5)) {
                 return Verdict(
@@ -346,7 +364,9 @@ object ReplyCraft {
         if (tokens(r).size >= 4 && messages.filter { it.side == Side.ME }.takeLast(8).any { similar(r, it.text, 0.85) }) {
             return Verdict(Flaw.REPEAT, "Your last draft repeats something I already wrote earlier in this chat. Say something new that moves the conversation on.")
         }
-        if (letters(r) < plan.minLetters) {
+        val light = plan.kind == Kind.EMOJI || plan.kind == Kind.ACK || plan.kind == Kind.THANKS || plan.kind == Kind.GREETING
+        val emojiOnly = letters(r) == 0 && light              // a thumbs-up is a fine answer to "ok"
+        if (letters(r) < plan.minLetters && !emojiOnly) {
             return Verdict(
                 Flaw.TOO_SHORT,
                 "Your last draft (\"${quote(r)}\") was too short. Write a complete reply of ${plan.sentences} sentences that deals with everything they wrote, in the same language."

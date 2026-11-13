@@ -21,7 +21,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -858,6 +858,89 @@ object CoreTests {
         check("transcript prompt: the guidance comes before the request to write",
             up.contains("Guidance for my reply: NOTE-X") && up.trimEnd().endsWith("Write my reply now."))
         check("transcript prompt without guidance is unchanged", !LlmPrompts.replyUser(listOf(th("عندك طماطم؟"))).contains("Guidance for my reply"))
+
+        // a thumbs-up is a fine answer to "ok" or "thanks", never to a question
+        val lightKinds = listOf(th("تمام"), th("شكرا اوي على مساعدتك"), th("صباح الخير"), th("😂😂"))
+        check("judge: an emoji alone answers a light message",
+            lightKinds.all { ReplyCraft.judge("👍", listOf(it), ReplyCraft.plan(listOf(it))).ok })
+        val qm = listOf(th("هتيجي النهارده يا باشا؟"))
+        check("judge: an emoji alone does not answer a question", ReplyCraft.judge("👍", qm, ReplyCraft.plan(qm)).flaw == ReplyCraft.Flaw.TOO_SHORT)
+        // the language is only held against a reply when there is enough text to be sure of it
+        val tiny = listOf(th("هاي"))
+        val pt = ReplyCraft.plan(tiny)
+        check("language: a one word chat is not held to a language", !pt.checkScript && ReplyCraft.judge("Hello there my friend", tiny, pt).flaw != ReplyCraft.Flaw.WRONG_SCRIPT)
+        check("language: a real arabic message is", ReplyCraft.plan(q).checkScript)
+        check("language: arabizi is neither arabic nor latin: any reply script passes",
+            ReplyCraft.plan(listOf(th("ezayak ya basha 3amel eh el yom"))).let { it.script == ReplyCraft.Script.OTHER && ReplyCraft.judge("تمام الحمد لله وانت عامل ايه", listOf(th("ezayak ya basha 3amel eh el yom")), it).ok })
+        check("kind: arabizi greeting", planOf(th("ezayak 3amel eh")).kind == ReplyCraft.Kind.GREETING)
+        // a message of several lines is long even when no line is
+        val lines3 = th("النهارده الصبح رحت الشغل بدري\nوالمدير كان قاعد مستنيني عند الباب\nوقالي عايزك في موضوع مهم جدا بعدين")
+        check("kind: several lines of news are a long message", planOf(lines3).kind == ReplyCraft.Kind.LONG) { planOf(lines3).kind.toString() }
+    }
+
+    // ------------------------------------------------------------------ finding a game's chat by itself
+
+    private fun gameLocate() {
+        fun near(a: Float, b: Float) = kotlin.math.abs(a - b) < 0.003f
+        val json = "```json\n[\n" +
+            "  {\"box_2d\": [700, 50, 900, 600], \"label\": \"chat messages\"},\n" +
+            "  {\"box_2d\": [920, 50, 990, 800], \"label\": \"message input box\"},\n" +
+            "  {\"box_2d\": [920, 820, 990, 960], \"label\": \"send button\"},\n" +
+            "  {\"box_2d\": [20, 900, 120, 990], \"label\": \"chat button\"}\n]\n```"
+        val dets = GameLocate.parse(json)
+        check("scout: the four boxes are read", dets.size == 4) { dets.size.toString() }
+        val r0 = dets[0].box
+        check("scout: y comes first, x second, on a 0..1000 grid", near(r0.t, 0.7f) && near(r0.l, 0.05f) && near(r0.b, 0.9f) && near(r0.r, 0.6f)) { r0.toString() }
+        val f = GameLocate.classify(dets)
+        check("scout: each part is told apart by its label", f.chat != null && f.input != null && f.send != null && f.button != null && f.canType && f.any)
+        check("scout: and is the right box", near(f.send!!.l, 0.82f) && near(f.input!!.t, 0.92f) && near(f.button!!.l, 0.9f) && near(f.chat!!.b, 0.9f))
+
+        // our own keyboard covers the lower part of the screen: what is found there is its keys
+        val masked = GameLocate.classify(dets, maxCenterY = 0.5f)
+        check("scout: boxes under our keyboard are not the game's", masked.chat == null && masked.input == null && masked.send == null && masked.button != null)
+        check("scout: no keyboard, nothing is dropped", GameLocate.classify(dets, 1f).input != null)
+
+        // other ways the answer comes
+        val swapped = GameLocate.parse("{\"label\": \"send\", \"box_2d\": [900, 800, 980, 950]}")
+        check("scout: the label may come first", swapped.size == 1 && swapped[0].label == "send" && GameLocate.classify(swapped).send != null)
+        val frac = GameLocate.parse("[{\"box_2d\": [0.7, 0.05, 0.9, 0.6], \"label\": \"chat\"}]")
+        check("scout: fractions are accepted as they are", frac.size == 1 && near(frac[0].box.t, 0.7f) && GameLocate.classify(frac).chat != null)
+        val tinyChat = GameLocate.parse("{\"box_2d\": [20, 900, 80, 980], \"label\": \"chat\"}")
+        check("scout: a small box called just chat is the chat button", GameLocate.classify(tinyChat).let { it.button != null && it.chat == null })
+        val flipped = GameLocate.parse("{\"box_2d\": [900, 600, 700, 50], \"label\": \"chat messages\"}")
+        check("scout: corners in the wrong order are put right", flipped.size == 1 && near(flipped[0].box.t, 0.7f) && near(flipped[0].box.r, 0.6f))
+        val loose = GameLocate.parse("chat messages: [700, 50, 900, 600]\nsend button: [920, 820, 990, 960]")
+        check("scout: plain lines with numbers are read too", loose.size == 2 && GameLocate.classify(loose).let { it.chat != null && it.send != null }) { loose.size.toString() }
+
+        // what is not trusted
+        check("scout: the whole screen is not a chat", GameLocate.classify(GameLocate.parse("{\"box_2d\": [0, 0, 1000, 1000], \"label\": \"chat messages\"}")).chat == null)
+        check("scout: an empty box is dropped", GameLocate.parse("{\"box_2d\": [500, 500, 500, 500], \"label\": \"send\"}").isEmpty())
+        check("scout: words and nothing else", GameLocate.parse("I can't see a chat on this screen.").isEmpty() && GameLocate.parse("").isEmpty())
+        check("scout: a label that says nothing is left out", GameLocate.classify(GameLocate.parse("{\"box_2d\": [100, 100, 200, 300], \"label\": \"health bar\"}")).any.not())
+        check("scout: the biggest chat area wins", GameLocate.classify(GameLocate.parse(
+            "[{\"box_2d\": [700, 50, 780, 300], \"label\": \"chat messages\"}, {\"box_2d\": [600, 40, 900, 620], \"label\": \"chat log\"}]")).chat!!.height > 0.25f)
+
+        // what is kept about the game
+        val chat = FRect(0.05f, 0.7f, 0.6f, 0.9f)
+        val p = GameLocate.profileOf(GameLocate.Found(chat, null, null, FRect(0.82f, 0.92f, 0.96f, 0.99f)), FPoint(0.9f, 0.07f), FPoint(0.4f, 0.95f))
+        check("profile: the chat a little wider than it was drawn", p.chat != null && p.chat!!.l < chat.l && p.chat!!.t < chat.t && p.chat!!.r > chat.r && p.chat!!.b > chat.b)
+        check("profile: where to touch, the chat button, the send button", p.input == FPoint(0.4f, 0.95f) && p.open == FPoint(0.9f, 0.07f) && near(p.send!!.x, 0.89f))
+        check("profile: marked as found by itself, and typeable", p.auto && p.canType && p.taught)
+        check("profile: what was not found this time is kept from before",
+            GameLocate.profileOf(GameLocate.Found(null, null, null, null), null, null, base = GameProfile(input = FPoint(0.1f, 0.2f))).input == FPoint(0.1f, 0.2f))
+        val edge = GameLocate.padChat(FRect(0.01f, 0.02f, 0.99f, 0.98f))
+        check("profile: the wider chat stays on the screen", edge.l == 0f && edge.t == 0f && edge.r == 1f && edge.b == 1f)
+        val c = GameLocate.center(FRect(0.2f, 0.4f, 0.6f, 0.8f))
+        check("profile: the middle of a box", near(c.x, 0.4f) && near(c.y, 0.6f))
+
+        // how a box is brought up: the chat button first only when the chat is closed
+        val box = FPoint(0.5f, 0.95f)
+        val btn = FPoint(0.9f, 0.07f)
+        check("touches: just the box", GameLocate.openSteps(GameProfile(input = box), false) == listOf(box) && GameLocate.openSteps(GameProfile(input = box), true) == listOf(box))
+        check("touches: just the chat button", GameLocate.openSteps(GameProfile(open = btn), false) == listOf(btn))
+        check("touches: nothing known, nothing to touch", GameLocate.openSteps(GameProfile(chat = FRect(0.1f, 0.1f, 0.9f, 0.5f)), true).isEmpty())
+        check("touches: a closed chat is opened, then the box", GameLocate.openSteps(GameProfile(input = box, open = btn), false) == listOf(btn, box))
+        check("touches: an open chat is typed into at once, the button only if that fails", GameLocate.openSteps(GameProfile(input = box, open = btn), true) == listOf(box, btn, box))
     }
 
     // ------------------------------------------------------------------ games
@@ -881,6 +964,12 @@ object CoreTests {
         check("an untaught game", !GameProfile().taught && !GameProfile.decode("").taught)
         check("only the frame taught", GameProfile.decode(GameProfile(FRect(0.1f, 0.1f, 0.9f, 0.5f)).encode()).let { it.chat != null && it.input == null && it.send == null })
         check("one profile per game and orientation", GameProfile.key("com.x", true) != GameProfile.key("com.x", false) && GameProfile.key("com.x", true).startsWith("com.x"))
+        val found = GameProfile(FRect(0.1f, 0.2f, 0.7f, 0.4f), FPoint(0.5f, 0.9f), FPoint(0.95f, 0.9f), FPoint(0.93f, 0.08f), auto = true)
+        val foundBack = GameProfile.decode(found.encode())
+        check("a chat button and 'found by itself' are kept as text", foundBack.open == FPoint(0.93f, 0.08f) && foundBack.auto && foundBack.input != null) { found.encode() }
+        check("a profile taught by hand is not marked as found", !GameProfile.decode(gp.encode()).auto && !gp.encode().contains("a=1"))
+        check("something to type into: the box or the chat button", GameProfile(input = FPoint(0.5f, 0.9f)).canType && GameProfile(open = FPoint(0.9f, 0.1f)).canType &&
+            !GameProfile(chat = FRect(0.1f, 0.1f, 0.9f, 0.5f), send = FPoint(0.9f, 0.9f)).canType && !GameProfile().canType)
 
         // reading names and lines
         check("a name is split from its message", GameChat.splitName("Ahmed: gg wp") == ("Ahmed" to "gg wp"))

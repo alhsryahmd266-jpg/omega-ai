@@ -85,6 +85,9 @@ typed() {
   shot "$name"
 }
 
+# the tool row of the strip opened, nothing typed: bar <name> <prefs...>
+bar() { scenario "$@"; focus; $KB strip toggle 2>&1 | tee -a "$LOG"; sleep 1.2; shot "$1"; }
+
 # holds a key down for a few seconds and takes three screenshots while the finger is still on it: held <name> <key>
 held() {
   local name="$1" key="$2" X Y
@@ -123,6 +126,11 @@ look  kb-rose         s:theme=rose s:last_lang=en
 look  kb-forest       s:theme=forest s:last_lang=ar
 look  kb-gold         s:theme=gold s:last_lang=en
 look  kb-mint         s:theme=mint s:last_lang=en
+bar   kb-bar-light-ar  s:theme=light s:last_lang=ar
+bar   kb-bar-dark-en   s:theme=dark s:last_lang=en
+bar   kb-bar-aurora-ar s:theme=aurora s:last_lang=ar
+bar   kb-bar-neon-en   s:theme=neon s:last_lang=en
+bar   kb-bar-gold-en   s:theme=gold s:last_lang=en
 
 # --- the appearance sheet: colours, background colour (two switches), themes, size and effects
 scenario sheet s:theme=aurora s:last_lang=en
@@ -224,6 +232,17 @@ $KB strip csend 2>&1 | tee -a "$LOG"; sleep 3.5
 shot kb-csend-2
 say "csend log: $(adb logcat -d -s OmegaPic:D OmegaSend:D 2>/dev/null | tr -d '\r' | tail -4 | tr '\n' ' ')"
 say "csend field after: [$($KB text 2>/dev/null)]"
+
+# --- live translation of what is typed (like Gboard): English typed, its Arabic translation shows in the strip, a tap puts it in the box
+scenario kb-livetr s:theme=light s:last_lang=en s:typed_target=ar
+focus
+$KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-livetr-0
+$KB type "good morning my friend" 2>&1 | tee -a "$LOG"; sleep 14
+shot kb-livetr-1
+$KB strip go 2>&1 | tee -a "$LOG"; sleep 3
+shot kb-livetr-2
+say "livetr field after: [$($KB text 2>/dev/null)]"
 
 # --- resizing by hand: handles, drag the top edge up, the right edge in, the left edge in, done, then typing in the new size
 scenario kb-resize s:theme=light s:last_lang=ar

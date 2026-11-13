@@ -15,6 +15,11 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -28,7 +33,9 @@ import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.ai.ModelDownloader
 import com.omega.keyboard.ai.ModelImporter
 import com.omega.keyboard.ai.ModelStore
+import com.omega.keyboard.core.GameChat
 import java.io.File
+import java.io.FileOutputStream
 
 /** Where the local model file is chosen, copied in, tested and tuned. */
 class ModelActivity : BaseActivity() {
@@ -499,14 +506,15 @@ class ModelActivity : BaseActivity() {
         Bg.io {
             val msg = try {
                 val t0 = SystemClock.elapsedRealtime()
-                val backend = Llm.ensureLoaded(app)
+                // loaded once with the picture reader: the games need it, and a second load would cost the same time again
+                val backend = Llm.ensureLoaded(app, vision = true, retryVision = true)
                 val t1 = SystemClock.elapsedRealtime()
                 val out = Llm.generate(
                     app, "You are a friendly assistant. Answer in Egyptian Arabic, in one short sentence.",
                     "عرّف نفسك في جملة واحدة.", maxTokens = 60, temperature = 0.7f
                 )
                 val t2 = SystemClock.elapsedRealtime()
-                "اشتغل ✓ (على ${if (backend == "gpu") "كرت الشاشة" else "المعالج"})\nالتحميل: ${(t1 - t0) / 1000.0} ث، الرد: ${(t2 - t1) / 1000.0} ث\n\n${out.trim()}"
+                "اشتغل ✓ (على ${if (backend == "gpu") "كرت الشاشة" else "المعالج"})\nالتحميل: ${(t1 - t0) / 1000.0} ث، الرد: ${(t2 - t1) / 1000.0} ث\n\n${out.trim()}\n\n${visionCheck(app)}"
             } catch (e: Exception) {
                 AppLog.e("model", "test failed", e)
                 "فشل: ${e.message}\n\nلو الرسالة مش واضحة: انسخ \"سجل الأخطاء\" وابعته."
@@ -516,6 +524,50 @@ class ModelActivity : BaseActivity() {
                 testText = msg
                 render()
             }
+        }
+    }
+
+    /** A picture that looks like a game's chat (coloured lines on a dark scene), made here so the test needs nothing from outside. */
+    private fun testPicture(app: Context): File {
+        val bmp = Bitmap.createBitmap(900, 420, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(Color.rgb(24, 32, 44))
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 40f; typeface = Typeface.DEFAULT_BOLD }
+        fun line(y: Float, name: String, nameColour: Int, text: String, colour: Int) {
+            paint.color = nameColour
+            c.drawText(name, 28f, y, paint)
+            paint.color = colour
+            c.drawText(text, 28f + paint.measureText(name) + 14f, y, paint)
+        }
+        line(90f, "[VIP] Ahmed:", Color.rgb(255, 160, 0), "who has the flag?", Color.rgb(255, 235, 59))
+        line(190f, "Sara:", Color.rgb(120, 200, 255), "I do, covering left", Color.rgb(255, 105, 180))
+        line(290f, "Omar:", Color.rgb(255, 120, 120), "gg wp 482", Color.rgb(105, 240, 120))
+        val f = File(app.cacheDir, "vision_test.png")
+        FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bmp.recycle()
+        return f
+    }
+
+    /** The same way the autonomous mode reads a game's chat, on a picture whose lines are known. */
+    private fun visionCheck(app: Context): String {
+        if (Llm.visionOk != true) {
+            return "قراية الصور (للألعاب): مش شغالة ✗\n" + (Llm.visionWhy.takeIf { it.isNotBlank() } ?: "الجهاز مادّاش سبب") +
+                "\n\nلو دي الرسالة، ابعتها لي زي ما هي."
+        }
+        return try {
+            val f = testPicture(app)
+            val t0 = SystemClock.elapsedRealtime()
+            val raw = Llm.generate(
+                app, GameChat.visionSystem(""), GameChat.VISION_USER, maxTokens = 200, temperature = 0.1f, topK = 1, topP = 1f,
+                timeoutMs = 240_000, imagePath = f.absolutePath, visualTokens = 560
+            )
+            val sec = (SystemClock.elapsedRealtime() - t0) / 1000.0
+            val lines = GameChat.parseTranscript(raw, "", emptyList())
+            if (lines.isEmpty()) "قراية الصور: اشتغلت بس مقرتش رسايل ✗ ($sec ث)\nالرد: ${raw.trim().take(140)}"
+            else "قراية الصور (للألعاب): شغالة ✓ في $sec ث\nقرت ${lines.size} رسايل (المفروض ٣):\n" + lines.joinToString("\n") { "• " + it.text }
+        } catch (e: Exception) {
+            AppLog.e("model", "the picture test failed", e)
+            "قراية الصور: فشلت ✗\n${e.message}"
         }
     }
 

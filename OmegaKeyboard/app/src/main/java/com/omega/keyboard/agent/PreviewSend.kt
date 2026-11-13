@@ -24,30 +24,33 @@ object PreviewSend {
 
     /**
      * [pkg]: the app the picture went to; a send button of any other app is never pressed.
+     * [abortIf]: asked before every look: true = stop at once (the user went on typing, so a "send" button on the screen is the
+     * chat's own, for his next message, and must never be pressed).
      * [onDone]: told (on a background thread) whether the button was pressed.
      */
-    fun start(ctx: Context, pkg: String?, onDone: ((Boolean) -> Unit)? = null) {
+    fun start(ctx: Context, pkg: String?, abortIf: (() -> Boolean)? = null, onDone: ((Boolean) -> Unit)? = null) {
         val svc = ScreenAgentService.instance
         if (svc == null || running) { onDone?.invoke(false); return }
         running = true
         Bg.io {
             var pressed = false
-            try { pressed = waitAndPress(svc, pkg) } finally { running = false }
+            try { pressed = waitAndPress(svc, pkg, abortIf) } finally { running = false }
             try { onDone?.invoke(pressed) } catch (t: Throwable) { AppLog.e("picsend", "callback failed", t) }
         }
     }
 
-    private fun waitAndPress(svc: ScreenAgentService, pkg: String?): Boolean {
+    private fun waitAndPress(svc: ScreenAgentService, pkg: String?, abortIf: (() -> Boolean)?): Boolean {
         nap(FIRST_WAIT_MS)
         val end = System.currentTimeMillis() + GIVE_UP_MS
         while (System.currentTimeMillis() < end) {
+            if (abortIf != null && abortIf()) { AppLog.d("picsend", "the user went on typing: nothing is pressed"); return false }
             val snap = ScreenReader.read(svc)
             if (snap != null) {
                 try {
                     val s = snap.screen
                     if (pkg == null || s.pkg == pkg) {
                         val btn = PreviewSendFinder.find(s)
-                        if (btn != null) {
+                        if (btn != null && (abortIf == null || !abortIf())) {
                             val how = SendAction.tap(svc, snap, btn)
                             AppLog.d("picsend", "pressed '${btn.label}' (${btn.shortId}) -> $how")
                             if (how != null) return true

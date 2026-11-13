@@ -2,7 +2,12 @@ package com.omega.keyboard.agent
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.graphics.Point
 import android.view.WindowManager
 import com.omega.keyboard.AppLog
@@ -19,7 +24,11 @@ object GameEyes {
     const val GRID = 32
     private const val MAX_SIDE = 1280
 
-    class Look(val file: File, val grid: IntArray, val width: Int, val height: Int)
+    /** [blank]: the picture is (nearly) all black: the screen is protected from screenshots, or nothing is drawn yet */
+    class Look(val file: File, val grid: IntArray, val width: Int, val height: Int, val blank: Boolean = false)
+
+    /** a chat area is shown to the model at about this many pixels on its long side: small letters get big enough to read */
+    private const val CROP_TARGET = 1100
 
     /** The real size of the screen in pixels (what screenshots and gestures use), in the current orientation. */
     @Suppress("DEPRECATION")
@@ -38,7 +47,7 @@ object GameEyes {
      * A picture of the chat area [region] of the screen (all of it when null) saved as a PNG, and its gray grid. Waits for the
      * screenshot, so call it from a background thread. Null when the system refused the screenshot (a protected screen, Android 10 or older).
      */
-    fun look(ctx: Context, svc: ScreenAgentService, region: FRect?): Look? {
+    fun look(ctx: Context, svc: ScreenAgentService, region: FRect?, name: String = "game_eye"): Look? {
         var shot: Bitmap? = null
         Overlays.withBarHidden { shot = Shot.take(svc, 3500) }
         val full = shot ?: return null
@@ -52,12 +61,18 @@ object GameEyes {
                     Bitmap.createScaledBitmap(
                         crop, (crop.width * MAX_SIDE / longest).coerceAtLeast(1), (crop.height * MAX_SIDE / longest).coerceAtLeast(1), true
                     )
+                } else if (!whole && longest < CROP_TARGET) {
+                    // a small piece of the screen (the chat): bigger, so the model's picture reader sees its letters well
+                    val k = minOf(3f, CROP_TARGET.toFloat() / longest)
+                    Bitmap.createScaledBitmap(crop, (crop.width * k).toInt().coerceAtLeast(1), (crop.height * k).toInt().coerceAtLeast(1), true)
                 } else crop
                 try {
                     val grid = grayGrid(scaled)
-                    val f = File(ctx.cacheDir, "game_eye.png")
+                    val f = File(ctx.cacheDir, "$name.png")
                     FileOutputStream(f).use { out -> scaled.compress(Bitmap.CompressFormat.PNG, 100, out) }
-                    return Look(f, grid, scaled.width, scaled.height)
+                    val dark = grid.max() < 14
+                    AppLog.d("gameeyes", "picture ${scaled.width}x${scaled.height} of ${full.width}x${full.height}" + (if (dark) " (all black)" else ""))
+                    return Look(f, grid, scaled.width, scaled.height, dark)
                 } finally {
                     if (scaled !== crop) scaled.recycle()
                 }
@@ -69,6 +84,38 @@ object GameEyes {
             return null
         } finally {
             full.recycle()
+        }
+    }
+
+    /**
+     * The same picture with more contrast and stronger colours: coloured letters on a busy background (chat lines in yellow, pink or green)
+     * stand out more. Used when the plain picture gave no chat lines.
+     */
+    fun enhanced(ctx: Context, look: Look): Look? {
+        val src = BitmapFactory.decodeFile(look.file.absolutePath) ?: return null
+        try {
+            val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+            val k = 1.5f
+            val t = (-0.5f * k + 0.5f) * 255f + 14f
+            val m = ColorMatrix()
+            m.setSaturation(1.6f)
+            m.postConcat(ColorMatrix(floatArrayOf(
+                k, 0f, 0f, 0f, t,
+                0f, k, 0f, 0f, t,
+                0f, 0f, k, 0f, t,
+                0f, 0f, 0f, 1f, 0f,
+            )))
+            val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = ColorMatrixColorFilter(m) }
+            Canvas(out).drawBitmap(src, 0f, 0f, paint)
+            val f = File(ctx.cacheDir, "game_eye_hi.png")
+            FileOutputStream(f).use { o -> out.compress(Bitmap.CompressFormat.PNG, 100, o) }
+            out.recycle()
+            return Look(f, look.grid, look.width, look.height, look.blank)
+        } catch (t: Throwable) {
+            AppLog.e("gameeyes", "could not sharpen the picture", t)
+            return null
+        } finally {
+            src.recycle()
         }
     }
 

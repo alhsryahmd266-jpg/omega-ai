@@ -11,6 +11,7 @@ import android.os.Message
 import android.os.Messenger
 import android.os.Process
 import android.os.RemoteException
+import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -59,12 +60,19 @@ class LlmService : Service() {
 
         /** load: also set the picture reader up. reply: true when the model can read pictures */
         const val K_VISION = "vision"
+        /** load: open the engine again even when it is open already (the picture reader is tried once more) */
+        const val K_FORCE = "force"
+        /** reply to load: why the picture reader would not open (empty when it did, or was not asked for) */
+        const val K_VWHY = "vwhy"
         /** generate: absolute path of a picture to read together with the text */
         const val K_IMAGE = "image"
         /** generate: how many "visual tokens" the picture may use (more = reads small print better, slower); 0 = library default */
         const val K_VTOK = "vtok"
         /** generate: 0 library default, 1 speculative decoding on, 2 off */
         const val K_SPEC = "spec"
+
+        /** the answer to a picture when the picture reader is not open (the client then knows it has to open it again) */
+        const val E_NOVISION = "النموذج ده أو الجهاز ده مش بيقرا صور"
 
         /** generate: the conversation before the new message, as two arrays of the same length: the texts and "written by me" flags */
         const val K_HTEXT = "htext"
@@ -87,6 +95,7 @@ class LlmService : Service() {
     @Volatile private var visionOn = false
     @Volatile private var visionTried = false
     @Volatile private var visionName = ""
+    @Volatile private var visionNote = ""
     @Volatile private var openPath = ""
     @Volatile private var openMain = ""
     @Volatile private var openCache = ""
@@ -158,6 +167,33 @@ class LlmService : Service() {
         }
     }
 
+    /** a short English reason for the log and for the person who has to tell what went wrong: the kind of error and its first words */
+    private fun brief(t: Throwable): String {
+        val root = generateSequence(t) { it.cause }.last()
+        val msg = (root.message ?: t.message ?: "").replace('\n', ' ').trim().take(110)
+        return root.javaClass.simpleName + if (msg.isEmpty()) "" else ": $msg"
+    }
+
+    /**
+     * A marker that exists while the picture reader runs on the graphics chip. Some phones' graphics drivers take the whole process
+     * down instead of raising an error: then the marker is still there at the next start, and the graphics chip is left out for an hour
+     * so the model does not crash again and again.
+     */
+    private fun gpuMarker() = File(cacheDir, "vision_gpu_attempt")
+
+    private fun gpuVisionCrashed(): Boolean {
+        val f = gpuMarker()
+        return f.exists() && System.currentTimeMillis() - f.lastModified() < 60 * 60_000L
+    }
+
+    private fun markGpuVision(on: Boolean) {
+        try {
+            val f = gpuMarker()
+            if (on) f.writeText("1") else f.delete()
+        } catch (_: Throwable) {
+        }
+    }
+
     private fun closeEngine() {
         try { current?.close() } catch (_: Throwable) {}
         current = null
@@ -168,6 +204,7 @@ class LlmService : Service() {
         visionOn = false
         visionTried = false
         visionName = ""
+        visionNote = ""
         if (e != null) try { e.close() } catch (_: Throwable) {}
     }
 
@@ -199,12 +236,14 @@ class LlmService : Service() {
         val want = d.getString(K_BACKEND) ?: "cpu"
         val cache = d.getString(K_CACHE).orEmpty()
         val wantVision = d.getBoolean(K_VISION, false)
+        val force = d.getBoolean(K_FORCE, false)
         try {
             val key = "$path|$want"
-            if (engine != null && loadedKey == key && (!wantVision || visionOn || visionTried)) {
+            if (!force && engine != null && loadedKey == key && (!wantVision || visionOn || visionTried)) {
                 reply(m, R_OK) {
                     putString(K_INFO, usedBackend)
                     putBoolean(K_VISION, visionOn)
+                    putString(K_VWHY, visionNote)
                 }
                 return
             }
@@ -218,26 +257,40 @@ class LlmService : Service() {
             if (wantVision) for (b in mains) for (v in listOf("gpu", "cpu")) combos.add(b to v)
             for (b in mains) combos.add(b to "")
             var last: Throwable? = null
+            // what each picture reader that would not open said: it is told to the client (and so to the person), never dropped
+            val whys = ArrayList<String>()
+            val crashed = gpuVisionCrashed()
             for ((b, v) in combos) {
+                if (v == "gpu" && crashed) {
+                    whys.add("$b/gpu → skipped: it took the model's process down the last time")
+                    continue
+                }
                 try {
+                    if (v == "gpu") markGpuVision(true)
                     val e = open(path, b, v, cache)
+                    if (v == "gpu") markGpuVision(false)
                     engine = e
                     loadedKey = key
                     usedBackend = b
                     visionName = v
                     visionOn = v.isNotEmpty()
                     visionTried = wantVision
+                    visionNote = if (wantVision && !visionOn) whys.joinToString(" | ").take(420) else ""
                     openPath = path
                     openMain = b
                     openCache = cache
                     reply(m, R_OK) {
                         putString(K_INFO, b)
                         putBoolean(K_VISION, visionOn)
+                        putString(K_VWHY, visionNote)
                     }
                     return
                 } catch (t: Throwable) {
+                    if (v == "gpu") markGpuVision(false)
                     last = t
                     engine = null
+                    Log.w("OmegaLlm", "model on $b with picture reader '$v' did not open", t)
+                    if (v.isNotEmpty()) whys.add("$b/$v → ${brief(t)}")
                 }
             }
             throw last ?: IllegalStateException("فشل تحميل النموذج")
@@ -254,7 +307,7 @@ class LlmService : Service() {
             return
         }
         if (image.isNotEmpty() && !visionOn) {
-            reply(m, R_ERROR) { putString(K_ERR, "النموذج ده أو الجهاز ده مش بيقرا صور") }
+            reply(m, R_ERROR) { putString(K_ERR, E_NOVISION) }
             return
         }
         cancelled = false
@@ -283,7 +336,13 @@ class LlmService : Service() {
                     conv.sendMessage(user).toString()
                 } else {
                     setVisualBudget(d.getInt(K_VTOK, 0))
-                    conv.sendMessage(Contents.of(Content.ImageFile(image), Content.Text(user))).toString()
+                    val onGpu = visionName == "gpu"
+                    if (onGpu) markGpuVision(true)
+                    try {
+                        conv.sendMessage(Contents.of(Content.ImageFile(image), Content.Text(user))).toString()
+                    } finally {
+                        if (onGpu) markGpuVision(false)
+                    }
                 }
                 if (spec == 1 && specOffRetried) specBroken = true
                 reply(m, R_RESULT) { putString(K_TEXT, out) }
@@ -322,9 +381,11 @@ class LlmService : Service() {
             visionName = "cpu"
             visionOn = true
             true
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            Log.w("OmegaLlm", "the picture reader would not open on the processor either", t)
             visionOn = false
             visionName = ""
+            visionNote = "cpu → ${brief(t)}"
             // keep the text side alive for the next request
             try {
                 engine = open(openPath, openMain, "", openCache)

@@ -5,11 +5,14 @@ import android.os.Build
 import com.omega.keyboard.AppLog
 import com.omega.keyboard.Prefs
 import com.omega.keyboard.ai.Llm
+import com.omega.keyboard.core.ChatMessage
 import com.omega.keyboard.core.ColorCodes
+import com.omega.keyboard.core.FPoint
 import com.omega.keyboard.core.GameChat
 import com.omega.keyboard.core.GameProfile
 import com.omega.keyboard.core.Screen
 import com.omega.keyboard.ime.OmegaImeService
+import java.io.File
 import kotlin.random.Random
 
 /** What the autonomous mode's loop offers to a game round. */
@@ -30,6 +33,14 @@ class GameState(val pkg: String, val landscape: Boolean) {
     var profile = GameProfile()
     var profileLoaded = false
     var offeredTeaching = false
+    var chatOpen = false                 // the game's chat was open the last time it was used
+    var scoutFails = 0                   // looks for the chat and its buttons that gave no way to type
+    var nextScoutAt = 0L
+    var rescouts = 0                     // times a place found by itself was given up because it showed no chat
+    var rescoutAt = 0L
+    var emptyReads = 0                   // reads in a row that showed no chat line at all
+    var blankLooks = 0                   // pictures in a row that were all black
+    var sendLooks = 0                    // looks for the game's send button that found none
     var lastGrid: IntArray? = null       // the chat picture at the last read
     var prevGrid: IntArray? = null       // the chat picture at the last look
     var changedSince = 0L
@@ -45,6 +56,7 @@ class GameState(val pkg: String, val landscape: Boolean) {
  * One round of the autonomous mode inside a game. Games draw their own screens (nothing for the accessibility service to read), so the
  * chat is read from a picture of the screen by the local model, and the answer is typed through the keyboard.
  *
+ * Where the chat and its buttons are is found by the model too, once per game ([GameScout]); the user can still show them by hand.
  * The chat part of the screen is looked at all the time (cheap): only when it has changed and then held still is the model asked to
  * copy the messages from the picture (slow). A line that was answered, or that is mine, is never answered again.
  */
@@ -53,13 +65,25 @@ object GameRound {
     private const val CHANGE_CELLS = 10
     /** a chat that keeps moving is read anyway after this long */
     private const val SETTLE_MS = 7_000L
+    /** looks for the chat that may fail before the user is asked to show it */
+    private const val MAX_SCOUTS = 3
 
-    /** the model could not read pictures on this phone: games are left alone until the next start */
-    @Volatile var visionBroken = false
+    /** the model's picture reader would not open: games are left alone for a while, then it is tried again (memory may have been short) */
+    @Volatile private var visionBrokenAt = 0L
+    private const val VISION_COOL_MS = 3 * 60_000L
 
-    fun reset() { visionBroken = false }
+    fun visionBroken(): Boolean = visionBrokenAt != 0L && System.currentTimeMillis() - visionBrokenAt < VISION_COOL_MS
 
-    fun allowed(prefs: Prefs): Boolean = prefs.apVision != "off" && !visionBroken && Build.VERSION.SDK_INT >= 30
+    fun markVisionBroken() { visionBrokenAt = System.currentTimeMillis() }
+
+    /** what the person is told when the picture reader will not open (the library's own reason is added: it is what has to be fixed) */
+    fun visionFailedText(): String =
+        "جزء الصور في Gemma مفتحش على جهازك" + Llm.visionWhy.takeIf { it.isNotBlank() }?.let { " (${it.take(120)})" }.orEmpty() +
+            ". هسيب الألعاب وهجرّبه تاني بعد ٣ دقايق"
+
+    fun reset() { visionBrokenAt = 0L }
+
+    fun allowed(prefs: Prefs): Boolean = prefs.apVision != "off" && !visionBroken() && Build.VERSION.SDK_INT >= 30
 
     /** The screen shows no readable text at all: a game draws its own interface. */
     fun opaque(screen: Screen): Boolean =
@@ -77,13 +101,42 @@ object GameRound {
         g.offeredTeaching = true
         if (p != null && p.taught) {
             g.profile = p
+            g.chatOpen = false
             prefs.setGameProfile(GameProfile.key(g.pkg, g.landscape), p)
             g.lastGrid = null
             g.nextReadAt = 0L
+            g.emptyReads = 0
             host.say("تمام، اتعلّمت مكان الشات")
         } else {
             host.say(if (g.profile.taught) "سيبت الضبط زي ما كان" else "لغيت الضبط. هقرا الشاشة كلها (أبطأ وأقل دقة)", warn = !g.profile.taught)
         }
+    }
+
+    /** The model copies the chat lines from the picture [file]. Null = it failed (the user was told, and the next try is set). */
+    private fun readLines(ctx: Context, prefs: Prefs, g: GameState, host: GameHost, file: File): List<ChatMessage>? {
+        if (!Llm.visionReady()) host.say("بحمّل جزء الصور في النموذج (أول مرة بس، ممكن ياخد دقيقة)...")
+        val raw = try {
+            Llm.generate(
+                ctx, GameChat.visionSystem(prefs.apGameName), GameChat.VISION_USER, maxTokens = 420, temperature = 0.1f, topK = 1, topP = 1f,
+                timeoutMs = 300_000, imagePath = file.absolutePath, visualTokens = 560
+            )
+        } catch (e: Exception) {
+            if (host.stopped()) return null
+            AppLog.e("game", "reading the chat failed", e)
+            if (Llm.visionOk == false) {
+                markVisionBroken()
+                host.say(visionFailedText(), true)
+            } else {
+                g.failures++
+                g.nextReadAt = System.currentTimeMillis() + minOf(60_000L, 6_000L * g.failures)
+                host.say("قراية الشات فشلت (${Llm.lastError.take(50)}). هحاول تاني...", true)
+            }
+            return null
+        }
+        if (host.stopped()) return null
+        val messages = GameChat.parseTranscript(raw, prefs.apGameName, g.sent)
+        AppLog.d("game", "read ${messages.size} lines (${file.name}): " + raw.replace('\n', '⏎').take(300))
+        return messages
     }
 
     fun step(ctx: Context, svc: ScreenAgentService, prefs: Prefs, g: GameState, host: GameHost) {
@@ -93,14 +146,43 @@ object GameRound {
             g.profile = prefs.gameProfile(GameProfile.key(g.pkg, g.landscape))
             g.profileLoaded = true
         }
-        if (!g.profile.taught && !g.offeredTeaching) {
-            teach(svc, prefs, g, host)
-            if (host.stopped()) return
+
+        // ---- no way to type into this game is known yet: the model looks for its chat and buttons on the screen
+        if (!g.profile.canType) {
+            if (g.scoutFails < MAX_SCOUTS) {
+                if (System.currentTimeMillis() >= g.nextScoutAt) {
+                    val ok = GameScout.learn(ctx, svc, prefs, g, host)
+                    if (host.stopped()) return
+                    if (ok && g.profile.canType) {
+                        g.scoutFails = 0
+                    } else {
+                        g.scoutFails++
+                        g.nextScoutAt = System.currentTimeMillis() + 15_000L * g.scoutFails
+                    }
+                } else if (!g.profile.taught) {
+                    host.say("هدوّر على الشات تاني كمان ثواني...")
+                    return
+                }
+            } else if (!g.offeredTeaching) {
+                host.say("معرفتش أتعرّف على خانة الكتابة لوحدي", true)
+                teach(svc, prefs, g, host)
+                if (host.stopped()) return
+            }
+            if (!g.profile.taught && g.scoutFails < MAX_SCOUTS) return      // nothing is known yet: the next round tries again
         }
 
         // ---- a look at the chat part of the screen
         val look = GameEyes.look(ctx, svc, g.profile.chat)
         if (look == null) { host.say("مقدرتش آخد صورة للشاشة. ممكن اللعبة تكون محمية من التصوير", true); return }
+        if (look.blank) {
+            g.blankLooks++
+            host.say(
+                if (g.blankLooks >= 3) "الصورة لسه سودا. لو اللعبة بتمنع تصوير الشاشة مش هقدر أقراها" else "منطقة الشات سودا دلوقتي، هستنى...",
+                warn = g.blankLooks >= 3
+            )
+            return
+        }
+        g.blankLooks = 0
         val now = System.currentTimeMillis()
         val last = g.lastGrid
         val prev = g.prevGrid
@@ -120,36 +202,40 @@ object GameRound {
 
         // ---- the model copies the messages from the picture
         host.say("بقرا شات اللعبة...")
-        if (Llm.loading) host.say("النموذج بيتحمّل، ثواني...")
-        val raw = try {
-            Llm.generate(
-                ctx, GameChat.visionSystem(prefs.apGameName), GameChat.VISION_USER, maxTokens = 420, temperature = 0.1f, topK = 1, topP = 1f,
-                timeoutMs = 300_000, imagePath = look.file.absolutePath, visualTokens = 560
-            )
-        } catch (e: Exception) {
-            if (host.stopped()) return
-            AppLog.e("game", "reading the chat failed", e)
-            if (Llm.visionOk == false) {
-                visionBroken = true
-                host.say("النموذج ده مش بيقرا صور على الجهاز ده، فمش هقدر أقرا اللعبة. جرّب Gemma 4 أو اتأكد إن النموذج بيدعم الصور", true)
-            } else {
-                g.failures++
-                g.nextReadAt = System.currentTimeMillis() + minOf(60_000L, 6_000L * g.failures)
-                host.say("قراية الشات فشلت (${Llm.lastError.take(50)}). هحاول تاني...", true)
+        var messages = readLines(ctx, prefs, g, host, look.file) ?: return
+        g.failures = 0
+        g.lastGrid = look.grid
+        if (messages.isEmpty()) {
+            // coloured letters on a busy background: the same picture with more contrast and stronger colours, once
+            val sharp = GameEyes.enhanced(ctx, look)
+            if (sharp != null) {
+                host.say("مش شايف رسايل، هجرّب صورة أوضح...")
+                val again = readLines(ctx, prefs, g, host, sharp.file) ?: return
+                if (again.isNotEmpty()) {
+                    messages = again
+                    AppLog.d("game", "the sharper picture showed ${again.size} lines that the plain one did not")
+                }
+            }
+        }
+        if (messages.isEmpty()) {
+            g.idleReads++
+            g.emptyReads++
+            g.nextReadAt = System.currentTimeMillis() + idleGap(g.idleReads)
+            host.say("مش شايف رسايل شات في الصورة. لو المربع مش على الشات دوس «ضبط»", warn = g.idleReads >= 3)
+            // a place that was found by itself and shows no chat line again and again may be the wrong place: it is looked for once more
+            if (g.profile.auto && g.emptyReads >= 3 && g.rescouts < 2 && System.currentTimeMillis() >= g.rescoutAt) {
+                g.rescouts++
+                g.rescoutAt = System.currentTimeMillis() + 180_000L
+                g.emptyReads = 0
+                g.scoutFails = 0
+                g.nextScoutAt = 0L
+                g.profile = GameProfile()
+                g.lastGrid = null
+                host.say("المكان اللي لقيته مش بيطلّع رسايل. هدوّر على الشات من الأول...")
             }
             return
         }
-        if (host.stopped()) return
-        g.failures = 0
-        g.lastGrid = look.grid
-        val messages = GameChat.parseTranscript(raw, prefs.apGameName, g.sent)
-        AppLog.d("game", "read ${messages.size} lines: " + raw.replace('\n', '⏎').take(300))
-        if (messages.isEmpty()) {
-            g.idleReads++
-            g.nextReadAt = System.currentTimeMillis() + idleGap(g.idleReads)
-            host.say("مش شايف رسايل شات في الصورة. لو المربع مش على الشات دوس «ضبط»", warn = g.idleReads >= 3)
-            return
-        }
+        g.emptyReads = 0
         val decision = GameChat.decide(messages, g.handled)
         if (!decision.reply) {
             g.idleReads++
@@ -159,6 +245,13 @@ object GameRound {
         }
         g.idleReads = 0
         val theirs = messages.last().text
+
+        // a reply that cannot be typed is not worth the time of writing it
+        if (!g.profile.canType && ime.liveFieldPackage() != g.pkg) {
+            g.nextReadAt = System.currentTimeMillis() + 15_000L
+            host.say("فيه رسالة جديدة بس مش عارف مكان خانة الكتابة. دوس «ضبط» وعلّمني مكانها", true)
+            return
+        }
 
         // ---- the reply, written as me
         val lo = prefs.apDelayMinSec.coerceIn(0, 3)
@@ -190,9 +283,21 @@ object GameRound {
         // from now on a chat line with this text is mine, whatever it looks like in the picture
         g.sent.add(text)
         trim(g.sent)
-        val res = GameTyper.send(svc, ime, g.pkg, g.profile, coloured) { host.stopped() }
+        // the game's send button is looked for on the screen (slowly) only when none is known and the box's own action key sends nothing
+        var findSend: (() -> FPoint?)? = null
+        if (g.profile.send == null && g.sendLooks < 2) {
+            findSend = { GameScout.findSend(ctx, svc, host).also { if (it == null) g.sendLooks++ } }
+        }
+        val res = GameTyper.send(svc, ime, g.pkg, g.profile, coloured, g.chatOpen, { host.stopped() }, findSend)
         if (res.ok) {
             g.failures = 0
+            g.chatOpen = true
+            val learned = res.send
+            if (learned != null) {
+                // the send button that worked is kept for next time
+                g.profile = g.profile.copy(send = learned)
+                prefs.setGameProfile(GameProfile.key(g.pkg, g.landscape), g.profile)
+            }
             g.handled.add(theirs)
             trim(g.handled)
             g.nextReadAt = System.currentTimeMillis() + 3_000L

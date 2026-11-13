@@ -70,9 +70,11 @@ object Translator {
     // ------------------------------------------------------------------ typed text
 
     /** Translates text the user typed (may have several lines). [source] "auto" detects the language. */
-    fun translateText(ctx: Context, text: String, target: String, source: String = "auto"): Out {
+    /** [fastOnly]: only the quick engine may answer (a live preview while typing never wakes the big model); otherwise it throws. */
+    fun translateText(ctx: Context, text: String, target: String, source: String = "auto", fastOnly: Boolean = false): Out {
         val mode = Prefs.get(ctx).engineMode
         if (text.isBlank()) return Out(text, "none", null)
+        if (fastOnly && mode == "gemma") throw TranslateException("no preview in model mode")
         val trimmed = text.trim()
         val src = if (source == "auto") TranslateRules.sourceLanguage(trimmed, detectOne(trimmed), dominant = "en") else source
         if (src == target) return Out(text, "same", src)
@@ -99,6 +101,7 @@ object Translator {
         if (mode == "mlkit") {
             throw TranslateException(fastFailure?.let { friendly(it) } ?: "الترجمة السريعة رجّعت نتيجة مش مظبوطة. جرّب تاني.")
         }
+        if (fastOnly) throw TranslateException(fastFailure?.let { friendly(it) } ?: "no quick translation for this text")
         if (!Llm.isConfigured(ctx)) {
             throw TranslateException(fastFailure?.let { friendly(it) } ?: "اللغة دي محتاجة النموذج المحلي. ضيف ملف النموذج من التطبيق (الشاشة الرئيسية).")
         }

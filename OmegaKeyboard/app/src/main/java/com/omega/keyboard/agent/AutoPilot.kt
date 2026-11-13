@@ -422,6 +422,10 @@ object AutoPilot {
                         publish("قراية الألعاب محتاجة أندرويد ١١ أو أحدث", warn = true)
                         continue
                     }
+                    if (GameRound.opaque(snap.screen) && prefs.apVision != "off" && GameRound.visionBroken()) {
+                        publish(GameRound.visionFailedText(), warn = true)
+                        continue
+                    }
                     publish("ده مش شكله تطبيق محادثة. افتح المحادثة وأنا هرد (${appLabel(ctx, pkg)})")
                     continue
                 }

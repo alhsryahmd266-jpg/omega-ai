@@ -2,8 +2,10 @@ package com.omega.keyboard.ime
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
@@ -12,6 +14,7 @@ import android.text.TextUtils
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import com.omega.keyboard.core.ColorMath
 
 /**
  * The bar above the keys: word suggestions, the tool row (autonomous mode, translation, voice, clipboard...),
@@ -62,6 +65,11 @@ class StripView(ctx: Context) : View(ctx) {
         set(v) { field = v; invalidate() }
     var canUndo: Boolean = false
         set(v) { field = v; invalidate() }
+    /** the live translation of what is typed (a tap puts it into the box), or the note shown while there is none */
+    var preview: String = ""
+        set(v) { if (field != v) { field = v; invalidate() } }
+    var previewNote: String = ""
+        set(v) { if (field != v) { field = v; invalidate() } }
 
     // status bar
     var statusText: String = ""
@@ -110,9 +118,76 @@ class StripView(ctx: Context) : View(ctx) {
         }
     }
 
+    // ------------------------------------------------------------------ the round buttons
+
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
+    private val shine = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /** both ends of a row of round buttons keep this margin from the edge of the keyboard */
+    private val railEdge get() = dp(23f)
+
+    /** the centre of button [i] of [n]: the first and the last sit [railEdge] from the edges and every gap in between is the same */
+    private fun railX(i: Int, n: Int, w: Float): Float =
+        if (n <= 1) w / 2f else railEdge + i * (w - 2 * railEdge) / (n - 1)
+
+    /** one radius for every button of the row, as big as the gaps allow, so the row never looks stuck together here and loose there */
+    private fun railRadius(n: Int, w: Float): Float {
+        val step = if (n <= 1) dp(40f) else (w - 2 * railEdge) / (n - 1)
+        return minOf(dp(17f), step / 2f - dp(2.5f)).coerceAtLeast(dp(11f))
+    }
+
+    private enum class Chip { PLAIN, ACTIVE }
+
+    /**
+     * One round button: the same size and the same look wherever it stands. A plain one is a little glass pearl (soft shadow, light
+     * top, hairline edge), a running tool is filled with the accent colour and glows.
+     */
+    private fun drawChip(c: Canvas, cx: Float, cy: Float, r: Float, kind: Chip, pressed: Boolean) {
+        val t = theme
+        val rr = if (pressed) r * 0.93f else r
+        fill.shader = null
+        val sa = ColorMath.alpha(t.shadow)
+        if (!t.glass && sa > 0) {
+            fill.color = ColorMath.withAlpha(t.shadow, (sa * 0.5f).toInt())
+            c.drawCircle(cx, cy + dp(1.3f), rr, fill)
+        }
+        when (kind) {
+            Chip.ACTIVE -> {
+                fill.color = ColorMath.withAlpha(t.accent, 0x3A)
+                c.drawCircle(cx, cy, rr + dp(3f), fill)
+                fill.shader = LinearGradient(cx, cy - rr, cx, cy + rr, ColorMath.shade(t.accent, 0.12f), ColorMath.shade(t.accent, -0.16f), Shader.TileMode.CLAMP)
+                c.drawCircle(cx, cy, rr, fill)
+                fill.shader = null
+                ring.color = ColorMath.withAlpha(ColorMath.PAPER, 0x55)
+            }
+            Chip.PLAIN -> {
+                val top = if (pressed) t.keyPressed else t.key
+                val bottom = if (pressed) t.keyPressed else ColorMath.blend(t.key, t.keyFn, 0.55f)
+                fill.shader = LinearGradient(cx, cy - rr, cx, cy + rr, top, bottom, Shader.TileMode.CLAMP)
+                c.drawCircle(cx, cy, rr, fill)
+                fill.shader = null
+                ring.color = if (t.glass) t.rim else ColorMath.withAlpha(t.divider, 0xC0)
+            }
+        }
+        c.drawCircle(cx, cy, rr - density * 0.5f, ring)
+        // the light on the top half
+        shine.shader = LinearGradient(
+            cx, cy - rr, cx, cy + rr * 0.15f,
+            ColorMath.withAlpha(ColorMath.PAPER, if (kind == Chip.ACTIVE) 0x55 else if (t.dark) 0x26 else 0x70), 0x00FFFFFF, Shader.TileMode.CLAMP
+        )
+        c.drawCircle(cx, cy, rr - dp(1f), shine)
+    }
+
     /** the round colour button: a disc in the typing colour (or the rainbow) with a "send" arrow in a readable ink */
     private fun drawSwatch(c: Canvas, cx: Float, cy: Float, radius: Float, pressed: Boolean) {
         val prev = fill.shader
+        val rr = if (pressed) radius * 0.93f else radius
+        val sa = ColorMath.alpha(theme.shadow)
+        if (!theme.glass && sa > 0) {
+            fill.shader = null
+            fill.color = ColorMath.withAlpha(theme.shadow, (sa * 0.5f).toInt())
+            c.drawCircle(cx, cy + dp(1.3f), rr, fill)
+        }
         if (swatchRainbow) {
             val cs = IntArray(7) { com.omega.keyboard.core.ColorMath.rainbow(it * 8 + 1) }
             cs[6] = cs[0]
@@ -121,10 +196,14 @@ class StripView(ctx: Context) : View(ctx) {
             fill.shader = null
             fill.color = swatch
         }
-        c.drawCircle(cx, cy, if (pressed) radius * 0.92f else radius, fill)
+        c.drawCircle(cx, cy, rr, fill)
         fill.shader = prev
+        ring.color = ColorMath.withAlpha(ColorMath.PAPER, 0x66)
+        c.drawCircle(cx, cy, rr - density * 0.5f, ring)
+        shine.shader = LinearGradient(cx, cy - rr, cx, cy + rr * 0.15f, ColorMath.withAlpha(ColorMath.PAPER, 0x55), 0x00FFFFFF, Shader.TileMode.CLAMP)
+        c.drawCircle(cx, cy, rr - dp(1f), shine)
         val ink = if (swatchRainbow) 0xFFFFFFFF.toInt() else com.omega.keyboard.core.ColorMath.onColor(swatch)
-        drawIcon(c, "send", cx, cy, radius * 1.15f, ink)
+        drawIcon(c, "send", cx, cy, rr * 1.15f, ink)
     }
 
     private fun drawText(c: Canvas, s: String, cx: Float, cy: Float, maxW: Float) {
@@ -143,19 +222,23 @@ class StripView(ctx: Context) : View(ctx) {
         val btn = dp(40f)
         when (mode) {
             Mode.SUGGEST -> {
-                val r = addHit(dp(4f), cy - btn / 2, dp(4f) + btn, cy + btn / 2, "toggle")
-                pressBg(c, r, "toggle", btn / 2)
-                drawIcon(c, "chevron_right", r.centerX(), cy, dp(24f), t.onBgSub)
-                val mr = addHit(w - dp(4f) - btn, cy - btn / 2, w - dp(4f), cy + btn / 2, "mic")
-                pressBg(c, mr, "mic", btn / 2)
-                drawIcon(c, "mic", mr.centerX(), cy, dp(22f), t.onBgSub)
-                var left = dp(48f)
+                val rr = dp(16f)
+                val tx = railEdge
+                addHit(tx - btn / 2, cy - btn / 2, tx + btn / 2, cy + btn / 2, "toggle")
+                drawChip(c, tx, cy, rr, Chip.PLAIN, pressedTag == "toggle")
+                drawIcon(c, "chevron_right", tx, cy, rr * 1.25f, t.text)
+                val mx = w - railEdge
+                addHit(mx - btn / 2, cy - btn / 2, mx + btn / 2, cy + btn / 2, "mic")
+                drawChip(c, mx, cy, rr, Chip.PLAIN, pressedTag == "mic")
+                drawIcon(c, "mic", mx, cy, rr * 1.25f, t.text)
+                var left = tx + btn / 2 + dp(2f)
                 if (colourSend) {
-                    val sr = addHit(left - dp(2f), cy - btn / 2, left - dp(2f) + btn, cy + btn / 2, "csend")
-                    drawSwatch(c, sr.centerX(), cy, dp(16f), pressedTag == "csend")
-                    left = sr.right + dp(2f)
+                    val sx = left + btn / 2
+                    addHit(sx - btn / 2, cy - btn / 2, sx + btn / 2, cy + btn / 2, "csend")
+                    drawSwatch(c, sx, cy, rr, pressedTag == "csend")
+                    left = sx + btn / 2 + dp(2f)
                 }
-                val right = w - dp(48f)
+                val right = mx - btn / 2 - dp(2f)
                 val slot = (right - left) / 3f
                 // order on screen: second | best | third
                 val order = listOf(1, 0, 2)
@@ -173,64 +256,73 @@ class StripView(ctx: Context) : View(ctx) {
                 }
             }
             Mode.TOOLBAR -> {
-                val r = addHit(dp(4f), cy - btn / 2, dp(4f) + btn, cy + btn / 2, "toggle")
-                pressBg(c, r, "toggle", btn / 2)
-                drawIcon(c, "chevron_left", r.centerX(), cy, dp(24f), t.onBgSub)
-                val left = dp(48f)
-                val slot = (w - left - dp(4f)) / maxOf(1, tools.size)
-                val pw = minOf(dp(44f), slot - dp(2f))
-                val ph = dp(34f)
+                // the collapse button and every tool stand on one rail: same size, same look, equal gaps
+                val n = tools.size + 1
+                val rr = railRadius(n, w)
+                val step = if (n <= 1) w else (w - 2 * railEdge) / (n - 1)
+                val tx = railX(0, n, w)
+                addHit(tx - step / 2, 0f, tx + step / 2, h, "toggle")
+                drawChip(c, tx, cy, rr, Chip.PLAIN, pressedTag == "toggle")
+                drawIcon(c, "chevron_left", tx, cy, rr * 1.25f, t.text)
                 for ((i, tool) in tools.withIndex()) {
-                    val l = left + i * slot
-                    val rect = addHit(l, 0f, l + slot, h, "t:${tool.id}")
-                    val pill = RectF(rect.centerX() - pw / 2, cy - ph / 2, rect.centerX() + pw / 2, cy + ph / 2)
-                    // Gboard look: icons only. The microphone sits in a round bubble, a running tool in a filled pill.
+                    val x = railX(i + 1, n, w)
+                    val tag = "t:${tool.id}"
+                    addHit(x - step / 2, 0f, x + step / 2, h, tag)
+                    val down = pressedTag == tag
                     if (tool.id == "csend") {
-                        drawSwatch(c, pill.centerX(), cy, ph / 2, pressedTag == "t:csend")
+                        drawSwatch(c, x, cy, rr, down)
                         continue
                     }
-                    when {
-                        tool.active -> { fill.color = t.accent; c.drawRoundRect(pill, ph / 2, ph / 2, fill) }
-                        pressedTag == "t:${tool.id}" -> { fill.color = t.keyFn; c.drawRoundRect(pill, ph / 2, ph / 2, fill) }
-                        tool.id == "voice" -> { fill.color = t.key; c.drawCircle(pill.centerX(), cy, ph / 2, fill) }
-                    }
-                    val ink = when {
-                        tool.active -> t.onAccent
-                        pressedTag == "t:${tool.id}" -> t.onFn
-                        tool.id == "voice" -> t.text
-                        else -> t.onBg
-                    }
-                    drawIcon(c, tool.icon, rect.centerX(), cy, dp(22f), ink)
+                    drawChip(c, x, cy, rr, if (tool.active) Chip.ACTIVE else Chip.PLAIN, down)
+                    drawIcon(c, tool.icon, x, cy, rr * 1.25f, if (tool.active) t.onAccent else t.text)
                 }
             }
             Mode.TRANSLATE -> {
                 val r = addHit(dp(4f), cy - btn / 2, dp(4f) + btn, cy + btn / 2, "close")
                 pressBg(c, r, "close", btn / 2)
                 drawIcon(c, "close", r.centerX(), cy, dp(22f), t.onBgSub)
-                // go button (right)
-                val goW = dp(84f)
+                // the button at the right puts the live translation in, or translates now when there is none yet
+                val goW = dp(72f)
                 val go = addHit(w - dp(6f) - goW, cy - dp(17f), w - dp(6f), cy + dp(17f), "go")
                 fill.color = if (pressedTag == "go") t.keyPressed else t.accent
                 c.drawRoundRect(go, dp(17f), dp(17f), fill)
                 tp.color = t.onAccent
                 tp.textSize = dp(14f)
                 tp.isFakeBoldText = true
-                drawText(c, if (busy) "..." else "ترجم", go.centerX(), cy, goW - dp(10f))
+                drawText(c, if (busy) "..." else if (preview.isNotEmpty()) "استخدم" else "ترجم", go.centerX(), cy, goW - dp(10f))
                 tp.isFakeBoldText = false
-                var chipRight = go.left - dp(6f)
+                var right = go.left - dp(6f)
                 if (canUndo) {
-                    val u = addHit(chipRight - btn, cy - btn / 2, chipRight, cy + btn / 2, "undo")
+                    val u = addHit(right - btn, cy - btn / 2, right, cy + btn / 2, "undo")
                     pressBg(c, u, "undo", btn / 2)
                     drawIcon(c, "undo", u.centerX(), cy, dp(20f), t.onBg)
-                    chipRight = u.left - dp(2f)
+                    right = u.left - dp(2f)
                 }
                 // target language chip
-                val chip = addHit(dp(50f), cy - dp(17f), chipRight, cy + dp(17f), "lang")
+                tp.textSize = dp(14f)
+                val chipText = "$targetName ▾"
+                val chipW = minOf(dp(112f), maxOf(dp(72f), tp.measureText(chipText) + dp(26f)))
+                val chip = addHit(dp(46f), cy - dp(17f), dp(46f) + chipW, cy + dp(17f), "lang")
                 fill.color = if (pressedTag == "lang") t.keyPressed else t.keyFn
                 c.drawRoundRect(chip, dp(17f), dp(17f), fill)
                 tp.color = t.onFn
-                tp.textSize = dp(14f)
-                drawText(c, "إلى: $targetName  ▾", chip.centerX(), cy, chip.width() - dp(14f))
+                drawText(c, chipText, chip.centerX(), cy, chip.width() - dp(12f))
+                // the live translation between the chip and the buttons: a tap puts it into the box
+                val pl = chip.right + dp(6f)
+                if (right - pl > dp(44f)) {
+                    if (preview.isNotEmpty()) {
+                        val box = addHit(pl, cy - dp(17f), right, cy + dp(17f), "go")
+                        fill.color = if (pressedTag == "go") t.keyPressed else t.key
+                        c.drawRoundRect(box, dp(17f), dp(17f), fill)
+                        tp.color = t.text
+                        tp.textSize = dp(15f)
+                        drawText(c, preview, box.centerX(), cy, box.width() - dp(16f))
+                    } else if (previewNote.isNotEmpty()) {
+                        tp.color = t.onBgSub
+                        tp.textSize = dp(13f)
+                        drawText(c, previewNote, (pl + right) / 2f, cy, right - pl - dp(6f))
+                    }
+                }
             }
             Mode.STATUS -> {
                 val ic = RectF(dp(8f), cy - dp(14f), dp(36f), cy + dp(14f))

@@ -57,16 +57,29 @@ data class FPoint(val x: Float, val y: Float) {
 }
 
 /**
- * What the autonomous mode has been taught about one game (and one screen orientation): where its chat messages are, where to
- * tap to open the typing box, and where its send button is. Games draw their own screens, so none of this can be read from them.
+ * What the autonomous mode knows about one game (and one screen orientation): where its chat messages are, where to touch to get a
+ * box that is ready to type into ([input]), where its send button is. Games draw their own screens, so none of this can be read from
+ * them: it was either shown by the user, or found by the model on a picture of the screen ([auto]).
+ * [open] is the chat button, for games whose typing box shows only after it is touched ([input] is then the box itself).
  */
-data class GameProfile(val chat: FRect? = null, val input: FPoint? = null, val send: FPoint? = null) {
-    val taught: Boolean get() = chat != null || input != null || send != null
+data class GameProfile(
+    val chat: FRect? = null,
+    val input: FPoint? = null,
+    val send: FPoint? = null,
+    val open: FPoint? = null,
+    val auto: Boolean = false,
+) {
+    val taught: Boolean get() = chat != null || input != null || send != null || open != null
+
+    /** there is a place to touch that brings up a box to type into: without it nothing can be sent */
+    val canType: Boolean get() = input != null || open != null
 
     fun encode(): String = listOfNotNull(
         chat?.let { "c=" + it.encode() },
         input?.let { "i=" + it.encode() },
         send?.let { "s=" + it.encode() },
+        open?.let { "o=" + it.encode() },
+        if (auto) "a=1" else null,
     ).joinToString(";")
 
     companion object {
@@ -74,6 +87,8 @@ data class GameProfile(val chat: FRect? = null, val input: FPoint? = null, val s
             var c: FRect? = null
             var i: FPoint? = null
             var d: FPoint? = null
+            var o: FPoint? = null
+            var a = false
             for (part in s.split(';')) {
                 val eq = part.indexOf('=')
                 if (eq < 1) continue
@@ -82,9 +97,11 @@ data class GameProfile(val chat: FRect? = null, val input: FPoint? = null, val s
                     "c" -> c = FRect.decode(v)
                     "i" -> i = FPoint.decode(v)
                     "s" -> d = FPoint.decode(v)
+                    "o" -> o = FPoint.decode(v)
+                    "a" -> a = v.trim() == "1"
                 }
             }
-            return GameProfile(c, i, d)
+            return GameProfile(c, i, d, o, a)
         }
 
         fun key(pkg: String, landscape: Boolean): String = pkg + if (landscape) "|L" else "|P"
@@ -107,6 +124,9 @@ object GameChat {
         sb.append("- Output one line per message, oldest first (top to bottom), in the form: Name: message\n")
         sb.append("- If a message shows no sender name, output only the message.\n")
         sb.append("- Keep the original language, spelling, emoji and numbers. Never translate and never correct anything.\n")
+        sb.append("- The chat lines can be in any colour (white, yellow, red, green, blue, pink, orange, rainbow) and may have an outline or a shadow, ")
+        sb.append("over a dark, bright or busy background. Read every one of them, whatever its colour. A player's name or rank tag is often ")
+        sb.append("in another colour than the message that follows it.\n")
         sb.append("- Copy only what players or friends typed in the chat. Ignore buttons, menus, health bars, scores, timers, ")
         sb.append("names floating in the game world, rewards, system notices (joined, left, kills) and anything else that is not a typed message.\n")
         sb.append("- If you can see no chat messages, output exactly: NONE\n")

@@ -226,8 +226,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
         if (h == shaderH && t === shaderTheme && sheen != null) return
         shaderH = h
         shaderTheme = t
-        val topA = if (t.glass) 0x52 else if (t.dark) 0x22 else 0x66
-        val botA = if (t.glass) 0x00 else if (t.dark) 0x2A else 0x14
+        val topA = if (t.glass) 0x52 else if (t.dark) 0x24 else 0x4A
+        val botA = if (t.glass) 0x00 else if (t.dark) 0x26 else 0x0A
         sheen = LinearGradient(
             0f, 0f, 0f, h,
             intArrayOf(ColorMath.withAlpha(ColorMath.PAPER, topA), ColorMath.withAlpha(ColorMath.PAPER, topA / 6), ColorMath.withAlpha(0xFF000000.toInt(), botA)),
@@ -277,9 +277,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
         val p = kr.press
         val sink = dp(1.4f) * p
         rf.set(kr.cell.left + insetX + sink, kr.cell.top + insetY + sink, kr.cell.right - insetX - sink, kr.cell.bottom - insetY - sink)
-        // Gboard look: the enter key and the page switchers are pills, every other key is a rounded square
-        val pill = k.kind == KeyKind.ENTER || k.kind == KeyKind.SYMBOLS || k.kind == KeyKind.SYMBOLS2 || k.kind == KeyKind.LETTERS
-        val radius = if (pill) rf.height() / 2f else dp(11f)
+        // one corner for every key (the enter key and the page switchers used to be pills, which made the bottom row look like
+        // another keyboard): the rows read as one even grid
+        val radius = dp(12f)
 
         val base = when (k.kind) {
             KeyKind.CHAR -> if (k.fn) t.keyFn else t.key
