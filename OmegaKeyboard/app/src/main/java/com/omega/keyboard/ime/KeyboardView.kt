@@ -115,6 +115,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
         private const val LONG_PRESS_MS = 400L
         private val SHADOW_FRAC = floatArrayOf(0.55f, 0.32f, 0.16f)
 
+        /** the halo of the enter key in the luxe look: four rings, each a little wider and fainter than the one inside it */
+        private val GLOW_FRAC = floatArrayOf(0.34f, 0.24f, 0.15f, 0.08f)
+
         /** limits of the size the user can give the keyboard (percent of the normal one) */
         const val MIN_HEIGHT_PCT = 60
         const val MAX_HEIGHT_PCT = 170
@@ -150,6 +153,13 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rimLoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
+    // the metal of the enter key: a stronger highlight, a diagonal streak of light, a bright upper edge and an amber lower edge
+    private val goldSheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val streakPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val goldRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
+    private val goldEdgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
     private val ripplePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val letterFace: Typeface = try { Typeface.create("sans-serif-medium", Typeface.NORMAL) } catch (_: Throwable) { Typeface.DEFAULT }
     private val rf = RectF()
@@ -161,6 +171,10 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private var rimShader: Shader? = null
     private var shaderH = -1f
     private var shaderTheme: KbTheme? = null
+    private val bodyShaders = arrayOfNulls<Shader>(3)     // luxe look: gradient of a letter key, a function key and an accent (enter) key
+    private var streakShader: Shader? = null
+    private var streakW = 0f
+    private var streakH = 0f
 
     // animation state
     private var lastFrame = 0L
@@ -226,16 +240,69 @@ class KeyboardView(ctx: Context) : View(ctx) {
         if (h == shaderH && t === shaderTheme && sheen != null) return
         shaderH = h
         shaderTheme = t
-        val topA = if (t.glass) 0x52 else if (t.dark) 0x24 else 0x4A
-        val botA = if (t.glass) 0x00 else if (t.dark) 0x26 else 0x0A
-        sheen = LinearGradient(
-            0f, 0f, 0f, h,
-            intArrayOf(ColorMath.withAlpha(ColorMath.PAPER, topA), ColorMath.withAlpha(ColorMath.PAPER, topA / 6), ColorMath.withAlpha(0xFF000000.toInt(), botA)),
-            floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
-        )
+        if (t.fancy) {
+            for (g in 0..2) bodyShaders[g] = LinearGradient(0f, 0f, 0f, h, t.stops(g), t.stopPos(g), Shader.TileMode.CLAMP)
+            streakShader = null
+            goldSheenPaint.shader = LinearGradient(
+                0f, 0f, 0f, h,
+                intArrayOf(ColorMath.withAlpha(ColorMath.PAPER, 0x74), ColorMath.withAlpha(ColorMath.PAPER, 0x10), ColorMath.withAlpha(ColorMath.PAPER, 0)),
+                floatArrayOf(0f, 0.42f, 0.55f), Shader.TileMode.CLAMP,
+            )
+            val bright = ColorMath.withAlpha(0xFFFFF4C0.toInt(), 0xB4)
+            goldRimPaint.shader = LinearGradient(0f, 0f, 0f, h, intArrayOf(bright, ColorMath.withAlpha(bright, 0)), floatArrayOf(0f, 0.7f), Shader.TileMode.CLAMP)
+            val amber = ColorMath.withAlpha(0xFF7A4A00.toInt(), 0xB0)
+            goldEdgePaint.shader = LinearGradient(
+                0f, 0f, 0f, h, intArrayOf(ColorMath.withAlpha(amber, 0), ColorMath.withAlpha(amber, 0), amber), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
+            )
+            // a short, clean highlight on the upper half; the body's own gradient does the shading
+            sheen = LinearGradient(
+                0f, 0f, 0f, h,
+                intArrayOf(ColorMath.withAlpha(ColorMath.PAPER, if (t.dark) 0x22 else 0x78), ColorMath.withAlpha(ColorMath.PAPER, 0)),
+                floatArrayOf(0f, 0.55f), Shader.TileMode.CLAMP,
+            )
+            val lo = t.rimDark
+            rimLoPaint.shader = LinearGradient(
+                0f, 0f, 0f, h, intArrayOf(ColorMath.withAlpha(lo, 0), ColorMath.withAlpha(lo, 0), lo), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
+            )
+        } else {
+            val topA = if (t.glass) 0x52 else if (t.dark) 0x24 else 0x4A
+            val botA = if (t.glass) 0x00 else if (t.dark) 0x26 else 0x0A
+            sheen = LinearGradient(
+                0f, 0f, 0f, h,
+                intArrayOf(ColorMath.withAlpha(ColorMath.PAPER, topA), ColorMath.withAlpha(ColorMath.PAPER, topA / 6), ColorMath.withAlpha(0xFF000000.toInt(), botA)),
+                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
+            )
+        }
         sheenPaint.shader = sheen
         rimShader = LinearGradient(0f, 0f, 0f, h, intArrayOf(t.rim, ColorMath.withAlpha(t.rim, 0)), floatArrayOf(0f, 0.75f), Shader.TileMode.CLAMP)
         rimPaint.shader = rimShader
+    }
+
+    /** soft light round a key: [GLOW_FRAC] rings of [color], strongest next to the key */
+    private fun drawGlow(c: Canvas, r: RectF, radius: Float, color: Int, strength: Float) {
+        val a = ColorMath.alpha(color) * strength
+        for (i in GLOW_FRAC.indices) {
+            val spread = dp(1.7f) * (i + 1)
+            fill.color = ColorMath.withAlpha(color, (a * GLOW_FRAC[i]).toInt())
+            c.drawRoundRect(r.left - spread, r.top - spread, r.right + spread, r.bottom + spread, radius + spread, radius + spread, fill)
+        }
+    }
+
+    /** the diagonal streak of light across the enter key: a broad band and a thin one, running from the lower left to the upper right */
+    private fun streakFor(w: Float, h: Float): Shader {
+        val cached = streakShader
+        if (cached != null && abs(w - streakW) < 0.5f && abs(h - streakH) < 0.5f) return cached
+        streakW = w
+        streakH = h
+        val gx = 0.9f / w
+        val gy = 1f / h
+        val n = gx * gx + gy * gy
+        fun white(a: Int) = ColorMath.withAlpha(ColorMath.PAPER, a)
+        return LinearGradient(
+            0f, 0f, gx / n, gy / n,
+            intArrayOf(white(0), white(0), white(0x5C), white(0), white(0), white(0x2E), white(0)),
+            floatArrayOf(0f, 0.62f, 0.75f, 0.88f, 0.94f, 0.98f, 1f), Shader.TileMode.CLAMP,
+        ).also { streakShader = it }
     }
 
     override fun onDraw(c: Canvas) {
@@ -306,17 +373,51 @@ class KeyboardView(ctx: Context) : View(ctx) {
             }
         }
 
+        // the enter key (and caps lock) shine in the luxe look
+        val accentKey = k.kind == KeyKind.ENTER || (k.kind == KeyKind.SHIFT && shiftState == 2)
+        val fancy = t.fancy
+        if (fancy && accentKey) drawGlow(c, rf, radius, ColorMath.withAlpha(t.accent, 0x5A), 1f + 0.7f * p)
+
         // body
-        fill.color = ColorMath.blend(base, pressedTo, p)
-        c.drawRoundRect(rf, radius, radius, fill)
+        if (fancy) {
+            val grade = if (accentKey) 2 else if (base == t.keyFn) 1 else 0
+            c.save()
+            c.translate(rf.left, rf.top)
+            bodyPaint.shader = if (p > 0.01f) {
+                // while a key is pushed its gradient moves towards the pressed colour (built per frame, only for the keys being touched);
+                // the metal keeps most of its shine
+                val st = t.stops(grade)
+                val to = IntArray(st.size) { i ->
+                    if (grade == 2) ColorMath.blend(st[i], pressedTo, p * 0.6f)
+                    else ColorMath.blend(st[i], if (i == 0) pressedTo else ColorMath.shade(pressedTo, -0.12f), p)
+                }
+                LinearGradient(0f, 0f, 0f, shaderH, to, t.stopPos(grade), Shader.TileMode.CLAMP)
+            } else bodyShaders[grade]
+            c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, bodyPaint)
+            c.restore()
+        } else {
+            fill.color = ColorMath.blend(base, pressedTo, p)
+            c.drawRoundRect(rf, radius, radius, fill)
+        }
 
         // gloss, light under the finger, ripples: all clipped to the key by being drawn as the key's own shape
         c.save()
         c.translate(rf.left, rf.top)
-        sheenPaint.alpha = (255 * (1f - 0.55f * p)).toInt()
-        c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, sheenPaint)
         val hw = density * 0.5f
-        c.drawRoundRect(hw, hw, rf.width() - hw, rf.height() - hw, radius, radius, rimPaint)
+        if (fancy && accentKey) {
+            goldSheenPaint.alpha = (255 * (1f - 0.5f * p)).toInt()
+            c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, goldSheenPaint)
+            streakPaint.shader = streakFor(kr.cell.width() - 2 * insetX, kr.cell.height() - 2 * insetY)
+            streakPaint.alpha = (255 * (1f - 0.4f * p)).toInt()
+            c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, streakPaint)
+            c.drawRoundRect(hw, hw, rf.width() - hw, rf.height() - hw, radius, radius, goldRimPaint)
+            c.drawRoundRect(hw, hw, rf.width() - hw, rf.height() - hw, radius, radius, goldEdgePaint)
+        } else {
+            sheenPaint.alpha = (255 * (1f - 0.55f * p)).toInt()
+            c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, sheenPaint)
+            c.drawRoundRect(hw, hw, rf.width() - hw, rf.height() - hw, radius, radius, rimPaint)
+            if (fancy) c.drawRoundRect(hw, hw, rf.width() - hw, rf.height() - hw, radius, radius, rimLoPaint)
+        }
         c.restore()
 
         if (glowAmount > 0.01f) c.drawRoundRect(rf, radius, radius, glowPaint)
@@ -368,6 +469,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 size = min(size, min(kr.cell.width() * 0.92f, rowHeight * 0.62f))
                 textPaint.textSize = size
                 if (t.neon != 0) textPaint.setShadowLayer(dp(6f), 0f, 0f, ColorMath.withAlpha(t.neon, 0xE0))
+                else if (t.fancy && t.dark) textPaint.setShadowLayer(dp(0.9f), 0f, dp(0.9f), 0x80000000.toInt())
                 drawCentered(c, lab, cx, cy)
                 textPaint.clearShadowLayer()
                 textPaint.typeface = Typeface.DEFAULT
@@ -383,7 +485,12 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 if (spaceLabel.isNotEmpty()) {
                     textPaint.color = t.textSub
                     textPaint.textSize = dp(13f)
-                    drawCentered(c, spaceLabel, cx, cy)
+                    if (t.fancy) {
+                        // the language name with a short accent line under it
+                        drawCentered(c, spaceLabel, cx, cy - dp(3f))
+                        fill.color = ColorMath.withAlpha(t.accent, 0xC0)
+                        c.drawRoundRect(cx - dp(13f), cy + dp(9f), cx + dp(13f), cy + dp(10.6f), dp(1f), dp(1f), fill)
+                    } else drawCentered(c, spaceLabel, cx, cy)
                 }
             }
             KeyKind.ENTER -> drawIcon(c, enterIcon, cx, cy, dp(24f), t.onAccent)

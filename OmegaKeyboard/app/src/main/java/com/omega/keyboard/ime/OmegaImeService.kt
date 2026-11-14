@@ -178,12 +178,19 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     }
 
     private var debugDump: BroadcastReceiver? = null
+    private var debugActive = ""        // preview builds: a tool shown as running, so the emulator test can look at its gold disc
+
 
     /** Preview builds only (never in the release APK): lets the emulator test ask where the keys are. */
     private fun registerDebugDump() {
         if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0) return
         val r = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
+                if (i.action == "com.omega.keyboard.DEBUG_ACTIVE") {
+                    debugActive = i.getStringExtra("tool") ?: ""
+                    refreshStrip()
+                    return
+                }
                 if (i.action == "com.omega.keyboard.DEBUG_PIC") {
                     // draws the coloured picture (text arrives base64-encoded: adb mangles non-ASCII arguments)
                     try {
@@ -209,6 +216,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         }
         val f = IntentFilter("com.omega.keyboard.DEBUG_DUMP")
         f.addAction("com.omega.keyboard.DEBUG_PIC")
+        f.addAction("com.omega.keyboard.DEBUG_ACTIVE")
         try {
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED) else registerReceiver(r, f)
             debugDump = r
@@ -356,14 +364,15 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (r != null) {
             // the background (flat, gradient or the moving aurora) is painted once behind strip and keys; it is only
             // replaced when it really changed, so dragging a colour slider does not restart the animation
-            val sig = listOf(theme.bgStyle, theme.bg, theme.bg2) + theme.aurora
+            val sig = listOf(theme.bgStyle, theme.bg, theme.bg2, theme.spot, theme.hair) + theme.aurora
             if (sig != bgSignature || r.background == null) {
                 bgSignature = sig
                 aurora?.stop()
                 aurora = null
                 r.background = when (theme.bgStyle) {
                     2 -> AuroraDrawable(theme.bg, theme.bg2, theme.aurora).also { aurora = it }
-                    1 -> GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(theme.bg, theme.bg2))
+                    1 -> if (theme.spot != 0 || theme.hair != 0) LuxeBackground(theme.bg, theme.bg2, theme.spot, theme.hair)
+                         else GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(theme.bg, theme.bg2))
                     else -> ColorDrawable(theme.bg)
                 }
             }
@@ -1016,7 +1025,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     /** Same slots as Gboard's tool row (mic, themes, translate, settings, GIF, stickers, more), filled with our own tools. */
     private fun buildTools(): List<StripView.Tool> = listOfNotNull(
         StripView.Tool("voice", "mic", "صوت", voiceActive),
-        if (colourActive() && !plain && !numeric) StripView.Tool("csend", "send", "ملوّن") else null,
+        if (colourButtonShown()) StripView.Tool("csend", "send", "ملوّن") else null,
         StripView.Tool("screen", "g_translate", "الشاشة", ScreenTranslateController.active),   // translates the whole screen
         StripView.Tool("theme", "palette", "المظهر", appearanceOpen()),
         StripView.Tool("resize", "open_in_full", "الحجم", resizing),
@@ -1024,7 +1033,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         StripView.Tool("clip", "content_paste", "الحافظة"),
         StripView.Tool("typed", "translate", "ترجم", translateBar),                              // translates what is typed: far from the screen one
         StripView.Tool("settings", "settings", "إعدادات"),
-    )
+    ).map { if (it.id == debugActive) it.copy(active = true) else it }
 
     private fun refreshStrip() {
         val st = strip ?: return
@@ -1035,7 +1044,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         st.targetName = Languages.arabicName(prefs.typedTarget)
         st.swatch = if (prefs.textColor == 0) 0xFF2979FF.toInt() else prefs.textColor
         st.swatchRainbow = prefs.textRainbow
-        st.colourSend = colourActive() && !plain && !numeric
+        st.colourSend = colourButtonShown()
 
         fun status(icon: String, text: String, warn: Boolean, label: String, id: String, calm: Boolean = false) {
             st.statusIcon = icon
@@ -1118,6 +1127,9 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     /** a text colour (or the rainbow) is chosen, so what is typed is coloured */
     private fun colourActive(): Boolean = prefs.textColor != 0 || prefs.textRainbow
 
+    /** the round "send coloured" button is an extra (picture / sticker, or colour codes): shown only when the user switched it on */
+    private fun colourButtonShown(): Boolean = prefs.colourButton && colourActive() && !plain && !numeric
+
     /** the picture types the field says it can take (empty: it takes none) */
     private fun acceptedImageTypes(ei: EditorInfo?): Array<String> {
         if (ei == null || Build.VERSION.SDK_INT < 25) return emptyArray()
@@ -1140,7 +1152,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     private fun mimeOf(f: File): String = if (f.name.endsWith(".webp")) StickerRenderer.MIME else "image/png"
 
-    private fun codeFormat(): ColorCodes.Format = ColorCodes.Format.of(prefs.colorCodes)
+    /** the colour-code format of the box in front: the one the user picked, or the one the app is known to read (auto) */
+    private fun codeFormat(): ColorCodes.Format = ColorCodes.resolve(ColorCodes.Format.of(prefs.colorCodes), fieldPkg ?: editor?.packageName)
 
     /** colour of the n-th letter exactly as typing uses it */
     private fun letterColour(n: Int): Int = if (prefs.textRainbow) ColorMath.rainbow(n) else prefs.textColor
@@ -1490,46 +1503,15 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (currentInputConnection == null) false else { performEnter(); true }
     }
 
-    /** The reply as the autonomous mode types it in a game: in the game's colour codes when a colour and a format are chosen. Any thread. */
+    /**
+     * The reply as the autonomous mode types it in a game: real text, in the game's colour codes when a colour is chosen and the game's
+     * format is known (picked by the user, or recognised from the app). Never a picture. Any thread.
+     */
     fun colourForGame(text: String): String {
         if (!prefs.apColour || !colourActive()) return text
         val fmt = codeFormat()
         if (fmt == ColorCodes.Format.NONE) return text
         return ColorCodes.wrap(text, fmt) { n -> letterColour(n) }
-    }
-
-    /** True when colour can reach the other side from the attached box (it takes pictures / stickers, or a colour-code format is chosen). Any thread. */
-    fun colourPossible(): Boolean = onMain(false) {
-        prefs.apColour && colourActive() && currentInputConnection != null && fieldLive && !plain && !numeric &&
-            (takesImages() || codeFormat() != ColorCodes.Format.NONE)
-    }
-
-    /** [colourPossible] for the box of the app [pkg]: false while another app's box (or none) is attached. Any thread. */
-    fun colourPossibleFor(pkg: String): Boolean = fieldLive && fieldPkg == pkg && colourPossible()
-
-    /** What came of a coloured send made for the autonomous mode: [how] = sticker | picture | codes | draft | unsent | refused ... */
-    class ColourResult(val ok: Boolean, val how: String)
-
-    /**
-     * The autonomous mode sends [text] the way coloured writing travels: a see-through sticker or a picture where the box takes
-     * pictures, colour codes where the user picked a format. With [send] false the result stays in the box for the user to send.
-     * Blocks until it is done. @return null when colour is not possible here (the caller sends plain text then).
-     */
-    fun autopilotColourSend(text: String, send: Boolean, timeoutMs: Long = 16_000): ColourResult? {
-        if (!colourPossible()) return null
-        val latch = CountDownLatch(1)
-        var res: ColourResult? = null
-        main.post {
-            try {
-                startColoured(text, false, if (send) SendMode.SEND else SendMode.HOLD) { ok, how -> res = ColourResult(ok, how); latch.countDown() }
-            } catch (t: Throwable) {
-                AppLog.e("ime", "autonomous coloured send failed", t)
-                res = ColourResult(false, "error")
-                latch.countDown()
-            }
-        }
-        latch.await(timeoutMs, TimeUnit.MILLISECONDS)
-        return res ?: ColourResult(false, "timeout")
     }
 
     private fun applyReplacement(original: String, result: String, wasSelection: Boolean) {

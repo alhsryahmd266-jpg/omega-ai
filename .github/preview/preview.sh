@@ -65,10 +65,14 @@ focus() {
     if [ "$(current_ime)" != "$IME" ]; then say "the system changed the keyboard, selecting ours again"; select_keyboard; fi
     $KB field 2>&1 | tee -a "$LOG"
     sleep 2.5
-    if $KB dump >> "$LOG" 2>&1; then return 0; fi
+    # the dump alone is not proof (it also answers while the keyboard is hidden): the system must say the keyboard is shown
+    if $KB shown && $KB dump >> "$LOG" 2>&1; then return 0; fi
     say "our keyboard is not on the screen yet (try $i)"
     adb shell input keyevent KEYCODE_BACK
     sleep 1
+    # BACK may have closed the app: bring the test screen with the text field back before trying again
+    adb shell am start -W -n $PKG/.ui.MainActivity > /dev/null
+    sleep 2
   done
   return 1
 }
@@ -86,7 +90,15 @@ typed() {
 }
 
 # the tool row of the strip opened, nothing typed: bar <name> <prefs...>
-bar() { scenario "$@"; focus; $KB strip toggle 2>&1 | tee -a "$LOG"; sleep 1.2; shot "$1"; }
+bar() { scenario "$@"; focus; $KB openbar 2>&1 | tee -a "$LOG"; sleep 1.2; shot "$1"; }
+
+# the tool row with one tool shown as running (its gold disc): barlit <name> <tool> <prefs...>
+barlit() {
+  local name="$1" tool="$2"; shift 2
+  scenario "$name" "$@"; focus; $KB openbar 2>&1 | tee -a "$LOG"
+  adb shell am broadcast -a com.omega.keyboard.DEBUG_ACTIVE --es tool "$tool" -p $PKG > /dev/null
+  sleep 1.2; shot "$name"
+}
 
 # holds a key down for a few seconds and takes three screenshots while the finger is still on it: held <name> <key>
 held() {
@@ -119,18 +131,32 @@ typed kb-aurora    "neon text" s:theme=aurora s:last_lang=en i:text_color=0xFF39
 typed kb-neon      "glow" s:theme=neon s:last_lang=en i:text_color=0xFFFF2BD6
 typed kb-rainbow   "rainbow" s:theme=amoled s:last_lang=en b:text_rainbow=true
 typed kb-highlight "marker" s:theme=light s:last_lang=en b:text_highlight=true i:text_color=0xFFFFEA00
+# the luxe look (the default): black and gold by night, pearl and gold by day
+look  kb-luxe-en      s:theme=luxe s:last_lang=en
+look  kb-luxe-ar      s:theme=luxe s:last_lang=ar
+look  kb-pearl-en     s:theme=pearl s:last_lang=en
+look  kb-pearl-ar     s:theme=pearl s:last_lang=ar
+typed kb-luxe-typed-ar "مرحبا بكم يا اصدقاء" s:theme=luxe s:last_lang=ar
+typed kb-luxe-typed-en "Hello world" s:theme=luxe s:last_lang=en
+typed kb-pearl-typed-ar "اهلا بيك" s:theme=pearl s:last_lang=ar
+typed kb-luxe-sugg-ar "مر" s:theme=luxe s:last_lang=ar b:toolbar_open=false
+typed kb-pearl-sugg-en "hel" s:theme=pearl s:last_lang=en b:toolbar_open=false
+bar   kb-bar-luxe-ar  s:theme=luxe s:last_lang=ar
+bar   kb-bar-luxe-en  s:theme=luxe s:last_lang=en
+bar   kb-bar-pearl-ar s:theme=pearl s:last_lang=ar
+bar   kb-bar-pearl-en s:theme=pearl s:last_lang=en
+barlit kb-bar-luxe-lit   auto s:theme=luxe s:last_lang=en
+barlit kb-bar-pearl-lit  screen s:theme=pearl s:last_lang=ar
 look  kb-auto         s:theme=auto s:last_lang=en
 look  kb-ocean        s:theme=ocean s:last_lang=ar
 look  kb-sunset       s:theme=sunset s:last_lang=en
 look  kb-rose         s:theme=rose s:last_lang=en
 look  kb-forest       s:theme=forest s:last_lang=ar
-look  kb-gold         s:theme=gold s:last_lang=en
 look  kb-mint         s:theme=mint s:last_lang=en
 bar   kb-bar-light-ar  s:theme=light s:last_lang=ar
 bar   kb-bar-dark-en   s:theme=dark s:last_lang=en
 bar   kb-bar-aurora-ar s:theme=aurora s:last_lang=ar
 bar   kb-bar-neon-en   s:theme=neon s:last_lang=en
-bar   kb-bar-gold-en   s:theme=gold s:last_lang=en
 
 # --- the appearance sheet: colours, background colour (two switches), themes, size and effects
 scenario sheet s:theme=aurora s:last_lang=en
@@ -143,10 +169,38 @@ $KB tab 2 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-size
 $KB tab 0 2>&1 | tee -a "$LOG"; sleep 0.8
 $KB target 3 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-bg
 
+# --- the luxe look in the sheet and the panels
+scenario sheet-luxe s:theme=luxe s:last_lang=ar
+focus
+$KB tool theme 2>&1 | tee -a "$LOG"
+sleep 2
+shot sheet-luxe
+$KB tab 1 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-luxe-themes
+scenario kb-emoji-luxe s:theme=luxe s:last_lang=en
+focus
+$KB key EMOJI 2>&1 | tee -a "$LOG"; sleep 2; shot kb-emoji-luxe
+scenario kb-symbols-luxe s:theme=luxe s:last_lang=ar
+focus
+$KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-luxe-1
+scenario kb-clip-luxe s:theme=luxe s:last_lang=en
+focus
+$KB tool clip 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-clip-luxe
+scenario kb-sheet-pearl s:theme=pearl s:last_lang=en
+focus
+$KB tool theme 2>&1 | tee -a "$LOG"
+sleep 2
+shot kb-sheet-pearl
+
 # --- the finger: a key held down (glow, ripple, preview bubble) and the long-press alternatives
 scenario kb-hold-en s:theme=aurora s:last_lang=en
 focus
 held kb-hold-en g
+scenario kb-hold-luxe s:theme=luxe s:last_lang=en
+focus
+held kb-hold-luxe g
+scenario kb-hold-luxe-enter s:theme=luxe s:last_lang=ar
+focus
+held kb-hold-luxe-enter ENTER
 scenario kb-popup-en s:theme=dark s:last_lang=en
 focus
 held kb-popup-en e

@@ -709,7 +709,7 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
     }
 
     private fun refreshCards() {
-        for (c in cards) c.picked = c.themeId == prefs.theme
+        for (c in cards) c.picked = c.themeId == Themes.canon(prefs.theme)
     }
 
     private fun pickTheme(id: String) {

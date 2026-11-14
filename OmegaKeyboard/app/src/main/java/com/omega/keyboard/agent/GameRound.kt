@@ -6,7 +6,6 @@ import com.omega.keyboard.AppLog
 import com.omega.keyboard.Prefs
 import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.core.ChatMessage
-import com.omega.keyboard.core.ColorCodes
 import com.omega.keyboard.core.FPoint
 import com.omega.keyboard.core.GameChat
 import com.omega.keyboard.core.GameProfile
@@ -275,9 +274,9 @@ object GameRound {
         // ---- typed into the game, in colour codes when a colour and a game format are chosen
         val coloured = ime.colourForGame(text)
         val colourOn = prefs.apColour && (prefs.textColor != 0 || prefs.textRainbow)
-        if (colourOn && coloured == text && !g.colourHinted && ColorCodes.Format.of(prefs.colorCodes) == ColorCodes.Format.NONE) {
+        if (colourOn && coloured == text && !g.colourHinted) {
             g.colourHinted = true
-            Notice.toast(ctx, "اللعبة مبتقبلش صور، فالرد هيتكتب عادي. اختار «ألوان الألعاب» من الإعدادات عشان يتلوّن")
+            Notice.toast(ctx, "الرد بيتكتب نص عادي. لو لعبتك بتفهم أكواد الألوان اختار صيغتها من الإعدادات > ألوان الألعاب عشان يتلوّن")
         }
         host.say("بكتب الرد في اللعبة...")
         // from now on a chat line with this text is mine, whatever it looks like in the picture

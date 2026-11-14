@@ -2,7 +2,6 @@ package com.omega.keyboard.agent
 
 import android.content.Context
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
 import com.omega.keyboard.AppLog
 import com.omega.keyboard.Bg
 import com.omega.keyboard.Prefs
@@ -295,50 +294,6 @@ object AutoPilot {
         if (teach) GameRound.teach(svc, prefs, g, gameHost) else GameRound.step(ctx, svc, prefs, g, gameHost)
     }
 
-    /** the reply travels as coloured writing when a colour is chosen and the chat box can carry it; null = send it as plain text */
-    private fun colourReply(svc: ScreenAgentService, pkg: String, text: String, send: Boolean): SendAction.Result? {
-        if (isAiChat(pkg)) return null
-        val ime = OmegaImeService.instance ?: return null
-        if (!ime.colourPossibleFor(pkg)) {
-            // the box has to be attached to our keyboard (which stays hidden): touch it, then wait a moment for it to attach
-            if (ime.liveFieldPackage() != pkg) focusInput(svc)
-            val end = System.currentTimeMillis() + 2500
-            while (ime.liveFieldPackage() != pkg && System.currentTimeMillis() < end && !stopFlag) nap(120)
-            if (!ime.colourPossibleFor(pkg)) return null
-        }
-        val r = ime.autopilotColourSend(text, send) ?: return null
-        AppLog.d("autopilot", "coloured send: ok=${r.ok} how=${r.how}")
-        return when {
-            r.ok -> SendAction.Result(true, "colour-" + r.how, "")
-            r.how == "refused" -> null                       // the box took no picture after all: plain text then
-            else -> SendAction.Result(false, "", "الرسالة الملونة ماتبعتتش (${r.how})")
-        }
-    }
-
-    private fun focusInput(svc: ScreenAgentService) {
-        val snap = ScreenReader.read(svc) ?: return
-        try {
-            val input = ChatParser.findInput(snap.screen) ?: return
-            val node = snap.node(input.id) ?: return
-            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        } finally {
-            snap.release()
-        }
-    }
-
-    /** After a coloured message (a picture or sticker has no text to match): everything on screen now counts as answered. */
-    private fun markAnswered(svc: ScreenAgentService, prefs: Prefs, pkg: String, sent: List<String>, handled: HashMap<String, String>) {
-        try {
-            Thread.sleep(1600)
-            val s = ScreenReader.read(svc) ?: return
-            val p = parseChat(s.screen, prefs, sent)
-            s.release()
-            if (s.screen.pkg == pkg) handled[pkg] = ReplyPolicy.key(p.messages)
-        } catch (_: Throwable) {
-        }
-    }
-
     private const val USER_SCROLL_GRACE_MS = 6000L
     /** a text in the message box that does not change for this long is not being typed any more: the reply replaces it */
     private const val DRAFT_GRACE_MS = 5000L
@@ -546,8 +501,7 @@ object AutoPilot {
                 stale = 0
 
                 if (!prefs.apAutoSend) {
-                    val c = if (prefs.apColour) colourReply(svc, pkg, text, send = false) else null
-                    val ok = c?.ok ?: SendAction.typeOnly(svc, text)
+                    val ok = SendAction.typeOnly(svc, text)
                     handled[pkg] = workKey
                     publish(if (ok) "كتبت الرد. ابعته إنت: $text" else "مقدرتش أكتب الرد", warn = !ok)
                     continue
@@ -558,9 +512,8 @@ object AutoPilot {
                 // never be taken for a message from the other side (that would be an endless conversation with myself)
                 if (sent.lastOrNull() != text) sent.add(text)
                 while (sent.size > 12) sent.removeAt(0)
-                // with a colour chosen the reply goes out as coloured writing (a see-through sticker / picture, or colour codes)
-                val colourRes = if (prefs.apColour) colourReply(svc, pkg, text, send = true) else null
-                val res = colourRes ?: SendAction.sendText(svc, text)
+                // always real text: the autonomous mode never sends a picture or a sticker
+                val res = SendAction.sendText(svc, text)
                 if (res.ok) {
                     sendFailures = 0
                     modelFailures = 0
@@ -569,7 +522,7 @@ object AutoPilot {
                     repliesSent++
                     firstReply = false
                     handled[pkg] = workKey
-                    if (colourRes != null) markAnswered(svc, prefs, pkg, sent, handled) else learnAlignment(svc, prefs, pkg, text)
+                    learnAlignment(svc, prefs, pkg, text)
                     AppLog.d("autopilot", "sent via ${res.how}: ${text.take(60)}")
                     publish("ردّيت $repliesSent مرة. آخر رد: ${text.take(48)}")
                 } else {

@@ -91,6 +91,14 @@ object CoreTests {
             check("layout ${l.id} has an enter and a backspace", l.rows.any { r -> r.keys.any { it.kind == KeyKind.ENTER } } &&
                 l.rows.any { r -> r.keys.any { it.kind == KeyKind.BACKSPACE } })
         }
+        // the bottom row is one design on every page and in both languages: round keys one letter wide, only the space bar differs
+        for (l in all.filter { it.kind != LayoutKind.NUMERIC }) {
+            val b = l.rows.last().keys
+            val spaceWanted = if (l.lang == "ar") 4f else 3f
+            check("layout ${l.id} bottom row keeps the same design",
+                b.size == 7 && b[0].weight == 1.5f && b[1].weight == 1f && b[2].weight == 1f && b[3].weight == 1f && b[5].weight == 1f &&
+                    b[6].weight == 1.5f && b[4].kind == KeyKind.SPACE && kotlin.math.abs(b[4].weight - spaceWanted) < 0.01f) { "${b.map { it.weight }}" }
+        }
         val ar = Layouts.arabic(false, false)
         check("arabic row1 starts with ض", ar.rows[0].keys.first().text == "ض")
         check("arabic has 4 rows", ar.rows.size == 4)
@@ -702,6 +710,12 @@ object CoreTests {
         val blue = 0xFF2979FF.toInt()
         check("a format is found by its id", ColorCodes.Format.of("ff") == ColorCodes.Format.FREEFIRE && ColorCodes.Format.of("discord") == ColorCodes.Format.DISCORD && ColorCodes.Format.of("???") == ColorCodes.Format.NONE && ColorCodes.Format.of(null) == ColorCodes.Format.NONE)
         check("no format leaves the text alone", ColorCodes.wrap("hello", ColorCodes.Format.NONE) { red } == "hello")
+        check("auto alone leaves the text alone", ColorCodes.wrap("hello", ColorCodes.Format.AUTO) { red } == "hello")
+        check("auto is the id of the default", ColorCodes.Format.of("auto") == ColorCodes.Format.AUTO)
+        check("Discord and Free Fire are recognised by their app", ColorCodes.forPackage("com.discord") == ColorCodes.Format.DISCORD && ColorCodes.forPackage("com.dts.freefireth") == ColorCodes.Format.FREEFIRE && ColorCodes.forPackage("com.dts.freefiremax") == ColorCodes.Format.FREEFIRE)
+        check("an unknown app gets plain text", ColorCodes.forPackage("com.whatsapp") == ColorCodes.Format.NONE && ColorCodes.forPackage(null) == ColorCodes.Format.NONE)
+        check("a chosen format wins over the app", ColorCodes.resolve(ColorCodes.Format.UNITY, "com.discord") == ColorCodes.Format.UNITY)
+        check("auto follows the app", ColorCodes.resolve(ColorCodes.Format.AUTO, "com.discord") == ColorCodes.Format.DISCORD && ColorCodes.resolve(ColorCodes.Format.AUTO, "com.whatsapp") == ColorCodes.Format.NONE)
         check("Free Fire code goes before the text", ColorCodes.wrap("hello", ColorCodes.Format.FREEFIRE) { red } == "[FF0000]hello")
         check("one colour over several words is one code", ColorCodes.wrap("hello world", ColorCodes.Format.FREEFIRE) { red } == "[FF0000]hello world")
         check("Arabic text gets the same treatment", ColorCodes.wrap("مرحبا بيك", ColorCodes.Format.FREEFIRE) { blue } == "[2979FF]مرحبا بيك")

@@ -73,15 +73,20 @@ object Layouts {
         "ل" to listOf("لا", "لأ", "لإ", "لآ"),
     )
 
+    /**
+     * The bottom row is one design on every page and in both languages: symbols 1.5 | comma | emoji | globe | space | full stop | enter 1.5,
+     * and each round key is exactly one letter wide, so the keys sit under the columns of the letters above them. Only the space
+     * bar takes up what is left (4 letters wide in Arabic, 3 in English).
+     */
     private fun bottomRow(lang: String, switchKey: Key, total: Float): Row {
         val ar = lang == "ar"
-        val sw = switchKey.copy(weight = if (ar) 1.5f else 1.3f)
-        val comma = if (ar) c("،", popups = listOf("،", "؛", "؟", ",", "!", ":", "'", "\""), w = 1f, fn = true)
-        else c(",", popups = listOf(",", ";", ":", "!", "?", "'", "\""), w = 0.9f, fn = true)
+        val sw = switchKey.copy(weight = 1.5f)
+        val comma = if (ar) c("،", popups = listOf("،", "؛", "؟", ",", "!", ":", "'", "\""), fn = true)
+        else c(",", popups = listOf(",", ";", ":", "!", "?", "'", "\""), fn = true)
         val emoji = Key(KeyKind.EMOJI, "😊", weight = 1f)
         val globe = Key(KeyKind.LANG, "🌐", weight = 1f)
-        val period = c(".", popups = listOf(".", "…", "?", "!", ":", ";", "-", "_", "@", "/"), w = if (ar) 1f else 0.9f, fn = true)
-        val enter = Key(KeyKind.ENTER, "↵", weight = if (ar) 1.5f else 1.3f)
+        val period = c(".", popups = listOf(".", "…", "?", "!", ":", ";", "-", "_", "@", "/"), fn = true)
+        val enter = Key(KeyKind.ENTER, "↵", weight = 1.5f)
         val fixed = sw.weight + comma.weight + emoji.weight + globe.weight + period.weight + enter.weight
         val space = Key(KeyKind.SPACE, " ", " ", weight = total - fixed)
         return Row(listOf(sw, comma, emoji, globe, space, period, enter))

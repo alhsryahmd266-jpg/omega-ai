@@ -189,6 +189,28 @@ def cmd_tool(name):
     return 1
 
 
+def cmd_openbar():
+    """makes sure the tool row of the strip is open (it is the default: asking for it must never close it)"""
+    for _attempt in range(3):
+        _k, strip, _t = ask_dump()
+        if any(name.startswith("t:") for name in strip):
+            return 0
+        toggle = strip.get("toggle")
+        if toggle:
+            adb("shell", "input", "tap", str(toggle[0]), str(toggle[1]))
+            time.sleep(0.9)
+        else:
+            time.sleep(1.0)
+    print("the tool row did not open", file=sys.stderr)
+    return 1
+
+
+def cmd_shown():
+    """exit code 0 when the system says an input method window is on the screen (the dump alone also works when it is hidden)"""
+    out = adb("shell", "dumpsys", "input_method").stdout
+    return 0 if "mInputShown=true" in out else 1
+
+
 def cmd_strip(name):
     """taps a button of the suggestion strip by its tag (csend, toggle, t:<tool> ...)"""
     for _attempt in range(3):
@@ -273,6 +295,10 @@ def main(argv):
         return cmd_tool(argv[2])
     if cmd == "strip":
         return cmd_strip(argv[2])
+    if cmd == "openbar":
+        return cmd_openbar()
+    if cmd == "shown":
+        return cmd_shown()
     if cmd == "tab":
         return cmd_tab(argv[2])
     if cmd == "target":

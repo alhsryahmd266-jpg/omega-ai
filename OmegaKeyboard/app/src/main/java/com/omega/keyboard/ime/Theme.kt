@@ -34,11 +34,48 @@ data class KbTheme(
     val glass: Boolean = false,        // see-through keys: no shadow, a bright rim and a stronger sheen
     val rim: Int = 0x26FFFFFF,         // light edge along the top of every key
     val neon: Int = 0,                 // non-zero: letters and key edges glow in this colour
-)
+    // the "luxe" look (solid themes only): keys with a gradient body and a lit, bevelled edge, a capsule behind the tool row,
+    // a glowing enter key, a soft light and a thin line at the top. 0 means "work it out from the colours above".
+    val luxe: Boolean = false,
+    val keyLo: Int = 0,                // lower colour of a letter key's gradient ([key] is the upper one)
+    val fnLo: Int = 0,                 // the same for function keys
+    val rimLo: Int = 0,                // dark line along the bottom edge of every key and of the capsule
+    val metal: List<Int> = emptyList(), // the enter key and a running tool shine like metal: five colours, top to bottom (default: shades of [accent])
+    val capTop: Int = 0,               // capsule behind the tool row: top and bottom colour (default: from the function keys)
+    val capBottom: Int = 0,
+    val spot: Int = 0,                 // soft light at the top of the background
+    val hair: Int = 0,                 // thin line at the very top of the keyboard
+) {
+    /** the luxe look needs solid keys: glass and glowing themes keep their own */
+    val fancy: Boolean get() = luxe && !glass && neon == 0
+
+    /**
+     * Colours of the gradient body of a letter key (grade 0), a function key (1) and the enter key / a running tool (2), top to bottom.
+     * The first two fade from the key colour to a darker one; grade 2 is the metal: a bright edge, the body of the colour, a deep base.
+     */
+    fun stops(grade: Int): IntArray = when (grade) {
+        0 -> intArrayOf(key, if (keyLo != 0) keyLo else ColorMath.shade(key, if (dark) -0.30f else -0.07f))
+        1 -> intArrayOf(keyFn, if (fnLo != 0) fnLo else ColorMath.shade(keyFn, if (dark) -0.30f else -0.09f))
+        else -> if (metal.size == 5) metal.toIntArray() else intArrayOf(
+            ColorMath.shade(accent, 0.55f), ColorMath.shade(accent, 0.22f), accent, ColorMath.shade(accent, -0.20f), ColorMath.shade(accent, -0.38f),
+        )
+    }
+
+    /** where the [stops] sit along the key (null = evenly): the bright edge is narrow, the body of the metal is wide */
+    fun stopPos(grade: Int): FloatArray? = if (grade == 2) floatArrayOf(0f, 0.2f, 0.5f, 0.78f, 1f) else null
+
+    /** dark line along the bottom edge of keys and capsule */
+    val rimDark: Int get() = if (rimLo != 0) rimLo else ColorMath.withAlpha(0xFF000000.toInt(), if (dark) 0x96 else 0x46)
+
+    val capHi: Int get() = if (capTop != 0) capTop else ColorMath.shade(keyFn, if (dark) 0.06f else 0.30f)
+    val capLo: Int get() = if (capBottom != 0) capBottom else ColorMath.shade(keyFn, if (dark) -0.22f else -0.04f)
+}
 
 object Themes {
     val choices = listOf(
-        "auto" to "تلقائي (ألوان النظام)",
+        "auto" to "تلقائي (أسود فخم بالليل · لؤلؤي بالنهار)",
+        "luxe" to "أسود فخم (ذهبي)",
+        "pearl" to "لؤلؤي (ذهبي)",
         "light" to "فاتح",
         "dark" to "داكن",
         "amoled" to "أسود (AMOLED)",
@@ -48,15 +85,19 @@ object Themes {
         "neon" to "نيون",
         "rose" to "وردي",
         "forest" to "غابة",
-        "gold" to "أسود وذهبي",
         "mint" to "نعناع",
+        "system" to "ألوان النظام (Material You)",
     )
 
     /** short names under the cards of the theme picker */
     val cardNames = mapOf(
-        "auto" to "تلقائي", "light" to "فاتح", "dark" to "داكن", "amoled" to "أسود", "ocean" to "المحيط", "sunset" to "الغروب",
-        "aurora" to "أورورا", "neon" to "نيون", "rose" to "وردي", "forest" to "غابة", "gold" to "ذهبي", "mint" to "نعناع",
+        "auto" to "تلقائي", "luxe" to "أسود فخم", "pearl" to "لؤلؤي", "light" to "فاتح", "dark" to "داكن", "amoled" to "أسود",
+        "ocean" to "المحيط", "sunset" to "الغروب", "aurora" to "أورورا", "neon" to "نيون", "rose" to "وردي", "forest" to "غابة",
+        "mint" to "نعناع", "system" to "النظام",
     )
+
+    /** the id the picker knows a saved theme by ("gold", the old black-and-gold, is the luxe look now) */
+    fun canon(id: String): String = if (id == "gold") "luxe" else id
 
     private fun c(s: String) = Color.parseColor(s)
 
@@ -87,8 +128,22 @@ object Themes {
     val FOREST = KbTheme("forest", true, c("#0C2318"), c("#1D4A35"), c("#143826"), c("#2B6A4B"), c("#EAFBF1"), c("#8FC4A8"),
         c("#5EE6A0"), c("#04301A"), c("#25583F"), c("#1A4630"), c("#66000000"), bg2 = c("#08170F"), bgStyle = 1, rim = c("#2EFFFFFF"))
 
-    val GOLD = KbTheme("gold", true, c("#12100A"), c("#2A2414"), c("#1E1A0E"), c("#4A3E1E"), c("#FFE9A8"), c("#B8A468"),
-        c("#FFC107"), c("#2A1F00"), c("#3A3119"), c("#2E2813"), c("#66000000"), bg2 = c("#1C170B"), bgStyle = 1, rim = c("#66FFD54F"))
+    /** real gold, top to bottom: a bright edge, the gold itself, a deep amber base (the enter key, a running tool, the lines) */
+    private val GOLD_METAL = listOf(c("#FFEDA6"), c("#F7CF50"), c("#E0A621"), c("#C2870F"), c("#96620A"))
+
+    /** the default at night: deep black, a thin gold line, bevelled keys and an enter key of polished gold that glows */
+    val LUXE = KbTheme("luxe", true, c("#0D0F15"), c("#30343F"), c("#242730"), c("#4B5060"), c("#F4ECDD"), c("#DDB04A"),
+        c("#E0A621"), c("#2A1E00"), c("#3A3F4C"), c("#2B2F3A"), c("#8C000000"),
+        bg2 = c("#06070A"), onFn = c("#E9E1D0"), bgStyle = 1, rim = c("#40FFF1CF"),
+        luxe = true, keyLo = c("#1F222B"), fnLo = c("#171A21"), rimLo = c("#96000000"), metal = GOLD_METAL,
+        capTop = c("#22252F"), capBottom = c("#171A22"), spot = c("#22FFD678"), hair = c("#C8E0A621"))
+
+    /** the default by day: warm pearl white with the same gold */
+    val PEARL = KbTheme("pearl", false, c("#F3EFE6"), c("#FFFFFF"), c("#E6DFCF"), c("#D9D0BC"), c("#2A2620"), c("#9B7418"),
+        c("#C98F17"), c("#2A1E00"), c("#FFFFFF"), c("#DDD5C2"), c("#38000000"),
+        bg2 = c("#E4DDCD"), onFn = c("#3A3224"), bgStyle = 1, rim = c("#FFFFFFFF"),
+        luxe = true, keyLo = c("#F1ECDF"), fnLo = c("#D8D0BB"), rimLo = c("#466E5828"), metal = GOLD_METAL,
+        capTop = c("#FFFFFF"), capBottom = c("#F2EDE0"), spot = c("#78FFFFFF"), hair = c("#A8D3A12A"))
 
     val MINT = KbTheme("mint", false, c("#DDF3EE"), c("#FFFFFF"), c("#B6DDD3"), c("#9CCFC2"), c("#0D2B26"), c("#5B8780"),
         c("#00897B"), c("#FFFFFF"), c("#FFFFFF"), c("#BBDDD5"), c("#26000000"), bg2 = c("#C9EAE2"), bgStyle = 1, rim = c("#B3FFFFFF"))
@@ -97,7 +152,9 @@ object Themes {
         (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
     /** the theme as the picker offers it, without the user's own colours */
-    fun base(ctx: Context, id: String): KbTheme = when (id) {
+    fun base(ctx: Context, id: String): KbTheme = when (canon(id)) {
+        "luxe" -> LUXE
+        "pearl" -> PEARL
         "light" -> LIGHT
         "dark" -> DARK
         "amoled" -> AMOLED
@@ -107,9 +164,9 @@ object Themes {
         "neon" -> NEON
         "rose" -> ROSE
         "forest" -> FOREST
-        "gold" -> GOLD
         "mint" -> MINT
-        else -> auto(ctx)
+        "system" -> system(ctx)
+        else -> if (isNight(ctx)) LUXE else PEARL
     }
 
     /** forgets every colour the user changed on top of a theme (the colour of the typed text is not part of the look) */
@@ -162,6 +219,7 @@ object Themes {
                 divider = ColorMath.withAlpha(on, 0x26),
                 dark = !ColorMath.isLight(b),
                 aurora = if (t.bgStyle == 2) auroraFor(b, t.accent) else t.aurora,
+                spot = 0,                                   // the soft gold light only suits the theme's own background
             )
         }
         if (p.bgStyle in 0..2) t = withStyle(t, p.bgStyle)
@@ -194,12 +252,13 @@ object Themes {
                 keyFn = ColorMath.shade(k, if (light) -0.09f else 0.10f),
                 text = on, textSub = ColorMath.withAlpha(on, 150), onFn = on,
                 popupBg = k,
+                keyLo = 0, fnLo = 0, capTop = 0, capBottom = 0,       // the luxe gradients are worked out from the new colours
             )
             if (t.glass) t = t.copy(key = ColorMath.withAlpha(k, 0x66), keyFn = ColorMath.withAlpha(t.keyFn, 0x4D), keyPressed = ColorMath.withAlpha(t.keyPressed, 0x99))
         }
         if (p.fnColor != 0) {
             val f = ColorMath.opaque(p.fnColor)
-            t = t.copy(keyFn = if (t.glass) ColorMath.withAlpha(f, 0x66) else f, onFn = ColorMath.onColor(f))
+            t = t.copy(keyFn = if (t.glass) ColorMath.withAlpha(f, 0x66) else f, onFn = ColorMath.onColor(f), fnLo = 0, capTop = 0, capBottom = 0)
         }
         if (p.letterColor != 0) {
             val l = ColorMath.opaque(p.letterColor)
@@ -207,7 +266,10 @@ object Themes {
         }
         if (p.accentColor != 0) {
             val a = ColorMath.opaque(p.accentColor)
-            t = t.copy(accent = a, onAccent = ColorMath.onColor(a))
+            t = t.copy(
+                accent = a, onAccent = ColorMath.onColor(a), metal = emptyList(),
+                hair = if (t.hair != 0) ColorMath.withAlpha(a, ColorMath.alpha(t.hair)) else 0,
+            )
         }
 
         // glowing letters
@@ -221,14 +283,14 @@ object Themes {
     // ------------------------------------------------------------------ Material You
 
     /** Follows day/night and, on Android 12+, takes the colours from the wallpaper (Material You) like Gboard does. */
-    private fun auto(ctx: Context): KbTheme {
+    private fun system(ctx: Context): KbTheme {
         val night = isNight(ctx)
         val base = if (night) DARK else LIGHT
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return base
         return try {
             fun col(id: Int) = ctx.resources.getColor(id, ctx.theme)
             if (night) KbTheme(
-                "auto", true,
+                "system", true,
                 col(android.R.color.system_neutral1_900), col(android.R.color.system_neutral1_700),
                 col(android.R.color.system_neutral2_800), col(android.R.color.system_neutral1_600),
                 col(android.R.color.system_neutral1_50), col(android.R.color.system_neutral2_300),
@@ -236,7 +298,7 @@ object Themes {
                 col(android.R.color.system_neutral1_600), col(android.R.color.system_neutral2_700), base.shadow,
                 rim = base.rim,
             ) else KbTheme(
-                "auto", false,
+                "system", false,
                 col(android.R.color.system_accent2_100), col(android.R.color.system_neutral1_10),
                 col(android.R.color.system_accent2_200), col(android.R.color.system_accent2_300),
                 col(android.R.color.system_neutral1_900), col(android.R.color.system_neutral2_600),

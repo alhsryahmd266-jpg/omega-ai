@@ -206,6 +206,74 @@ class StripView(ctx: Context) : View(ctx) {
         drawIcon(c, "send", cx, cy, rr * 1.15f, ink)
     }
 
+    // ------------------------------------------------------------------ the capsule of the luxe look
+
+    private val capRect = RectF()
+
+    /** the rounded bar every tool stands in: soft shadow, gradient body, lit top edge, dark bottom edge */
+    private fun drawCapsule(c: Canvas, w: Float, h: Float): RectF {
+        val t = theme
+        val l = dp(8f)
+        val r = w - dp(8f)
+        val top = (h - dp(36f)) / 2f
+        val bot = top + dp(36f)
+        val rad = dp(18f)
+        capRect.set(l, top, r, bot)
+        val sa = ColorMath.alpha(t.shadow)
+        if (sa > 0) {
+            fill.shader = null
+            val frac = floatArrayOf(0.5f, 0.3f, 0.15f)
+            for (i in 0 until 3) {
+                val spread = dp(0.8f) * i
+                fill.color = ColorMath.withAlpha(t.shadow, (sa * frac[i]).toInt())
+                c.drawRoundRect(l - spread, top + dp(1.2f + i) - spread, r + spread, bot + dp(1.2f + i) + spread, rad + spread, rad + spread, fill)
+            }
+        }
+        fill.shader = LinearGradient(0f, top, 0f, bot, t.capHi, t.capLo, Shader.TileMode.CLAMP)
+        c.drawRoundRect(capRect, rad, rad, fill)
+        fill.shader = null
+        val lo = t.rimDark
+        ring.shader = LinearGradient(
+            0f, top, 0f, bot,
+            intArrayOf(t.rim, ColorMath.withAlpha(t.rim, 0), ColorMath.withAlpha(lo, 0), lo), floatArrayOf(0f, 0.45f, 0.55f, 1f), Shader.TileMode.CLAMP,
+        )
+        val hw = density * 0.5f
+        c.drawRoundRect(l + hw, top + hw, r - hw, bot - hw, rad, rad, ring)
+        ring.shader = null
+        return capRect
+    }
+
+    /** a tool icon standing in the capsule: no frame of its own, only a soft disc behind it while it is pressed */
+    private fun capIcon(c: Canvas, name: String, cx: Float, cy: Float, pressed: Boolean) {
+        val t = theme
+        if (pressed) {
+            fill.shader = null
+            fill.color = ColorMath.withAlpha(t.accent, 0x38)
+            c.drawCircle(cx, cy, dp(15f), fill)
+        }
+        drawIcon(c, name, cx, cy, dp(20f), t.onFn)
+    }
+
+    /** a running tool in the capsule: a gold disc with a glow round it */
+    private fun capActive(c: Canvas, name: String, cx: Float, cy: Float, r: Float, pressed: Boolean) {
+        val t = theme
+        val rr = if (pressed) r * 0.93f else r
+        fill.shader = null
+        val halo = intArrayOf(0x30, 0x1E, 0x10)
+        for (i in halo.indices) {
+            fill.color = ColorMath.withAlpha(t.accent, halo[i])
+            c.drawCircle(cx, cy, rr + dp(2.4f) * (i + 1), fill)
+        }
+        fill.shader = LinearGradient(cx, cy - rr, cx, cy + rr, t.stops(2), t.stopPos(2), Shader.TileMode.CLAMP)
+        c.drawCircle(cx, cy, rr, fill)
+        fill.shader = null
+        ring.color = ColorMath.withAlpha(ColorMath.PAPER, 0x66)
+        c.drawCircle(cx, cy, rr - density * 0.5f, ring)
+        shine.shader = LinearGradient(cx, cy - rr, cx, cy + rr * 0.15f, ColorMath.withAlpha(ColorMath.PAPER, 0x55), 0x00FFFFFF, Shader.TileMode.CLAMP)
+        c.drawCircle(cx, cy, rr - dp(1f), shine)
+        drawIcon(c, name, cx, cy, dp(19f), t.onAccent)
+    }
+
     private fun drawText(c: Canvas, s: String, cx: Float, cy: Float, maxW: Float) {
         val shown = TextUtils.ellipsize(s, tp, maxW, TextUtils.TruncateAt.END).toString()
         val fm = tp.fontMetrics
@@ -222,15 +290,21 @@ class StripView(ctx: Context) : View(ctx) {
         val btn = dp(40f)
         when (mode) {
             Mode.SUGGEST -> {
+                val fancy = t.fancy
+                val cap = if (fancy) drawCapsule(c, w, h) else null
                 val rr = dp(16f)
-                val tx = railEdge
+                val tx = if (cap != null) cap.left + dp(22f) else railEdge
+                val mx = if (cap != null) cap.right - dp(22f) else w - railEdge
                 addHit(tx - btn / 2, cy - btn / 2, tx + btn / 2, cy + btn / 2, "toggle")
-                drawChip(c, tx, cy, rr, Chip.PLAIN, pressedTag == "toggle")
-                drawIcon(c, "chevron_right", tx, cy, rr * 1.25f, t.text)
-                val mx = w - railEdge
+                if (fancy) capIcon(c, "chevron_right", tx, cy, pressedTag == "toggle") else {
+                    drawChip(c, tx, cy, rr, Chip.PLAIN, pressedTag == "toggle")
+                    drawIcon(c, "chevron_right", tx, cy, rr * 1.25f, t.text)
+                }
                 addHit(mx - btn / 2, cy - btn / 2, mx + btn / 2, cy + btn / 2, "mic")
-                drawChip(c, mx, cy, rr, Chip.PLAIN, pressedTag == "mic")
-                drawIcon(c, "mic", mx, cy, rr * 1.25f, t.text)
+                if (fancy) capIcon(c, "mic", mx, cy, pressedTag == "mic") else {
+                    drawChip(c, mx, cy, rr, Chip.PLAIN, pressedTag == "mic")
+                    drawIcon(c, "mic", mx, cy, rr * 1.25f, t.text)
+                }
                 var left = tx + btn / 2 + dp(2f)
                 if (colourSend) {
                     val sx = left + btn / 2
@@ -246,35 +320,71 @@ class StripView(ctx: Context) : View(ctx) {
                     val s = suggestions.getOrNull(idx) ?: continue
                     val l = left + pos * slot
                     val rect = addHit(l, 0f, l + slot, h, "s$idx")
-                    pressBg(c, RectF(rect.left + dp(3f), dp(5f), rect.right - dp(3f), h - dp(5f)), "s$idx", dp(10f))
+                    if (fancy) {
+                        if (pressedTag == "s$idx") {
+                            fill.shader = null
+                            fill.color = ColorMath.withAlpha(t.accent, 0x30)
+                            c.drawRoundRect(rect.left + dp(3f), cy - dp(14f), rect.right - dp(3f), cy + dp(14f), dp(14f), dp(14f), fill)
+                        }
+                    } else pressBg(c, RectF(rect.left + dp(3f), dp(5f), rect.right - dp(3f), h - dp(5f)), "s$idx", dp(10f))
                     tp.color = t.onBg
                     tp.textSize = dp(17f)
                     tp.isFakeBoldText = idx == 0
                     drawText(c, s, rect.centerX(), cy, slot - dp(12f))
                     tp.isFakeBoldText = false
-                    if (pos > 0) { line.color = t.divider; c.drawLine(l, dp(11f), l, h - dp(11f), line) }
+                    if (pos > 0) {
+                        line.color = if (fancy) ColorMath.withAlpha(t.onBgSub, 0x44) else t.divider
+                        c.drawLine(l, dp(11f), l, h - dp(11f), line)
+                    }
                 }
             }
             Mode.TOOLBAR -> {
-                // the collapse button and every tool stand on one rail: same size, same look, equal gaps
                 val n = tools.size + 1
-                val rr = railRadius(n, w)
-                val step = if (n <= 1) w else (w - 2 * railEdge) / (n - 1)
-                val tx = railX(0, n, w)
-                addHit(tx - step / 2, 0f, tx + step / 2, h, "toggle")
-                drawChip(c, tx, cy, rr, Chip.PLAIN, pressedTag == "toggle")
-                drawIcon(c, "chevron_left", tx, cy, rr * 1.25f, t.text)
-                for ((i, tool) in tools.withIndex()) {
-                    val x = railX(i + 1, n, w)
-                    val tag = "t:${tool.id}"
-                    addHit(x - step / 2, 0f, x + step / 2, h, tag)
-                    val down = pressedTag == tag
-                    if (tool.id == "csend") {
-                        drawSwatch(c, x, cy, rr, down)
-                        continue
+                if (t.fancy) {
+                    // the collapse button and every tool stand in one capsule, in equal slots; a running tool is a gold disc
+                    val cap = drawCapsule(c, w, h)
+                    val pad = dp(8f)
+                    val slot = (cap.width() - 2 * pad) / n
+                    val rr = minOf(dp(14f), slot / 2f - dp(2f)).coerceAtLeast(dp(9f))
+                    fun sx(i: Int) = cap.left + pad + slot * (i + 0.5f)
+                    fun hit(i: Int, tag: String) {
+                        val l = if (i == 0) 0f else sx(i) - slot / 2f
+                        val r = if (i == n - 1) w else sx(i) + slot / 2f
+                        addHit(l, 0f, r, h, tag)
                     }
-                    drawChip(c, x, cy, rr, if (tool.active) Chip.ACTIVE else Chip.PLAIN, down)
-                    drawIcon(c, tool.icon, x, cy, rr * 1.25f, if (tool.active) t.onAccent else t.text)
+                    hit(0, "toggle")
+                    capIcon(c, "chevron_left", sx(0), cy, pressedTag == "toggle")
+                    for ((i, tool) in tools.withIndex()) {
+                        val x = sx(i + 1)
+                        val tag = "t:${tool.id}"
+                        hit(i + 1, tag)
+                        val down = pressedTag == tag
+                        when {
+                            tool.id == "csend" -> drawSwatch(c, x, cy, rr, down)
+                            tool.active -> capActive(c, tool.icon, x, cy, rr, down)
+                            else -> capIcon(c, tool.icon, x, cy, down)
+                        }
+                    }
+                } else {
+                    // the collapse button and every tool stand on one rail: same size, same look, equal gaps
+                    val rr = railRadius(n, w)
+                    val step = if (n <= 1) w else (w - 2 * railEdge) / (n - 1)
+                    val tx = railX(0, n, w)
+                    addHit(tx - step / 2, 0f, tx + step / 2, h, "toggle")
+                    drawChip(c, tx, cy, rr, Chip.PLAIN, pressedTag == "toggle")
+                    drawIcon(c, "chevron_left", tx, cy, rr * 1.25f, t.text)
+                    for ((i, tool) in tools.withIndex()) {
+                        val x = railX(i + 1, n, w)
+                        val tag = "t:${tool.id}"
+                        addHit(x - step / 2, 0f, x + step / 2, h, tag)
+                        val down = pressedTag == tag
+                        if (tool.id == "csend") {
+                            drawSwatch(c, x, cy, rr, down)
+                            continue
+                        }
+                        drawChip(c, x, cy, rr, if (tool.active) Chip.ACTIVE else Chip.PLAIN, down)
+                        drawIcon(c, tool.icon, x, cy, rr * 1.25f, if (tool.active) t.onAccent else t.text)
+                    }
                 }
             }
             Mode.TRANSLATE -> {

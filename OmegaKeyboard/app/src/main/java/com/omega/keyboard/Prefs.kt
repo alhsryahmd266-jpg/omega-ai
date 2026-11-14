@@ -48,10 +48,12 @@ class Prefs private constructor(ctx: Context) {
     var textColor by I("text_color", 0xFF2979FF.toInt())  // colour of the text you type; 0 = the field's own colour
     var textRainbow by B("text_rainbow", false)           // every letter in the next colour of the rainbow
     var textHighlight by B("text_highlight", false)       // highlighter pen: the colour goes behind the text
-    var colourOnSend by B("colour_on_send", true)         // the send key of a chat box sends the text as a coloured picture / colour codes
+    // Whatever is written is real text, always. A picture / sticker is an extra the user switches on (the two below, both off).
+    var colourOnSend by B("colour_on_send_v2", false)     // the send key of a chat box sends the text as a coloured picture (off: plain text)
+    var colourButton by B("colour_button", false)         // the round "send coloured" button above the keys (a picture / sticker, or colour codes)
     var picAutoSend by B("pic_auto_send", true)           // presses the app's own "send" on the picture preview (needs the accessibility service)
     var picStyle by S("pic_style", "sticker")             // sticker (see-through, no frame: looks like coloured writing) | clean (card) | neon
-    var colorCodes by S("color_codes", "none")            // how colour travels where pictures are refused (games): see ColorCodes.Format
+    var colorCodes by S("color_codes", "auto")            // how colour travels as real text: a game / app format (ColorCodes.Format), or auto = by the app
     var keyColor by I("c_key", 0)
     var fnColor by I("c_fn", 0)
     var accentColor by I("c_accent", 0)

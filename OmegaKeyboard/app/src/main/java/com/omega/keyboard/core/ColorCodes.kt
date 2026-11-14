@@ -8,7 +8,9 @@ package com.omega.keyboard.core
 object ColorCodes {
 
     enum class Format(val id: String, val label: String) {
-        NONE("none", "بدون كود (صورة بس)"),
+        /** the app decides: the format of the apps listed in [forPackage], plain text everywhere else */
+        AUTO("auto", "تلقائي (حسب التطبيق)"),
+        NONE("none", "بدون كود (نص عادي)"),
         FREEFIRE("ff", "Free Fire  [FF0000]"),
         UNITY("unity", "ألعاب Unity  <color=#FF0000>"),
         DISCORD("discord", "Discord  (كمبيوتر)"),
@@ -20,6 +22,16 @@ object ColorCodes {
             fun of(id: String?): Format = values().firstOrNull { it.id == id } ?: NONE
         }
     }
+
+    /** the colour-code format an app is known to read; none for every other app (its text stays plain) */
+    fun forPackage(pkg: String?): Format = when (pkg) {
+        "com.discord" -> Format.DISCORD
+        "com.dts.freefireth", "com.dts.freefiremax" -> Format.FREEFIRE
+        else -> Format.NONE
+    }
+
+    /** [chosen] is what the user picked: [Format.AUTO] leaves it to the app [pkg] */
+    fun resolve(chosen: Format, pkg: String?): Format = if (chosen == Format.AUTO) forPackage(pkg) else chosen
 
     private const val ESC = "\u001B"
 
@@ -55,7 +67,7 @@ object ColorCodes {
      * Letters of one colour share one code; spaces and line breaks ride along and never start a code.
      */
     fun wrap(text: String, format: Format, colorAt: (Int) -> Int): String {
-        if (format == Format.NONE || text.isEmpty()) return text
+        if (format == Format.NONE || format == Format.AUTO || text.isEmpty()) return text
         val lead = StringBuilder()
         val runs = ArrayList<Run>()
         var n = 0
@@ -87,7 +99,7 @@ object ColorCodes {
                 for (r in runs) sb.append(ESC).append("[1;").append(discordCode(r.color)).append('m').append(r.body)
                 sb.append(ESC).append("[0m\n```")
             }
-            Format.NONE -> return text
+            Format.NONE, Format.AUTO -> return text
         }
         return sb.toString()
     }

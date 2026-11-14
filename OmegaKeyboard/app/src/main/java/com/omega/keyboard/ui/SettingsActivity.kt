@@ -111,8 +111,8 @@ class SettingsActivity : BaseActivity() {
         }
         h.addView(UiKit.group(
             this, p,
-            UiKit.valueRow(this, p, "المظهر", Themes.choices.firstOrNull { it.first == prefs.theme }?.second ?: "تلقائي") {
-                choose("المظهر", Themes.choices, prefs.theme) { prefs.theme = it; Themes.resetCustom(prefs) }
+            UiKit.valueRow(this, p, "المظهر", Themes.choices.firstOrNull { it.first == Themes.canon(prefs.theme) }?.second ?: "تلقائي") {
+                choose("المظهر", Themes.choices, Themes.canon(prefs.theme)) { prefs.theme = it; Themes.resetCustom(prefs) }
             },
             UiKit.valueRow(this, p, "لون الكتابة", textChoices.firstOrNull { it.first == textKey }?.second ?: "لون مخصص") {
                 choose("لون الكتابة", textChoices, textKey) { k ->
@@ -147,25 +147,26 @@ class SettingsActivity : BaseActivity() {
             sw("نقطة بالمسافتين", "مسافتين ورا بعض = نقطة ومسافة", prefs.doubleSpacePeriod) { prefs.doubleSpacePeriod = it },
         ))
 
-        // ---------------------------------------------------------------- coloured sending
-        h.addView(UiKit.section(this, p, "إرسال الكتابة الملونة"))
+        // ---------------------------------------------------------------- coloured writing
+        h.addView(UiKit.section(this, p, "الكتابة الملونة"))
         val picStyles = listOf("sticker" to "ملصق شفاف (بدون إطار)", "clean" to "كارت عادي (كلامك بلونه)", "neon" to "نيون مضيء")
         val codeChoices = ColorCodes.Format.values().map { it.id to it.label }
         h.addView(UiKit.group(
             this, p,
-            sw("زرار الإرسال يبعت ملوّن", "في خانات الدردشة اللي بتقبل صور (واتساب، تليجرام، ماسنجر): الكلام يتحوّل لصورة بلونك ويتبعت. الدايرة الملونة فوق الكيبورد بتعمل نفس الشيء.", prefs.colourOnSend) { prefs.colourOnSend = it },
-            sw("إرسال تلقائي", "يدوس \"إرسال\" لوحده في معاينة الصورة (محتاج تفعيل خدمة إمكانية الوصول للكيبورد)", prefs.picAutoSend) { prefs.picAutoSend = it },
             UiKit.valueRow(
-                this, p, "شكل الصورة", picStyles.firstOrNull { it.first == prefs.picStyle }?.second ?: "ملصق شفاف (بدون إطار)",
-                "في واتساب الكلام بيتبعت ملصق شفاف من غير إطار، وده أقرب حاجة لنص ملوّن. باقي التطبيقات بتاخد الكارت"
-            ) {
-                choose("شكل الصورة الملونة", picStyles, prefs.picStyle) { prefs.picStyle = it }
-            },
-            UiKit.valueRow(
-                this, p, "ألوان الألعاب", codeChoices.firstOrNull { it.first == prefs.colorCodes }?.second ?: "بدون كود",
-                "للألعاب والتطبيقات اللي مبتقبلش صور: الكلام بيتبعت بكود ألوان تفهمه اللعبة. اختار الصيغة بتاعتها (Free Fire مثلًا)"
+                this, p, "ألوان الألعاب", codeChoices.firstOrNull { it.first == prefs.colorCodes }?.second ?: "تلقائي (حسب التطبيق)",
+                "الكتابة بتتبعت نص حقيقي دايماً. اللون بيوصل كنص في الألعاب والتطبيقات اللي بتفهم أكواد الألوان (Discord وFree Fire بيتعرّفوا لوحدهم). اختار صيغة لعبتك لو مختلفة"
             ) {
                 choose("كود ألوان الألعاب", codeChoices, prefs.colorCodes) { prefs.colorCodes = it }
+            },
+            sw("زرار الإرسال الملوّن (اختياري)", "دايرة ملونة فوق الكيبورد: تبعت الكلام بكود الألوان، أو كملصق/صورة في التطبيقات اللي بتقبل صور. مقفول لحد ما تفتحه", prefs.colourButton) { prefs.colourButton = it },
+            sw("زرار الإرسال يبعت صورة ملونة (اختياري)", "مقفول: زرار الإرسال بيبعت نص عادي دايماً. لو فتحته: في واتساب وتليجرام وماسنجر الكلام يتحوّل لملصق/صورة بلونك (واتساب مبيقبلش نص ملوّن، فالصورة هي الطريقة الوحيدة للون هناك)", prefs.colourOnSend) { prefs.colourOnSend = it },
+            sw("إرسال تلقائي للصورة", "يدوس \"إرسال\" لوحده في معاينة الصورة (محتاج تفعيل خدمة إمكانية الوصول للكيبورد)", prefs.picAutoSend) { prefs.picAutoSend = it },
+            UiKit.valueRow(
+                this, p, "شكل الصورة", picStyles.firstOrNull { it.first == prefs.picStyle }?.second ?: "ملصق شفاف (بدون إطار)",
+                "للصور والملصقات الاختيارية بس. في واتساب الكلام بيتبعت ملصق شفاف من غير إطار، وباقي التطبيقات بتاخد الكارت"
+            ) {
+                choose("شكل الصورة الملونة", picStyles, prefs.picStyle) { prefs.picStyle = it }
             },
         ))
 
@@ -212,7 +213,7 @@ class SettingsActivity : BaseActivity() {
                 "سيبها تلقائي. غيّرها بس لو بيرد على رسايلك إنت أو مش بيرد خالص") {
                 choose("رسايلي بتظهر على", sides, prefs.apSide) { prefs.apSide = it }
             },
-            sw("الردود بلون كتابتك", "لو اخترت لون كتابة: الرد يتبعت ملوّن (ملصق شفاف في واتساب، وكود ألوان في الألعاب لو اخترت صيغتها)", prefs.apColour) { prefs.apColour = it },
+            sw("ألوان الردود في الألعاب", "الرد بيتكتب نص حقيقي دايماً (مبيبعتش صور ولا ملصقات أبداً). لو اخترت لون كتابة واللعبة بتفهم أكواد الألوان (من «الكتابة الملونة») الرد بيتلوّن بيها", prefs.apColour) { prefs.apColour = it },
         ))
 
         // ---------------------------------------------------------------- games
