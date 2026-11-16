@@ -144,6 +144,31 @@ object GameEyes {
         }
     }
 
+    /**
+     * The picture with its background taken away: whatever stands out from its surroundings (letters of any colour) is black on white
+     * (see [com.omega.keyboard.core.TextMask]). The last try when neither the plain nor the sharper picture showed a chat line.
+     */
+    fun masked(ctx: Context, look: Look): Look? {
+        val src = BitmapFactory.decodeFile(look.file.absolutePath) ?: return null
+        try {
+            val w = src.width
+            val h = src.height
+            val px = IntArray(w * h)
+            src.getPixels(px, 0, w, 0, 0, w, h)
+            val made = com.omega.keyboard.core.TextMask.make(px, w, h)
+            val out = Bitmap.createBitmap(made, w, h, Bitmap.Config.ARGB_8888)
+            val f = File(ctx.cacheDir, "game_eye_mask.png")
+            FileOutputStream(f).use { o -> out.compress(Bitmap.CompressFormat.PNG, 100, o) }
+            out.recycle()
+            return Look(f, look.grid, look.width, look.height, look.blank, look.screenBlank)
+        } catch (t: Throwable) {
+            AppLog.e("gameeyes", "could not make the letters stand out", t)
+            return null
+        } finally {
+            src.recycle()
+        }
+    }
+
     /** The picture as 32 x 32 average gray values: enough to notice a new chat line, cheap to compare. */
     private fun grayGrid(bmp: Bitmap): IntArray {
         val side = GRID * 4

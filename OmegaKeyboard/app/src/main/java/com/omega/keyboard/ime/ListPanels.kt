@@ -268,9 +268,16 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
     fun rowsLine(): String {
         val sb = StringBuilder()
         val r = android.graphics.Rect()
+        val inWindow = IntArray(2)
+        val onScreen = IntArray(2)
         for ((tag, v) in rows) {
             if (!v.isShown || !v.getGlobalVisibleRect(r)) continue
-            sb.append("p:").append(tag).append('=').append(r.centerX()).append(',').append(r.centerY()).append(';')
+            // the visible part is measured inside the keyboard's window; a tap needs the place on the screen
+            v.getLocationInWindow(inWindow)
+            v.getLocationOnScreen(onScreen)
+            val x = r.centerX() + onScreen[0] - inWindow[0]
+            val y = r.centerY() + onScreen[1] - inWindow[1]
+            sb.append("p:").append(tag).append('=').append(x).append(',').append(y).append(';')
         }
         return sb.toString()
     }

@@ -236,13 +236,21 @@ def cmd_tab(index):
 
 
 def cmd_panel(name):
-    """taps a row or button of the panel that covers the keys (the decoration styles: p:<style>, p:undo, p:none, p:live)"""
-    for _attempt in range(3):
+    """taps a row or button of the panel that covers the keys (the decoration styles: p:<style>, p:undo, p:none, p:live).
+    A row that is not on the screen is looked for by scrolling the list: first towards its end, then back towards its start."""
+    fixed = ("p:live", "p:undo", "p:none")
+    for attempt in range(14):
         _k, _s, sheet = ask_dump()
         pos = sheet.get("p:" + name)
         if pos:
             adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
             return 0
+        rows = sorted((v for k, v in sheet.items() if k.startswith("p:") and k not in fixed), key=lambda v: v[1])
+        if rows:
+            x, y = rows[len(rows) // 2]
+            toward_end = attempt < 7
+            y0, y1 = (y + 120, y - 330) if toward_end else (y - 120, y + 330)
+            adb("shell", "input", "swipe", str(x), str(y0), str(x), str(y1), "700")
         time.sleep(1.0)
     print(f"panel row {name} not found", file=sys.stderr)
     return 1

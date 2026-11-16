@@ -263,6 +263,18 @@ object GameRound {
             }
         }
         if (messages.isEmpty()) {
+            // still nothing: the background is taken away and the letters (of any colour) are drawn black on white
+            val mask = GameEyes.masked(ctx, look)
+            if (mask != null) {
+                host.say("بجرّب أشيل الخلفية وأخلّي الكلام أسود على أبيض...")
+                val third = readLines(ctx, prefs, g, host, mask.file) ?: return
+                if (third.isNotEmpty()) {
+                    messages = third
+                    AppLog.d("game", "the black-on-white picture showed ${third.size} lines that the others did not")
+                }
+            }
+        }
+        if (messages.isEmpty()) {
             g.idleReads++
             g.emptyReads++
             g.nextReadAt = System.currentTimeMillis() + idleGap(g.idleReads)

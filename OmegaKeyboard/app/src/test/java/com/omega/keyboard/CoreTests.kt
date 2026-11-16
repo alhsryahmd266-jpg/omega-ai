@@ -19,7 +19,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -1145,5 +1145,37 @@ object CoreTests {
         check("source picked equal to the target: they trade places", TypedLang.pickSource("ar", "en", "en") == ("en" to "ar"))
         check("an automatic source never meets the target", TypedLang.pickSource(TypedLang.AUTO, "en", "en") == ("en" to "ar"))
         check("source set back to automatic", TypedLang.pickSource("ar", "en", TypedLang.AUTO) == (TypedLang.AUTO to "en"))
+    }
+
+    // ------------------------------------------------------------------ letters of any colour for the picture reader
+
+    private fun textMask() {
+        val w = 120
+        val h = 60
+        fun g(p: Int) = p and 0xFF
+        // a dark chat panel with bright blue strokes (letters)
+        val dark = IntArray(w * h) { 0xFF1E1E28.toInt() }
+        for (y in 20 until 40) for (x in 30 until 90) if ((x / 3) % 2 == 0) dark[y * w + x] = 0xFF1E3CFF.toInt()
+        val m = TextMask.make(dark, w, h)
+        check("mask: the size is kept", m.size == w * h)
+        check("mask: a blue letter on a dark panel is dark ink", g(m[30 * w + 30]) < 60) { "${g(m[30 * w + 30])}" }
+        check("mask: the gap between letters is white", g(m[30 * w + 33]) > 240) { "${g(m[30 * w + 33])}" }
+        check("mask: the empty panel is white", g(m[5 * w + 5]) > 240)
+        check("mask: every pixel is opaque", m.all { (it ushr 24) == 0xFF })
+        // dark red letters on a light panel
+        val light = IntArray(w * h) { 0xFFF0F0F0.toInt() }
+        for (y in 20 until 40) for (x in 30 until 90) if ((x / 3) % 2 == 0) light[y * w + x] = 0xFF8B0000.toInt()
+        val m2 = TextMask.make(light, w, h)
+        check("mask: a dark letter on a light panel is dark ink", g(m2[30 * w + 30]) < 60) { "${g(m2[30 * w + 30])}" }
+        check("mask: the light panel is white", g(m2[5 * w + 5]) > 240)
+        // nothing stands out: nothing to show
+        val flat = TextMask.make(IntArray(w * h) { 0xFF336699.toInt() }, w, h)
+        check("mask: a flat picture is all white", flat.all { g(it) == 255 })
+        val grad = IntArray(w * h) { val v = 20 + it % w; (0xFF shl 24) or (v shl 16) or (v shl 8) or v }
+        val m3 = TextMask.make(grad, w, h)
+        check("mask: a smooth gradient stays white", m3.count { g(it) < 200 } < w * h / 50) { "${m3.count { g(it) < 200 }}" }
+        // the polarity can be forced: dark letters on a dark picture are not found when light ones are asked for
+        val forced = TextMask.make(dark, w, h, lightText = false)
+        check("mask: the other polarity shows the gaps instead", g(forced[30 * w + 33]) < 60 && g(forced[30 * w + 30]) > 240)
     }
 }
