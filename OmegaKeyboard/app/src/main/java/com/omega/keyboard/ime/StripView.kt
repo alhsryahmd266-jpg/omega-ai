@@ -17,12 +17,12 @@ import android.view.View
 import com.omega.keyboard.core.ColorMath
 
 /**
- * The bar above the keys: word suggestions, the tool row (autonomous mode, translation, voice, clipboard...),
- * the typed-text translation controls and short status messages.
+ * The bar above the keys: word suggestions, the tool row (autonomous mode, translation, voice, clipboard...)
+ * and short status messages. (The typed-text translation has its own bar: [TranslateBar].)
  */
 class StripView(ctx: Context) : View(ctx) {
 
-    enum class Mode { SUGGEST, TOOLBAR, TRANSLATE, STATUS }
+    enum class Mode { SUGGEST, TOOLBAR, STATUS }
 
     data class Tool(val id: String, val icon: String, val label: String, val active: Boolean = false)
 
@@ -33,7 +33,6 @@ class StripView(ctx: Context) : View(ctx) {
         fun onMic()
         /** the round "send in my colour" button */
         fun onColourSend()
-        fun onTranslateAction(id: String)
         fun onStatusAction(id: String)
     }
 
@@ -57,19 +56,6 @@ class StripView(ctx: Context) : View(ctx) {
 
     var tools: List<Tool> = emptyList()
         set(v) { field = v; invalidate() }
-
-    // typed-text translation bar
-    var targetName: String = ""
-        set(v) { field = v; invalidate() }
-    var busy: Boolean = false
-        set(v) { field = v; invalidate() }
-    var canUndo: Boolean = false
-        set(v) { field = v; invalidate() }
-    /** the live translation of what is typed (a tap puts it into the box), or the note shown while there is none */
-    var preview: String = ""
-        set(v) { if (field != v) { field = v; invalidate() } }
-    var previewNote: String = ""
-        set(v) { if (field != v) { field = v; invalidate() } }
 
     // status bar
     var statusText: String = ""
@@ -97,7 +83,19 @@ class StripView(ctx: Context) : View(ctx) {
 
     private fun icon(name: String): Drawable? = icons.getOrPut(name) { Icons.get(context, name) }
 
-    private fun drawIcon(c: Canvas, name: String, cx: Float, cy: Float, size: Float, color: Int) {
+    /**
+     * [color] tints a flat icon. The robot is a painted 3D figure instead (see [Robot3D]): it ignores the tint, takes the shell that
+     * reads best on [surface] (the colour it stands on) and lets its eyes wear [glow]; [lit] is the running look.
+     */
+    private fun drawIcon(
+        c: Canvas, name: String, cx: Float, cy: Float, size: Float, color: Int,
+        surface: Int = 0, glow: Int = theme.accent, lit: Boolean = false,
+    ) {
+        if (name == "robot") {
+            val body = if (ColorMath.luminance(surface) < 0.30f) Robot3D.Body.PEARL else Robot3D.Body.GRAPHITE
+            Robot3D.draw(c, cx, cy, size * 1.2f, body, glow, lit)
+            return
+        }
         val d = icon(name) ?: return
         d.setTint(color)
         val h = size / 2f
@@ -156,6 +154,7 @@ class StripView(ctx: Context) : View(ctx) {
                 fill.color = ColorMath.withAlpha(t.accent, 0x3A)
                 c.drawCircle(cx, cy, rr + dp(3f), fill)
                 fill.shader = LinearGradient(cx, cy - rr, cx, cy + rr, ColorMath.shade(t.accent, 0.12f), ColorMath.shade(t.accent, -0.16f), Shader.TileMode.CLAMP)
+                fill.alpha = 255
                 c.drawCircle(cx, cy, rr, fill)
                 fill.shader = null
                 ring.color = ColorMath.withAlpha(ColorMath.PAPER, 0x55)
@@ -164,6 +163,7 @@ class StripView(ctx: Context) : View(ctx) {
                 val top = if (pressed) t.keyPressed else t.key
                 val bottom = if (pressed) t.keyPressed else ColorMath.blend(t.key, t.keyFn, 0.55f)
                 fill.shader = LinearGradient(cx, cy - rr, cx, cy + rr, top, bottom, Shader.TileMode.CLAMP)
+                fill.alpha = 255
                 c.drawCircle(cx, cy, rr, fill)
                 fill.shader = null
                 ring.color = if (t.glass) t.rim else ColorMath.withAlpha(t.divider, 0xC0)
@@ -192,6 +192,7 @@ class StripView(ctx: Context) : View(ctx) {
             val cs = IntArray(7) { com.omega.keyboard.core.ColorMath.rainbow(it * 8 + 1) }
             cs[6] = cs[0]
             fill.shader = SweepGradient(cx, cy, cs, null)
+            fill.alpha = 255
         } else {
             fill.shader = null
             fill.color = swatch
@@ -230,6 +231,7 @@ class StripView(ctx: Context) : View(ctx) {
             }
         }
         fill.shader = LinearGradient(0f, top, 0f, bot, t.capHi, t.capLo, Shader.TileMode.CLAMP)
+        fill.alpha = 255                                   // the body was drawn at the shadow's faint alpha: dull and flat
         c.drawRoundRect(capRect, rad, rad, fill)
         fill.shader = null
         val lo = t.rimDark
@@ -237,6 +239,7 @@ class StripView(ctx: Context) : View(ctx) {
             0f, top, 0f, bot,
             intArrayOf(t.rim, ColorMath.withAlpha(t.rim, 0), ColorMath.withAlpha(lo, 0), lo), floatArrayOf(0f, 0.45f, 0.55f, 1f), Shader.TileMode.CLAMP,
         )
+        ring.alpha = 255                                   // the round buttons leave a faint ring colour on this paint
         val hw = density * 0.5f
         c.drawRoundRect(l + hw, top + hw, r - hw, bot - hw, rad, rad, ring)
         ring.shader = null
@@ -251,7 +254,7 @@ class StripView(ctx: Context) : View(ctx) {
             fill.color = ColorMath.withAlpha(t.accent, 0x38)
             c.drawCircle(cx, cy, dp(15f), fill)
         }
-        drawIcon(c, name, cx, cy, dp(20f), t.onFn)
+        drawIcon(c, name, cx, cy, dp(20f), t.onFn, surface = ColorMath.blend(t.capHi, t.capLo, 0.5f))
     }
 
     /** a running tool in the capsule: a gold disc with a glow round it */
@@ -265,13 +268,14 @@ class StripView(ctx: Context) : View(ctx) {
             c.drawCircle(cx, cy, rr + dp(2.4f) * (i + 1), fill)
         }
         fill.shader = LinearGradient(cx, cy - rr, cx, cy + rr, t.stops(2), t.stopPos(2), Shader.TileMode.CLAMP)
+        fill.alpha = 255                                   // the halo's faint alpha made the gold disc almost invisible
         c.drawCircle(cx, cy, rr, fill)
         fill.shader = null
         ring.color = ColorMath.withAlpha(ColorMath.PAPER, 0x66)
         c.drawCircle(cx, cy, rr - density * 0.5f, ring)
         shine.shader = LinearGradient(cx, cy - rr, cx, cy + rr * 0.15f, ColorMath.withAlpha(ColorMath.PAPER, 0x55), 0x00FFFFFF, Shader.TileMode.CLAMP)
         c.drawCircle(cx, cy, rr - dp(1f), shine)
-        drawIcon(c, name, cx, cy, dp(19f), t.onAccent)
+        drawIcon(c, name, cx, cy, dp(19f), t.onAccent, surface = t.stops(2)[2], lit = true)
     }
 
     private fun drawText(c: Canvas, s: String, cx: Float, cy: Float, maxW: Float) {
@@ -383,60 +387,17 @@ class StripView(ctx: Context) : View(ctx) {
                             continue
                         }
                         drawChip(c, x, cy, rr, if (tool.active) Chip.ACTIVE else Chip.PLAIN, down)
-                        drawIcon(c, tool.icon, x, cy, rr * 1.25f, if (tool.active) t.onAccent else t.text)
-                    }
-                }
-            }
-            Mode.TRANSLATE -> {
-                val r = addHit(dp(4f), cy - btn / 2, dp(4f) + btn, cy + btn / 2, "close")
-                pressBg(c, r, "close", btn / 2)
-                drawIcon(c, "close", r.centerX(), cy, dp(22f), t.onBgSub)
-                // the button at the right puts the live translation in, or translates now when there is none yet
-                val goW = dp(72f)
-                val go = addHit(w - dp(6f) - goW, cy - dp(17f), w - dp(6f), cy + dp(17f), "go")
-                fill.color = if (pressedTag == "go") t.keyPressed else t.accent
-                c.drawRoundRect(go, dp(17f), dp(17f), fill)
-                tp.color = t.onAccent
-                tp.textSize = dp(14f)
-                tp.isFakeBoldText = true
-                drawText(c, if (busy) "..." else if (preview.isNotEmpty()) "استخدم" else "ترجم", go.centerX(), cy, goW - dp(10f))
-                tp.isFakeBoldText = false
-                var right = go.left - dp(6f)
-                if (canUndo) {
-                    val u = addHit(right - btn, cy - btn / 2, right, cy + btn / 2, "undo")
-                    pressBg(c, u, "undo", btn / 2)
-                    drawIcon(c, "undo", u.centerX(), cy, dp(20f), t.onBg)
-                    right = u.left - dp(2f)
-                }
-                // target language chip
-                tp.textSize = dp(14f)
-                val chipText = "$targetName ▾"
-                val chipW = minOf(dp(112f), maxOf(dp(72f), tp.measureText(chipText) + dp(26f)))
-                val chip = addHit(dp(46f), cy - dp(17f), dp(46f) + chipW, cy + dp(17f), "lang")
-                fill.color = if (pressedTag == "lang") t.keyPressed else t.keyFn
-                c.drawRoundRect(chip, dp(17f), dp(17f), fill)
-                tp.color = t.onFn
-                drawText(c, chipText, chip.centerX(), cy, chip.width() - dp(12f))
-                // the live translation between the chip and the buttons: a tap puts it into the box
-                val pl = chip.right + dp(6f)
-                if (right - pl > dp(44f)) {
-                    if (preview.isNotEmpty()) {
-                        val box = addHit(pl, cy - dp(17f), right, cy + dp(17f), "go")
-                        fill.color = if (pressedTag == "go") t.keyPressed else t.key
-                        c.drawRoundRect(box, dp(17f), dp(17f), fill)
-                        tp.color = t.text
-                        tp.textSize = dp(15f)
-                        drawText(c, preview, box.centerX(), cy, box.width() - dp(16f))
-                    } else if (previewNote.isNotEmpty()) {
-                        tp.color = t.onBgSub
-                        tp.textSize = dp(13f)
-                        drawText(c, previewNote, (pl + right) / 2f, cy, right - pl - dp(6f))
+                        drawIcon(
+                            c, tool.icon, x, cy, rr * 1.25f, if (tool.active) t.onAccent else t.text,
+                            surface = if (tool.active) t.accent else t.key, lit = tool.active,
+                        )
                     }
                 }
             }
             Mode.STATUS -> {
                 val ic = RectF(dp(8f), cy - dp(14f), dp(36f), cy + dp(14f))
-                drawIcon(c, statusIcon, ic.centerX(), cy, dp(22f), if (statusWarn) 0xFFE8A200.toInt() else t.accent)
+                val statusTint = if (statusWarn) 0xFFE8A200.toInt() else t.accent
+                drawIcon(c, statusIcon, ic.centerX(), cy, dp(22f), statusTint, surface = t.bg, glow = statusTint, lit = true)
                 var right = w - dp(8f)
                 if (statusActionLabel.isNotEmpty()) {
                     val pw = dp(86f)
@@ -499,7 +460,6 @@ class StripView(ctx: Context) : View(ctx) {
             tag.startsWith("s") && tag.length == 2 && tag[1].isDigit() -> suggestions.getOrNull(tag[1] - '0')?.let { listener?.onSuggestion(it) }
             tag.startsWith("t:") -> listener?.onTool(tag.substring(2))
             tag == "status" -> listener?.onStatusAction(statusActionId)
-            tag == "close" || tag == "go" || tag == "lang" || tag == "undo" -> listener?.onTranslateAction(tag)
         }
     }
 }

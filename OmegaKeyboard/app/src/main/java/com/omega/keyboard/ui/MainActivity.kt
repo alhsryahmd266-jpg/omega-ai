@@ -16,8 +16,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
-import android.graphics.BitmapFactory
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.omega.keyboard.ai.Llm
@@ -55,19 +53,7 @@ class MainActivity : BaseActivity() {
         // typing test
         col.addView(UiKit.section(this, p, "جرّب الكيبورد"))
         val test = UiKit.card(this, p)
-        // the picture the keyboard's coloured send hands over lands here (the box takes pictures like a chat box does)
-        val gotNote = UiKit.label(this, "", 13f, p.ok, true).apply { visibility = View.GONE; setPadding(0, 0, 0, dp(6)) }
-        val gotPic = ImageView(this).apply {
-            visibility = View.GONE
-            adjustViewBounds = true
-            scaleType = ImageView.ScaleType.FIT_START
-            maxHeight = dp(110)
-            setPadding(0, 0, 0, dp(8))
-        }
-        test.addView(gotNote)
-        test.addView(gotPic, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        val field = PictureField(this).apply {
-            onPicture = { uri, mime -> showPicture(uri, mime, gotNote, gotPic) }
+        val field = android.widget.EditText(this).apply {
             hint = "اكتب هنا..."
             setHintTextColor(p.sub)
             setTextColor(p.text)
@@ -90,9 +76,10 @@ class MainActivity : BaseActivity() {
         }
         tip("الوضع الذاتي", "افتح محادثة (واتساب مثلًا) واضغط \"ذاتي\" في شريط الأدوات فوق الكيبورد مرة واحدة. الكيبورد بيختفي، والنموذج المحلي بيقرا المحادثة، يكتب الرد باسمك ويبعته، ويفضل يرد على كل رسالة جديدة طول اليوم من غير حد أقصى ومن غير ما يوقف لوحده، لحد ما تضغط \"إيقاف\". (الشاشة بتفضل صاحية وهو شغال.)")
         tip("ترجمة الشاشة", "زر \"الشاشة\" بيخفي الكيبورد ويترجم كل نص على الشاشة من أي لغة للعربي (أو أي لغة تختارها من الإعدادات). يدوي: دوس مرة وهيترجم اللي ظاهر، ولو مرّرت لحاجة جديدة دوس \"ترجم\" على الشريط الصغير تاني.")
-        tip("ترجمة اللي بتكتبه", "زر \"ترجم\": اكتب بالعربي واضغط \"ترجم\" والنص يتحوّل للغة اللي تختارها. فيه زر تراجع.")
+        tip("ترجمة اللي بتكتبه", "زر \"ترجم\" بيفتح خانة كتابة صغيرة جوه الكيبورد. اكتب فيها بأي لغة (الكيبورد بيعرّف اللغة لوحده) والترجمة بتظهر لحظيًا في خانة التطبيق نفسه. دوس ✓ (زرار الإدخال) عشان تثبّتها وتكتب جملة تانية، و ⇄ بيقلب اللغتين، وسهم الرجوع بيقفل الشريط. لو الخانة فاضية، ✓ بتشتغل كزرار الإدخال العادي (إرسال).")
         tip("الصوت", "زر الميكروفون على الكيبورد بيكتب اللي بتقوله (إملاء). مفيش أوامر صوتية.")
-        tip("الكتابة الملونة", "اختار لون من زرار \"المظهر\"، اكتب، وبعدين دوس الدايرة الملوّنة فوق الكيبورد (مش زرار الإرسال بتاع التطبيق). التطبيقات بتمسح لون النص العادي، عشان كده اللون بيوصل مش كنص: في واتساب بيتبعت ملصق شفاف من غير إطار (أقرب حاجة لكلام ملوّن)، وفي باقي التطبيقات صورة ملونة. لو التطبيق مبيقبلش صور، الكيبورد بيفتح قايمة المشاركة. الألعاب اللي بتفهم أكواد الألوان ليها اختيار في الإعدادات، والكلام بيتبعت فيها نص عادي بكود اللون.")
+        tip("زخرفة الكتابة", "زر \"زخرفة\" بيحوّل الكلام لخط مزخرف: تشكيل وحروف مزخرفة ومطّ وإطارات وقلوب وخطوط إنجليزي مزخرفة. كلها نص حقيقي بيظهر في أي تطبيق، مش صور. اختار الشكل فيتطبق على اللي مكتوب، أو شغّل \"زخرفة وأنا بكتب\" عشان الحروف تتزخرف وإنت بتكتب. فيه زر تراجع.")
+        tip("الكتابة الملونة", "اختار لون من زرار \"المظهر\" واكتب: اللون بيتحط على الكلام كنص حقيقي. بعض الخانات بتحتفظ بالألوان وأغلب تطبيقات الشات بتمسحها وده مش في إيدي. الألعاب اللي بتفهم أكواد الألوان: من الإعدادات اختار صيغة اللعبة وفعّل زرار الإرسال الملوّن أو \"الإدخال بيبعت بلون\"، والكلام بيتبعت نص عادي بكود اللون.")
         tip("الوضع الذاتي في الألعاب", "لو الشات في لعبة (مفيهاش نص يتقري)، الوضع الذاتي بياخد صورة للشاشة والنموذج بيقرا الشات منها. أول مرة بيطلب منك تحدد مكان الشات وخانة الكتابة وزرار الإرسال على الشاشة (٣ خطوات). تقدر تعيد الضبط من زرار \"ضبط\" في الشريط الصغير. اكتب اسمك في اللعبة من الإعدادات عشان ميردّش على رسايلك. الكيبورد لازم يكون كيبورد Omega، وشغّل خدمة إمكانية الوصول.")
         col.addView(how)
 
@@ -110,23 +97,6 @@ class MainActivity : BaseActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handlePage(intent)
-    }
-
-    /** a picture arrived in the test box: shown above it, and logged so the emulator test can tell */
-    private fun showPicture(uri: Uri, mime: String, note: TextView, view: ImageView): Boolean {
-        val bmp = try {
-            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-        } catch (t: Throwable) {
-            Log.e("OmegaPic", "could not read the picture", t)
-            null
-        }
-        if (bmp == null) return false
-        view.setImageBitmap(bmp)
-        view.visibility = View.VISIBLE
-        note.text = "وصلت صورة ملونة ✓ (${bmp.width}×${bmp.height})"
-        note.visibility = View.VISIBLE
-        Log.d("OmegaPic", "received $mime ${bmp.width}x${bmp.height}")
-        return true
     }
 
     private fun handlePage(i: Intent?) {

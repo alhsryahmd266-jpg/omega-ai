@@ -24,8 +24,32 @@ object GameEyes {
     const val GRID = 32
     private const val MAX_SIDE = 1280
 
-    /** [blank]: the picture is (nearly) all black: the screen is protected from screenshots, or nothing is drawn yet */
-    class Look(val file: File, val grid: IntArray, val width: Int, val height: Int, val blank: Boolean = false)
+    /**
+     * [blank]: the picture of the chat part is (nearly) all black. [screenBlank]: the whole screen is: a game that forbids screenshots
+     * is drawn black (the system hides it, nothing is bypassed here), or nothing is drawn yet.
+     */
+    class Look(val file: File, val grid: IntArray, val width: Int, val height: Int, val blank: Boolean = false, val screenBlank: Boolean = false)
+
+    /** share (0..1) of the middle of the screen that is black: the bars at the top and the bottom belong to the system and stay visible on a protected screen */
+    fun blackShare(bmp: Bitmap): Float {
+        val w = bmp.width
+        val h = bmp.height
+        if (w < 8 || h < 8) return 0f
+        val cols = 40
+        val rows = 60
+        var dark = 0
+        var n = 0
+        for (r in 0 until rows) {
+            val y = (h * (0.08f + 0.84f * (r + 0.5f) / rows)).toInt().coerceIn(0, h - 1)
+            for (c in 0 until cols) {
+                val x = (w * (c + 0.5f) / cols).toInt().coerceIn(0, w - 1)
+                val px = bmp.getPixel(x, y)
+                n++
+                if (Color.red(px) + Color.green(px) + Color.blue(px) < 24) dark++
+            }
+        }
+        return if (n == 0) 0f else dark.toFloat() / n
+    }
 
     /** a chat area is shown to the model at about this many pixels on its long side: small letters get big enough to read */
     private const val CROP_TARGET = 1100
@@ -51,6 +75,7 @@ object GameEyes {
         var shot: Bitmap? = null
         Overlays.withBarHidden { shot = Shot.take(svc, 3500) }
         val full = shot ?: return null
+        val screenBlank = blackShare(full) >= 0.97f
         try {
             val r = (region ?: FRect(0f, 0f, 1f, 1f)).px(full.width, full.height)
             val whole = r[0] == 0 && r[1] == 0 && r[2] == full.width && r[3] == full.height
@@ -72,7 +97,7 @@ object GameEyes {
                     FileOutputStream(f).use { out -> scaled.compress(Bitmap.CompressFormat.PNG, 100, out) }
                     val dark = grid.max() < 14
                     AppLog.d("gameeyes", "picture ${scaled.width}x${scaled.height} of ${full.width}x${full.height}" + (if (dark) " (all black)" else ""))
-                    return Look(f, grid, scaled.width, scaled.height, dark)
+                    return Look(f, grid, scaled.width, scaled.height, dark, screenBlank)
                 } finally {
                     if (scaled !== crop) scaled.recycle()
                 }
@@ -110,7 +135,7 @@ object GameEyes {
             val f = File(ctx.cacheDir, "game_eye_hi.png")
             FileOutputStream(f).use { o -> out.compress(Bitmap.CompressFormat.PNG, 100, o) }
             out.recycle()
-            return Look(f, look.grid, look.width, look.height, look.blank)
+            return Look(f, look.grid, look.width, look.height, look.blank, look.screenBlank)
         } catch (t: Throwable) {
             AppLog.e("gameeyes", "could not sharpen the picture", t)
             return null

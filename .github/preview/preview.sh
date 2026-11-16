@@ -201,6 +201,26 @@ held kb-hold-luxe g
 scenario kb-hold-luxe-enter s:theme=luxe s:last_lang=ar
 focus
 held kb-hold-luxe-enter ENTER
+# --- the luxe extras, frozen so a still picture can show them: the shine at two tilts, the glint halfway, the sparks of the enter key
+fx() { adb shell am broadcast -a com.omega.keyboard.DEBUG_FX -p $PKG "$@" > /dev/null; sleep 1; }
+scenario kb-fx-luxe s:theme=luxe s:last_lang=en
+focus
+fx --ef tx 0.9 --ef ty -0.5
+shot kb-fx-tilt-a
+fx --ef tx -0.9 --ef ty 0.5
+shot kb-fx-tilt-b
+fx --ef tx 0 --ef ty 0 --ef intro 0.45
+shot kb-fx-glint
+fx --ef intro -1 --ef spark 0.35
+shot kb-fx-spark
+scenario kb-fx-pearl s:theme=pearl s:last_lang=ar
+focus
+fx --ef tx 0.9 --ef ty -0.5
+shot kb-fx-pearl-tilt
+fx --ef tx 0 --ef ty 0 --ef intro 0.45
+shot kb-fx-pearl-glint
+fx --ef intro -1 --ef spark 0.35
+shot kb-fx-pearl-spark
 scenario kb-popup-en s:theme=dark s:last_lang=en
 focus
 held kb-popup-en e
@@ -240,63 +260,73 @@ scenario kb-voice s:theme=light s:last_lang=ar
 focus
 $KB tool voice 2>&1 | tee -a "$LOG"; sleep 3; shot kb-voice
 
-# --- the coloured pictures "send in colour" puts into a chat box: drawn by the keyboard, pulled off the phone
-scenario kb-pics s:theme=light s:last_lang=ar
+# --- text decoration (زخرفة): write, open the panel, pick looks (the whole text is decorated), undo; then the live mode
+scenario kb-decor s:theme=luxe s:last_lang=ar
 focus
-pic() {   # pic <name> <text> <colour> <rainbow> <marker> <style>
-  local name="$1" text="$2" color="$3" rainbow="$4" marker="$5" style="$6"
-  local b64; b64="$(printf '%s' "$text" | base64 -w0)"
-  adb logcat -c
-  adb shell am broadcast -a com.omega.keyboard.DEBUG_PIC --es b64 "$b64" --ei color "$color" --ez rainbow "$rainbow" --ez marker "$marker" --es style "$style" > /dev/null
-  sleep 1.5
-  local f; f="$(adb logcat -d -s OmegaPic:D | grep -o 'file=[A-Za-z0-9_.-]*' | tail -1 | cut -d= -f2)"
-  if [ -n "$f" ]; then
-    local ext="${f##*.}"
-    adb exec-out run-as $PKG cat "cache/neon/$f" > "$OUT/$name.$ext"
-    say "picture $name = $f ($(stat -c %s "$OUT/$name.$ext") bytes)"
-    if [ "$ext" = "webp" ]; then
-      # a sticker is a see-through WebP: a copy flattened on grey is made so that it can be looked at
-      convert "$OUT/$name.webp" -background '#8a8a8a' -flatten "$OUT/$name-flat.png" 2>/dev/null \
-        || dwebp "$OUT/$name.webp" -o "$OUT/$name-flat.png" 2>/dev/null \
-        || python3 -c "from PIL import Image; i=Image.open('$OUT/$name.webp').convert('RGBA'); b=Image.new('RGBA', i.size, (138,138,138,255)); b.alpha_composite(i); b.convert('RGB').save('$OUT/$name-flat.png')" 2>/dev/null \
-        || say "picture $name: no tool here turns the WebP into a PNG"
-    fi
-  else
-    say "picture $name: nothing was drawn"
-  fi
-}
-pic pic-blue-ar    "مرحبا بيك يا صاحبي، عامل إيه؟" 0xFF2979FF false false clean
-pic pic-red-short  "اه" 0xFFFF1744 false false clean
-pic pic-yellow     "Good morning everybody" 0xFFFFEA00 false false clean
-pic pic-rainbow-ar "قوس قزح بالعربي" 0xFF2979FF true false clean
-pic pic-marker     "المستند مهم جدا" 0xFFFFEA00 false true clean
-pic pic-long       "ده كلام طويل شوية عشان نشوف الصورة بتتصرف إزاي لما الجملة تبقى كبيرة وتحتاج أكتر من سطر ونص وتتحط في كارت واحد مرتب" 0xFF00C853 false false clean
-pic pic-neon       "نيون مضيء" 0xFFFF2BD6 false false neon
-pic sticker-red    "مرحبا بيك يا صاحبي" 0xFFFF1744 false false sticker
-pic sticker-yellow "Good morning everybody" 0xFFFFEA00 false false sticker
-pic sticker-rainbow "قوس قزح" 0xFF2979FF true false sticker
-
-# --- coloured send end to end: type in colour, press the round colour button, a picture lands in a box that takes pictures
-scenario kb-csend s:theme=light s:last_lang=en i:text_color=0xFFFF1744
+$KB type "لا يسيء الظن بك" 2>&1 | tee -a "$LOG"; sleep 1.2
+$KB tool decor 2>&1 | tee -a "$LOG"; sleep 1.8
+shot kb-decor-1
+$KB panel royal 2>&1 | tee -a "$LOG"; sleep 1.8
+shot kb-decor-2
+say "decor royal: [$($KB text 2>/dev/null)]"
+$KB panel kashida 2>&1 | tee -a "$LOG"; sleep 1.5
+say "decor kashida: [$($KB text 2>/dev/null)]"
+$KB panel brackets 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-decor-3
+say "decor brackets: [$($KB text 2>/dev/null)]"
+$KB panel undo 2>&1 | tee -a "$LOG"; sleep 1.5
+say "decor undo: [$($KB text 2>/dev/null)]"
+$KB panel none 2>&1 | tee -a "$LOG"; sleep 1.2
+say "decor none: [$($KB text 2>/dev/null)]"
+# live: the letters are decorated as they are typed, one backspace takes a letter with its marks
+scenario kb-decor-live s:theme=pearl s:last_lang=ar b:decor_live=true s:decor_style=royal
 focus
-$KB type "good morning" 2>&1 | tee -a "$LOG"; sleep 1.2
-shot kb-csend-1
-adb logcat -c
-$KB strip csend 2>&1 | tee -a "$LOG"; sleep 3.5
-shot kb-csend-2
-say "csend log: $(adb logcat -d -s OmegaPic:D OmegaSend:D 2>/dev/null | tr -d '\r' | tail -4 | tr '\n' ' ')"
-say "csend field after: [$($KB text 2>/dev/null)]"
+$KB type "عرفك" 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-decor-live-1
+say "decor live typed: [$($KB text 2>/dev/null)]"
+$KB key BACKSPACE 2>&1 | tee -a "$LOG"; sleep 1.2
+say "decor live after one backspace: [$($KB text 2>/dev/null)]"
+shot kb-decor-live-2
+# the English fonts
+scenario kb-decor-en s:theme=luxe s:last_lang=en
+focus
+$KB type "Hello Omega" 2>&1 | tee -a "$LOG"; sleep 1.2
+$KB tool decor 2>&1 | tee -a "$LOG"; sleep 1.8
+$KB panel script 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-decor-en
+say "decor script: [$($KB text 2>/dev/null)]"
 
-# --- live translation of what is typed (like Gboard): English typed, its Arabic translation shows in the strip, a tap puts it in the box
-scenario kb-livetr s:theme=light s:last_lang=en s:typed_target=ar
+# --- translating what is typed, the Gboard way: a box inside the keyboard, its translation written live into the app's field.
+# English typed in the box -> Arabic in the field; the tick keeps it; another sentence; swap; the list of source languages; back.
+scenario kb-livetr s:theme=light s:last_lang=en s:typed_target=ar s:typed_source=auto
 focus
 $KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5
 shot kb-livetr-0
 $KB type "good morning my friend" 2>&1 | tee -a "$LOG"; sleep 14
 shot kb-livetr-1
-$KB strip go 2>&1 | tee -a "$LOG"; sleep 3
+say "livetr field while typing: [$($KB text 2>/dev/null)]"
+$KB key ENTER 2>&1 | tee -a "$LOG"; sleep 1.5
 shot kb-livetr-2
-say "livetr field after: [$($KB text 2>/dev/null)]"
+say "livetr field after the tick: [$($KB text 2>/dev/null)]"
+$KB type "thank you" 2>&1 | tee -a "$LOG"; sleep 9
+shot kb-livetr-3
+say "livetr field with a second sentence: [$($KB text 2>/dev/null)]"
+$KB strip tr:swap 2>&1 | tee -a "$LOG"; sleep 9
+shot kb-livetr-4
+say "livetr field after the swap: [$($KB text 2>/dev/null)]"
+$KB strip tr:src 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-livetr-5
+$KB strip tr:back 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-livetr-6
+say "livetr field at the end: [$($KB text 2>/dev/null)]"
+
+# the same bar in the luxe look, with Arabic typed and English coming out
+scenario kb-livetr-luxe s:theme=luxe s:last_lang=ar s:typed_target=en s:typed_source=auto
+focus
+$KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5
+$KB type "صباح الخير يا صديقي" 2>&1 | tee -a "$LOG"; sleep 14
+shot kb-livetr-luxe
+say "livetr luxe field: [$($KB text 2>/dev/null)]"
 
 # --- resizing by hand: handles, drag the top edge up, the right edge in, the left edge in, done, then typing in the new size
 scenario kb-resize s:theme=light s:last_lang=ar
@@ -336,6 +366,9 @@ adb shell settings put system user_rotation 1
 sleep 3
 focus
 shot kb-land
+$KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-land-translate
+$KB strip tr:back 2>&1 | tee -a "$LOG"; sleep 1.2
 $KB tool theme 2>&1 | tee -a "$LOG"; sleep 2; shot kb-land-sheet
 adb shell settings put system user_rotation 0
 

@@ -734,6 +734,7 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
         row.addView(chip("شمال", { prefs.kbOffset == 0 }) { prefs.kbOffset = 0; host.onSize(); restyle() })
         row.addView(chip("ضوء الإصبع", { prefs.fxGlow }) { prefs.fxGlow = !prefs.fxGlow; host.onLook(); restyle() })
         row.addView(chip("موجات الضغط", { prefs.fxRipple }) { prefs.fxRipple = !prefs.fxRipple; host.onLook(); restyle() })
+        row.addView(chip("لمعان وشرارات", { prefs.fxLuxe }) { prefs.fxLuxe = !prefs.fxLuxe; host.onLook(); restyle() })
         col.addView(sv, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(36f)).also { it.topMargin = ctx.dpi(4f) })
         return col
     }

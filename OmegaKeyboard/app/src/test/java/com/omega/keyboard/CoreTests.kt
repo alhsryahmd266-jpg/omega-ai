@@ -1,8 +1,6 @@
 package com.omega.keyboard
 
 import com.omega.keyboard.core.*
-import com.omega.keyboard.ime.ColorPicRenderer
-import com.omega.keyboard.ime.StickerRenderer
 import com.omega.keyboard.voice.VoicePlan
 
 /**
@@ -21,7 +19,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -735,30 +733,6 @@ object CoreTests {
         check("Discord red and blue", ColorCodes.discordCode(0xFF0000) == 31 && ColorCodes.discordCode(0x2979FF) == 34)
         val dc = ColorCodes.wrap("hi", ColorCodes.Format.DISCORD) { red }
         check("Discord ansi block", dc == "```ansi\n\u001B[1;31mhi\u001B[0m\n```") { dc.replace("\u001B", "ESC") }
-
-        // the picture's card keeps the text readable
-        check("light colours get a dark card", ColorPicRenderer.cardFor(0xFFFFEA00.toInt(), false, false) == 0xFF16161F.toInt())
-        check("dark colours get a white card", ColorPicRenderer.cardFor(0xFF1A237E.toInt(), false, false) == 0xFFFFFFFF.toInt())
-        check("the rainbow gets a dark card", ColorPicRenderer.cardFor(blue, true, false) == 0xFF16161F.toInt())
-        check("the highlighter pen colours the card", ColorPicRenderer.cardFor(red, false, true) == red)
-
-        // the send button of a picture preview
-        val dm = 3f
-        fun node(id: Int, label: String, viewId: String, l: Int, t: Int, r: Int, b: Int, act: Boolean = true, desc: String = "") =
-            UiNode(id, -1, 0, label, desc, viewId, "android.widget.ImageButton", "com.whatsapp", l, t, r, b, clickable = act, actionable = act)
-        fun scr(vararg n: UiNode) = Screen("com.whatsapp", 1080, 2400, dm, n.toList())
-        val send = node(1, "", "com.whatsapp:id/send", 900, 2150, 1030, 2280, desc = "إرسال")
-        val caption = UiNode(2, -1, 0, "", "", "com.whatsapp:id/caption", "android.widget.EditText", "com.whatsapp", 100, 2150, 880, 2280, editable = true)
-        val close = node(3, "", "com.whatsapp:id/cancel", 20, 100, 150, 230, desc = "إغلاق")
-        val crop = node(4, "", "com.whatsapp:id/crop", 800, 100, 930, 230, desc = "قص")
-        check("the preview's send button is found by id and label", PreviewSendFinder.find(scr(close, crop, caption, send))?.id == 1)
-        val byLabel = node(5, "", "x:id/btn", 900, 2150, 1030, 2280, desc = "Send")
-        check("or by label alone", PreviewSendFinder.find(scr(close, byLabel))?.id == 5)
-        check("no send button: nothing is pressed", PreviewSendFinder.find(scr(close, crop, caption)) == null)
-        check("the microphone is never taken for send", PreviewSendFinder.find(scr(node(6, "", "x:id/voice_note_btn", 900, 2150, 1030, 2280, desc = "Send voice message"))) == null)
-        check("a disabled button is not pressed", PreviewSendFinder.find(Screen("p", 1080, 2400, dm, listOf(send.copy(enabled = false)))) == null)
-        val chatSend = node(7, "", "com.whatsapp:id/send", 900, 1500, 1030, 1630, desc = "إرسال")
-        check("with two matches the lower one (the preview's own) wins", PreviewSendFinder.find(scr(chatSend, send))?.id == 1)
     }
 
     // ------------------------------------------------------------------ replies that are not short and stupid
@@ -1026,9 +1000,150 @@ object CoreTests {
         // the prompt that makes the model copy the chat
         val vs = GameChat.visionSystem("Omar")
         check("the copying prompt names me and the empty answer", vs.contains("\"Omar\"") && vs.contains("NONE") && !GameChat.visionSystem("").contains("My own name"))
+    }
 
-        // the see-through sticker's outline
-        check("light ink gets a dark outline, dark ink a white one",
-            StickerRenderer.outlineFor(0xFFFFEA00.toInt()) == 0xFF15151D.toInt() && StickerRenderer.outlineFor(0xFF1A237E.toInt()) == 0xFFFFFFFF.toInt())
+    // ------------------------------------------------------------------ text decoration (زخرفة)
+
+    private fun decor() {
+        fun marksOf(s: String) = s.count { Decor.isMark(it) }
+        val sample = "لا يسيء الظن بك من عرفك بقلبه"
+        val royal = Decor.apply("royal", sample)
+        check("royal: the letters carry marks", marksOf(royal) >= sample.count { Decor.isLetter(it) && it != 'ا' }) { royal }
+        check("royal: ends with the hearts and sparkles", royal.endsWith(" ♥✨")) { royal }
+        check("royal: alef gets its madda and kaf becomes the swash kaf", royal.contains('آ') && royal.contains('ڪ') && !royal.contains('ا') && !royal.contains('ك'))
+        check("royal: taking it off gives the text back", Decor.plain(royal) == sample) { Decor.plain(royal) }
+        check("royal: the same text always looks the same", Decor.apply("royal", sample) == royal)
+        check("royal: no mark ever follows a space", royal.windowed(2).none { it[0].isWhitespace() && Decor.isMark(it[1]) })
+        check("royal: the letters underneath are the user's", Decor.apply("royal", "عرفك").filter { !Decor.isMark(it) }.startsWith("عرفڪ"))
+        val ra = Decor.apply("royal", "ترى")
+        check("royal: a final ى becomes the long yeh, with no marks after it", ra.contains('\uFBAF') && !ra.contains('ى') && ra.trimEnd(' ', '♥', '✨').last() == '\uFBAF') { ra }
+        check("a plain text with a real madda is left alone", Decor.plain("القرآن") == "القرآن")
+        check("taking decoration off also takes a typed tashkeel off", Decor.plain("بِسْمِ") == "بسم")
+
+        // every style: applying it twice is the same as once, and it changes the text
+        val mixed = "مرحبا Hello 123"
+        for (st in Decor.styles) {
+            val once = Decor.apply(st, mixed)
+            check("${st.id}: applied twice is the same as once", Decor.apply(st, once) == once) { "${st.id}: $once" }
+            check("${st.id}: it changes the text", once != mixed && once.isNotBlank()) { st.id }
+            check("${st.id}: it can be found by its id", Decor.byId(st.id) === st)
+        }
+        check("a style that does not exist takes the decoration off", Decor.apply("nope", royal) == sample)
+        check("the 'none' id takes the decoration off", Decor.apply(Decor.NONE, royal) == sample)
+
+        // fancy English
+        check("script letters", Decor.apply("script", "Hi") == String(Character.toChars(0x1D4D7)) + String(Character.toChars(0x1D4F2)))
+        check("double-struck holes use the old letters", Decor.apply("struck", "C") == "ℂ" && Decor.apply("struck", "R") == "ℝ" && Decor.apply("struck", "a") == String(Character.toChars(0x1D552)))
+        check("bubble letters and digits", Decor.apply("bubble", "A1") == "Ⓐ①" && Decor.apply("bubble", "0") == "⓪")
+        check("wide letters", Decor.apply("wide", "ab") == "ａｂ")
+        check("small caps", Decor.apply("smallcaps", "Abc") == "ᴀʙᴄ")
+        check("fancy English goes back to plain letters", Decor.plain(Decor.apply("script", "Hello 123")) == "Hello 123" && Decor.plain(Decor.apply("bubble", "Go 7")) == "Go 7")
+        check("small caps come back in lower case", Decor.plain(Decor.apply("smallcaps", "hello xyz")) == "hello xyz") { Decor.plain(Decor.apply("smallcaps", "hello xyz")) }
+        check("an English style leaves Arabic alone", Decor.apply("script", "مرحبا") == "مرحبا")
+
+        // frames
+        check("brackets", Decor.apply("brackets", "hi") == "﴿ hi ﴾")
+        check("a frame comes off again", Decor.plain("﴿ hi ﴾") == "hi")
+        check("another frame replaces the first", Decor.apply("hearts", "﴿ hi ﴾") == "♥ hi ♥")
+        check("empty or blank text stays as it is", Decor.apply("royal", "") == "" && Decor.apply("royal", "   ") == "   ")
+        check("spaces round the text stay outside the frame", Decor.apply("hearts", " hi ") == " ♥ hi ♥ ")
+
+        // the other Arabic looks
+        check("stretch: letters that join get two bars, the others none", Decor.apply("kashida", "عرف") == "ع\u0640\u0640رف")
+        check("stretch: the last letter of a word gets none", Decor.apply("kashida", "كتاب") == "ك\u0640\u0640ت\u0640\u0640اب")
+        check("stretch: taken off", Decor.plain(Decor.apply("kashida", "كتاب")) == "كتاب")
+        val ts = Decor.apply("tashkeel", "كتاب")
+        check("tashkeel: a mark on every letter but the alef, a sukun at the end", marksOf(ts) == 3 && ts.endsWith("ب\u0652")) { ts }
+        check("double marks", Decor.apply("double", "عرف") == "ع\u064E\u064Eر\u064E\u064Eف\u064E\u064E")
+        check("letters only", Decor.apply("letters", "كتاب") == "ڪتآب")
+
+        // while typing
+        val royalStyle = Decor.byId("royal")!!
+        val typed = Decor.typed(royalStyle, "ب", "", 0)
+        check("a typed letter of the royal look gets marks", typed.startsWith("ب") && typed.length >= 3) { typed }
+        check("a typed space gets nothing", Decor.typed(royalStyle, " ", "", 0) == " ")
+        check("a typed alef is the alef with madda, no marks", Decor.typed(royalStyle, "ا", "", 0) == "آ")
+        check("a frame is not typed letter by letter", Decor.typed(Decor.byId("hearts")!!, "a", "", 0) == "a")
+        val ks = Decor.byId("kashida")!!
+        check("typed stretch: the bars come in front of the next letter", Decor.typed(ks, "ر", "ع", 0) == "\u0640\u0640ر")
+        check("typed stretch: none after a letter that does not join", Decor.typed(ks, "ف", "ر", 0) == "ف")
+        check("typed stretch: none after a space", Decor.typed(ks, "ف", "ع ", 0) == "ف")
+        check("typed fancy English equals the whole-text one", Decor.typed(Decor.byId("script")!!, "Hi", "", 0) == Decor.apply("script", "Hi"))
+        check("the marks vary from one typed letter to the next", (0 until 12).map { Decor.typed(royalStyle, "ب", "", it) }.toSet().size > 3)
+        check("Arabic letters are counted", Decor.letterCount("ab عر1") == 2)
+
+        // backspace
+        check("backspace takes a letter with its marks", Decor.unitBefore("اب\u064E\u0650") == 3)
+        check("backspace takes a plain letter alone", Decor.unitBefore("abc") == 1)
+        check("backspace on nothing", Decor.unitBefore("") == 0)
+        check("backspace takes both halves of an emoji", Decor.unitBefore("a😀") == 2)
+        check("backspace takes a run of stretch bars", Decor.unitBefore("ع\u0640\u0640") == 2)
+        check("a stretched letter goes with its two bars", Decor.unitBefore("ع\u0640\u0640ر") == 3)
+        check("one lonely bar before a letter stays", Decor.unitBefore("ع\u0640ر") == 1)
+        check("a lone mark is one press", Decor.unitBefore("\u064E") == 1)
+        check("marks and bars are noticed", Decor.hasDecoration("ب\u064E") && Decor.hasDecoration("ع\u0640") && !Decor.hasDecoration("ب"))
+
+        // the panel's previews
+        check("previews use the user's own words when they fit the style", Decor.sampleFor(Decor.byId("royal"), "مرحبا") == "مرحبا" && Decor.sampleFor(Decor.byId("script"), "مرحبا") == "Omega Keyboard")
+        check("previews use an example for an empty box", Decor.sampleFor(Decor.byId("royal"), "").isNotBlank() && Decor.sampleFor(null, "  ").isNotBlank())
+    }
+
+    // ------------------------------------------------------------------ the translate bar's own text box and its two languages
+
+    private fun typedBox() {
+        val b = TextBox()
+        check("a new box is empty", b.isEmpty && b.caret == 0 && b.text == "")
+        b.insert("مرحبا")
+        check("typing puts the caret after the text", b.text == "مرحبا" && b.caret == 5)
+        b.insert(" بك")
+        check("typing goes on", b.text == "مرحبا بك" && b.caret == 8)
+        b.move(-3)
+        check("the caret moves left", b.caret == 5)
+        b.insert("،")
+        check("typing in the middle", b.text == "مرحبا، بك" && b.caret == 6) { b.text }
+        check("backspace removes the character before the caret", b.backspace() && b.text == "مرحبا بك" && b.caret == 5)
+        check("delete removes the character after the caret", b.deleteForward() && b.text == "مرحباbك".replace('b', ' ').let { "مرحبا" + "بك" } && b.caret == 5) { b.text }
+        b.moveTo(0)
+        check("nothing before the start", !b.backspace() && b.text == "مرحبابك")
+        b.moveTo(99)
+        check("a position past the end stops at the end", b.caret == b.length)
+        b.clear()
+        check("clear empties the box", b.isEmpty && b.caret == 0)
+        check("backspace on an empty box", !b.backspace() && !b.deleteForward())
+
+        // emoji are two UTF-16 units and never cut in half
+        b.set("a😀b")
+        check("the box starts with the caret at the end", b.caret == 4)
+        b.move(-1)
+        b.move(-1)
+        check("one step crosses a whole emoji", b.caret == 1) { "${b.caret}" }
+        b.move(1)
+        check("one step forward crosses it again", b.caret == 3) { "${b.caret}" }
+        b.backspace()
+        check("backspace takes the whole emoji", b.text == "ab" && b.caret == 1) { b.text }
+        b.set("a😀b")
+        b.moveTo(2)
+        check("a caret placed inside an emoji moves in front of it", b.caret == 1) { "${b.caret}" }
+
+        // one line only
+        b.set("one\ntwo\r\nthree")
+        check("line breaks become spaces", b.text == "one two three") { b.text }
+        b.clear()
+        b.insert("x".repeat(TextBox.MAX + 50))
+        check("the length is limited", b.length == TextBox.MAX)
+        b.clear()
+        b.insert("a".repeat(TextBox.MAX - 1) + "😀")
+        check("the limit never cuts an emoji", b.length == TextBox.MAX - 1) { "${b.length}" }
+
+        // the two languages
+        check("swap: two languages trade places", TypedLang.swap("ar", "en", null) == ("en" to "ar"))
+        check("swap with an automatic source: the language found becomes the target", TypedLang.swap(TypedLang.AUTO, "en", "ar") == ("en" to "ar"))
+        check("swap with an automatic source and nothing found", TypedLang.swap(TypedLang.AUTO, "en", null) == ("en" to "ar") && TypedLang.swap(TypedLang.AUTO, "ar", null) == ("ar" to "en"))
+        check("swap: a found language equal to the target is no use", TypedLang.swap(TypedLang.AUTO, "ar", "ar") == ("ar" to "en"))
+        check("target picked equal to the source: they trade places", TypedLang.pickTarget("ar", "en", "ar") == ("en" to "ar"))
+        check("target picked with an automatic source", TypedLang.pickTarget(TypedLang.AUTO, "en", "fr") == (TypedLang.AUTO to "fr"))
+        check("source picked equal to the target: they trade places", TypedLang.pickSource("ar", "en", "en") == ("en" to "ar"))
+        check("an automatic source never meets the target", TypedLang.pickSource(TypedLang.AUTO, "en", "en") == ("en" to "ar"))
+        check("source set back to automatic", TypedLang.pickSource("ar", "en", TypedLang.AUTO) == (TypedLang.AUTO to "en"))
     }
 }

@@ -16,13 +16,18 @@ object Shot {
     private val exec = Executors.newSingleThreadExecutor()
     @Volatile private var lastAt = 0L
 
+    /** 0 = the last screenshot worked; otherwise the system's refusal code (-1: no answer in time, -2: Android older than 11) */
+    @Volatile var lastCode = 0
+        private set
+
     fun take(service: AccessibilityService, timeoutMs: Long = 2500): Bitmap? {
-        if (Build.VERSION.SDK_INT < 30) return null
+        if (Build.VERSION.SDK_INT < 30) { lastCode = -2; return null }
         // the system refuses screenshots that come too close together
         val wait = 600 - (System.currentTimeMillis() - lastAt)
         if (wait > 0) try { Thread.sleep(wait) } catch (_: InterruptedException) { return null }
         val latch = CountDownLatch(1)
         var bmp: Bitmap? = null
+        var code = -1
         try {
             service.takeScreenshot(Display.DEFAULT_DISPLAY, exec, object : AccessibilityService.TakeScreenshotCallback {
                 override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
@@ -30,6 +35,7 @@ object Shot {
                         val hb = result.hardwareBuffer
                         val hw = Bitmap.wrapHardwareBuffer(hb, result.colorSpace)
                         bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
+                        code = if (bmp != null) 0 else 1
                         hw?.recycle()
                         hb.close()
                     } catch (t: Throwable) {
@@ -40,6 +46,7 @@ object Shot {
 
                 override fun onFailure(errorCode: Int) {
                     AppLog.d("shot", "screenshot refused, code $errorCode")
+                    code = errorCode
                     latch.countDown()
                 }
             })
@@ -48,6 +55,7 @@ object Shot {
             AppLog.e("shot", "take failed", t)
         }
         lastAt = System.currentTimeMillis()
+        lastCode = if (bmp != null) 0 else if (code == 0) -1 else code
         return bmp
     }
 

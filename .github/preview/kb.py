@@ -235,6 +235,19 @@ def cmd_tab(index):
     return 0
 
 
+def cmd_panel(name):
+    """taps a row or button of the panel that covers the keys (the decoration styles: p:<style>, p:undo, p:none, p:live)"""
+    for _attempt in range(3):
+        _k, _s, sheet = ask_dump()
+        pos = sheet.get("p:" + name)
+        if pos:
+            adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+            return 0
+        time.sleep(1.0)
+    print(f"panel row {name} not found", file=sys.stderr)
+    return 1
+
+
 def cmd_target(index):
     """taps one of the colour targets of the appearance sheet (0 text, 1 keys, 2 letters, 3 background, 4 function keys, 5 accent)"""
     _k, _s, sheet = wait_dump(need="sheet")
@@ -303,6 +316,8 @@ def main(argv):
         return cmd_tab(argv[2])
     if cmd == "target":
         return cmd_target(argv[2])
+    if cmd == "panel":
+        return cmd_panel(argv[2])
     if cmd == "drag":
         return cmd_drag(argv[2], argv[3], argv[4], argv[5] if len(argv) > 5 else "600")
     if cmd == "text":

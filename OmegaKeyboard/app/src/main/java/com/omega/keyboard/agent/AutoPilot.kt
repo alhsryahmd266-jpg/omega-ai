@@ -104,6 +104,7 @@ object AutoPilot {
         forget = false
         teachRequested = false
         GameRound.reset()
+        protectedPkgs.clear()
         userScrollAt = 0L
         wake.drainPermits()
         Llm.keepLoaded = true          // answers must come fast: the model stays in memory for the whole run
@@ -283,7 +284,23 @@ object AutoPilot {
         override fun paused(): Boolean = paused
         override fun nap(ms: Long): Boolean = this@AutoPilot.nap(ms)
         override fun replied(text: String) { repliesSent++ }
+        override fun notice(text: String) {
+            publish(text, true)
+            ScreenAgentService.instance?.let { Notice.toast(it, text) }
+        }
+        override fun protectedScreen(pkg: String, text: String) {
+            protectedPkgs.add(pkg)
+            AppLog.d("autopilot", "$pkg forbids screenshots: left alone")
+            publish(text, true)
+            ScreenAgentService.instance?.let { Notice.toast(it, text) }
+        }
     }
+
+    /** games that forbid screenshots: the loop does not look at them again (nothing is worked around) until the person asks it to */
+    private val protectedPkgs: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
+    private fun protectedNote(ctx: Context, pkg: String): String =
+        "${appLabel(ctx, pkg)} بتمنع تصوير الشاشة (حماية)، فمش هقدر أقراها ومش بتخطّى الحماية. افتح تطبيق تاني، أو دوس «كمّل» لو غيّرت حاجة"
 
     /** one look at a game (or teaching it, when asked), for the app in front */
     private fun gameTurn(ctx: Context, svc: ScreenAgentService, prefs: Prefs, pkg: String, states: HashMap<String, GameState>, teach: Boolean) {
@@ -335,7 +352,7 @@ object AutoPilot {
                     if (nap(3000)) break
                     continue
                 }
-                if (forget) { handled.clear(); retryAt.clear(); waiting.clear(); noReply.clear(); forget = false }
+                if (forget) { handled.clear(); retryAt.clear(); waiting.clear(); noReply.clear(); protectedPkgs.clear(); forget = false }
                 if (paused) { publish("واقف مؤقتًا. دوس «كمّل»"); continue }
 
                 // nothing may cover the conversation while we read it
@@ -354,8 +371,12 @@ object AutoPilot {
                 if (snap == null) {
                     // a game that gives the accessibility service nothing to read: it is looked at instead
                     val fg = ScreenReader.foregroundPackage(svc)
+                    if (fg in protectedPkgs) { publish(protectedNote(ctx, fg), warn = true); if (nap(4000)) break; continue }
                     if (fg.isNotBlank() && fg != ctx.packageName && GameRound.allowed(prefs)) { gameTurn(ctx, svc, prefs, fg, games, teach = false); continue }
-                    publish("مش قادر أقرا الشاشة دي. افتح المحادثة")
+                    publish(
+                        if (fg.isNotBlank() && fg != ctx.packageName) "مش قادر أقرا شاشة ${appLabel(ctx, fg)}. ممكن التطبيق بيمنع القراءة. افتح المحادثة"
+                        else "مش قادر أقرا الشاشة دي. افتح المحادثة"
+                    )
                     continue
                 }
                 val pkg = snap.screen.pkg
@@ -369,6 +390,7 @@ object AutoPilot {
                 if (!looksLikeChat) {
                     // a game draws its own screen: no text to read, so it is looked at (and typed into through the keyboard)
                     val taught = prefs.gameProfile(GameProfile.key(pkg, snap.screen.width > snap.screen.height)).taught
+                    if (pkg in protectedPkgs) { publish(protectedNote(ctx, pkg), warn = true); if (nap(4000)) break; continue }
                     if ((GameRound.opaque(snap.screen) || taught) && GameRound.allowed(prefs)) {
                         gameTurn(ctx, svc, prefs, pkg, games, teach = false)
                         continue

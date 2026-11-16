@@ -3,9 +3,11 @@ package com.omega.keyboard.ime
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -22,10 +24,12 @@ import com.omega.keyboard.core.Key
 import com.omega.keyboard.core.KeyKind
 import com.omega.keyboard.core.Layout
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 
 /**
  * The key grid. Everything is drawn on one canvas (like real keyboards do) for speed: rounded keys with layered shadows,
@@ -86,6 +90,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
     var fxGlow: Boolean = true
     var fxRipple: Boolean = true
 
+    /** the luxe look's extras: the metal catches the light as the phone tilts, gold sparks leave the enter key, a glint crosses the keys when they appear */
+    var fxLuxe: Boolean = true
+
     var showPreview: Boolean = true
     var layout: Layout? = null
         private set
@@ -95,6 +102,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
     }
 
     private class Ripple(val kr: KeyRect, val x: Float, val y: Float, val t0: Long)
+
+    /** one gold spark: it leaves [x],[y] along [ang], [dist] far, starts after [delay] (0..0.18 of the animation) and turns by [spin] */
+    private class Spark(val x: Float, val y: Float, val ang: Float, val dist: Float, val size: Float, val spin: Float, val delay: Float)
 
     private class Ptr(val id: Int) {
         var kr: KeyRect? = null
@@ -110,6 +120,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     companion object {
         private const val RIPPLE_MS = 460L
+        private const val SPARK_MS = 720L
+        private const val INTRO_MS = 800L
 
         /** how long a letter is held before its alternatives open (a slow tap must not become "another letter") */
         private const val LONG_PRESS_MS = 400L
@@ -153,6 +165,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glowRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density * 1.4f }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rimLoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density }
     // the metal of the enter key: a stronger highlight, a diagonal streak of light, a bright upper edge and an amber lower edge
@@ -175,6 +188,24 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private var streakShader: Shader? = null
     private var streakW = 0f
     private var streakH = 0f
+    private val streakM = Matrix()
+
+    // luxe extras: tilt of the phone (smoothed towards the sensor's value), sparks, the glint when the keys appear
+    private var tiltX = 0f
+    private var tiltY = 0f
+    private var tiltTX = 0f
+    private var tiltTY = 0f
+    private val sparks = ArrayList<Spark>()
+    private var sparkT0 = 0L
+    private var introT0 = 0L
+    private val sparkPath = Path()
+    private val sweepPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dirty = Rect()
+
+    /** preview builds only: freeze the effects at a given point so a screenshot can show them (-1 = off) */
+    var debugIntro = -1f
+    var debugSpark = -1f
+    var debugTilt = false
 
     // animation state
     private var lastFrame = 0L
@@ -305,6 +336,142 @@ class KeyboardView(ctx: Context) : View(ctx) {
         ).also { streakShader = it }
     }
 
+    // ------------------------------------------------------------------ luxe extras: tilt, sparks, glint
+
+    /** the phone's tilt, -1..1 on each axis, from the sensor: the metal of the enter key catches the light as it moves */
+    fun setTilt(x: Float, y: Float) {
+        if (debugTilt || !fxLuxe || !theme.fancy) return
+        if (abs(x - tiltTX) < 0.01f && abs(y - tiltTY) < 0.01f) return
+        tiltTX = x
+        tiltTY = y
+        accentRect()?.let { postInvalidateOnAnimation(it.left, it.top, it.right, it.bottom) }
+    }
+
+    /** the glint that crosses the keys once when they appear */
+    fun playIntro() {
+        if (!fxLuxe || !theme.fancy) return
+        introT0 = SystemClock.uptimeMillis()
+        invalidate()
+    }
+
+    /** preview builds only: shows the effects frozen (tilt, glint progress 0..1, spark age 0..1; -1 = off) */
+    fun debugFx(tx: Float?, ty: Float?, intro: Float?, spark: Float?) {
+        if (tx != null || ty != null) {
+            debugTilt = true
+            tiltTX = tx ?: 0f; tiltTY = ty ?: 0f
+            tiltX = tiltTX; tiltY = tiltTY
+        }
+        if (intro != null) debugIntro = intro
+        if (spark != null) {
+            debugSpark = spark
+            if (spark >= 0f) keys.firstOrNull { it.key.kind == KeyKind.ENTER }?.let { spawnSparks(it) } else sparks.clear()
+        }
+        invalidate()
+    }
+
+    /** the area the enter key (and a locked caps key) shines in, glow included */
+    private fun accentRect(): Rect? {
+        var found = false
+        var l = 0f; var t = 0f; var r = 0f; var b = 0f
+        for (kr in keys) {
+            if (kr.key.kind != KeyKind.ENTER && !(kr.key.kind == KeyKind.SHIFT && shiftState == 2)) continue
+            if (!found) { l = kr.cell.left; t = kr.cell.top; r = kr.cell.right; b = kr.cell.bottom; found = true }
+            else { l = min(l, kr.cell.left); t = min(t, kr.cell.top); r = max(r, kr.cell.right); b = max(b, kr.cell.bottom) }
+        }
+        if (!found) return null
+        val m = dp(14f)
+        dirty.set((l - m).toInt(), (t - m).toInt(), (r + m).toInt() + 1, (b + m).toInt() + 1)
+        return dirty
+    }
+
+    /** moves the tilt the keys show towards the sensor's value; true while it is still moving */
+    private fun stepTilt(dt: Float): Boolean {
+        if (debugTilt) return false
+        val dx = tiltTX - tiltX
+        val dy = tiltTY - tiltY
+        if (abs(dx) < 0.004f && abs(dy) < 0.004f) { tiltX = tiltTX; tiltY = tiltTY; return false }
+        val k = 1f - exp(-dt / 110f)
+        tiltX += dx * k
+        tiltY += dy * k
+        return true
+    }
+
+    private fun spawnSparks(kr: KeyRect) {
+        sparks.clear()
+        val rnd = kotlin.random.Random(SystemClock.uptimeMillis())
+        val n = 14
+        for (i in 0 until n) {
+            val a = (2.0 * Math.PI * i / n).toFloat() + rnd.nextFloat() * 0.45f
+            sparks.add(
+                Spark(
+                    kr.cell.centerX(), kr.cell.centerY(), a, dp(26f) + rnd.nextFloat() * dp(36f),
+                    dp(3f) + rnd.nextFloat() * dp(3.6f), rnd.nextFloat() * 1.6f, rnd.nextFloat() * 0.18f,
+                ),
+            )
+        }
+        sparkT0 = SystemClock.uptimeMillis()
+    }
+
+    /** a four-pointed star centred on [cx],[cy] with points [r] long, turned by [rot] */
+    private fun starPath(cx: Float, cy: Float, r: Float, rot: Float) {
+        sparkPath.reset()
+        for (i in 0 until 8) {
+            val rr = if (i % 2 == 0) r else r * 0.3f
+            val a = rot + i * (Math.PI / 4).toFloat()
+            val x = cx + cos(a) * rr
+            val y = cy + sin(a) * rr
+            if (i == 0) sparkPath.moveTo(x, y) else sparkPath.lineTo(x, y)
+        }
+        sparkPath.close()
+    }
+
+    /** true while sparks are flying */
+    private fun drawSparks(c: Canvas, t: KbTheme, now: Long): Boolean {
+        if (sparks.isEmpty() || !t.fancy) return false
+        val age = if (debugSpark >= 0f) debugSpark else (now - sparkT0) / SPARK_MS.toFloat()
+        if (age >= 1f) { sparks.clear(); return false }
+        for (sp in sparks) {
+            val a = ((age - sp.delay) / (1f - sp.delay)).coerceIn(0f, 1f)
+            if (a <= 0f) continue
+            val e = 1f - (1f - a) * (1f - a)
+            val px = sp.x + cos(sp.ang) * sp.dist * e
+            val py = sp.y + sin(sp.ang) * sp.dist * e - dp(9f) * a * a
+            val alpha = (1f - a) * (1f - a)
+            val sz = sp.size * (1f - 0.45f * a)
+            fill.shader = null
+            fill.color = ColorMath.withAlphaF(t.accent, 0.22f * alpha)
+            c.drawCircle(px, py, sz * 1.9f, fill)
+            starPath(px, py, sz * 1.5f, sp.spin * a * 1.3f)
+            fill.color = ColorMath.withAlphaF(0xFFFFF1B8.toInt(), alpha)
+            c.drawPath(sparkPath, fill)
+        }
+        return debugSpark < 0f
+    }
+
+    /** true while the glint crosses the keys */
+    private fun drawSweep(c: Canvas, t: KbTheme, now: Long): Boolean {
+        val p = when {
+            debugIntro >= 0f -> debugIntro
+            introT0 == 0L -> return false
+            else -> (now - introT0) / INTRO_MS.toFloat()
+        }
+        if (p >= 1f) { introT0 = 0L; return false }
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val e = p * p * (3f - 2f * p)
+        val bandW = w * 0.36f
+        val x0 = -bandW + e * (w + 2f * bandW)
+        val tint = if (t.dark) 0xFFFFE9B0.toInt() else 0xFFFFC94D.toInt()
+        val a = if (t.dark) 0x34 else 0x40
+        sweepPaint.shader = LinearGradient(
+            x0, 0f, x0 + bandW, h * 0.5f,
+            intArrayOf(ColorMath.withAlpha(tint, 0), ColorMath.withAlpha(tint, a), ColorMath.withAlpha(tint, 0)),
+            floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
+        )
+        c.drawRect(0f, 0f, w, h, sweepPaint)
+        return debugIntro < 0f
+    }
+
     override fun onDraw(c: Canvas) {
         val t = theme
         val now = SystemClock.uptimeMillis()
@@ -318,15 +485,34 @@ class KeyboardView(ctx: Context) : View(ctx) {
         if (abs(glowTarget - glowAmount) < 0.01f) glowAmount = glowTarget
         var busy = glowAmount != glowTarget
         if (glowAmount > 0.01f) {
-            glowPaint.shader = RadialGradient(
-                glowX, glowY, dp(125f),
-                intArrayOf(ColorMath.withAlpha(t.accent, (0x55 * glowAmount).toInt()), ColorMath.withAlpha(t.accent, 0)),
-                null, Shader.TileMode.CLAMP,
-            )
+            if (t.fancy) {
+                // the luxe look: a colourless lift under the finger, and the metal catching the light on the edges of the keys round it.
+                // (A gold tint laid over the dark keys turned them olive-brown.)
+                val lift = if (t.dark) ColorMath.PAPER else t.accent
+                val liftA = if (t.dark) 0x1E else 0x1A
+                glowPaint.shader = RadialGradient(
+                    glowX, glowY, dp(120f),
+                    intArrayOf(ColorMath.withAlpha(lift, (liftA * glowAmount).toInt()), ColorMath.withAlpha(lift, 0)),
+                    null, Shader.TileMode.CLAMP,
+                )
+                val edge = if (t.dark) (t.metal.getOrNull(1) ?: t.accent) else ColorMath.shade(t.accent, -0.08f)
+                glowRimPaint.shader = RadialGradient(
+                    glowX, glowY, dp(112f),
+                    intArrayOf(ColorMath.withAlpha(edge, (0xF0 * glowAmount).toInt()), ColorMath.withAlpha(edge, (0x70 * glowAmount).toInt()), ColorMath.withAlpha(edge, 0)),
+                    floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
+                )
+            } else {
+                glowPaint.shader = RadialGradient(
+                    glowX, glowY, dp(125f),
+                    intArrayOf(ColorMath.withAlpha(t.accent, (0x55 * glowAmount).toInt()), ColorMath.withAlpha(t.accent, 0)),
+                    null, Shader.TileMode.CLAMP,
+                )
+            }
         }
 
         ripples.removeAll { now - it.t0 > RIPPLE_MS }
         ensureShaders(rowHeight - 2 * insetY, t)
+        val tiltBusy = fxLuxe && t.fancy && stepTilt(dt)
 
         for (kr in keys) {
             val target = if (pressed.contains(kr)) 1f else 0f
@@ -335,8 +521,13 @@ class KeyboardView(ctx: Context) : View(ctx) {
             drawKey(c, kr, t, now)
         }
         if (ripples.isNotEmpty()) busy = true
+        if (fxLuxe && t.fancy) {
+            if (drawSparks(c, t, now)) busy = true
+            if (drawSweep(c, t, now)) busy = true
+        }
         if (resizeMode) drawResize(c, t)
         if (busy) postInvalidateOnAnimation()
+        else if (tiltBusy) accentRect()?.let { postInvalidateOnAnimation(it.left, it.top, it.right, it.bottom) }
     }
 
     private fun drawKey(c: Canvas, kr: KeyRect, t: KbTheme, now: Long) {
@@ -392,7 +583,10 @@ class KeyboardView(ctx: Context) : View(ctx) {
                     else ColorMath.blend(st[i], if (i == 0) pressedTo else ColorMath.shade(pressedTo, -0.12f), p)
                 }
                 LinearGradient(0f, 0f, 0f, shaderH, to, t.stopPos(grade), Shader.TileMode.CLAMP)
-            } else bodyShaders[grade]
+            } else bodyShaders[grade]?.also {
+                // the metal's bright band slides up and down as the phone tips
+                if (grade == 2) { streakM.setTranslate(0f, tiltY * shaderH * 0.14f); it.setLocalMatrix(streakM) }
+            }
             c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, bodyPaint)
             c.restore()
         } else {
@@ -407,7 +601,13 @@ class KeyboardView(ctx: Context) : View(ctx) {
         if (fancy && accentKey) {
             goldSheenPaint.alpha = (255 * (1f - 0.5f * p)).toInt()
             c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, goldSheenPaint)
-            streakPaint.shader = streakFor(kr.cell.width() - 2 * insetX, kr.cell.height() - 2 * insetY)
+            val nw = kr.cell.width() - 2 * insetX
+            val nh = kr.cell.height() - 2 * insetY
+            val streak = streakFor(nw, nh)
+            // the streak of light slides across the key as the phone turns
+            streakM.setTranslate(tiltX * nw * 0.6f, tiltY * nh * 0.25f)
+            streak.setLocalMatrix(streakM)
+            streakPaint.shader = streak
             streakPaint.alpha = (255 * (1f - 0.4f * p)).toInt()
             c.drawRoundRect(0f, 0f, rf.width(), rf.height(), radius, radius, streakPaint)
             c.drawRoundRect(hw, hw, rf.width() - hw, rf.height() - hw, radius, radius, goldRimPaint)
@@ -420,7 +620,13 @@ class KeyboardView(ctx: Context) : View(ctx) {
         }
         c.restore()
 
-        if (glowAmount > 0.01f) c.drawRoundRect(rf, radius, radius, glowPaint)
+        if (glowAmount > 0.01f) {
+            c.drawRoundRect(rf, radius, radius, glowPaint)
+            if (fancy) {
+                val gw = glowRimPaint.strokeWidth / 2f
+                c.drawRoundRect(rf.left + gw, rf.top + gw, rf.right - gw, rf.bottom - gw, radius, radius, glowRimPaint)
+            }
+        }
 
         for (rp in ripples) {
             if (rp.kr !== kr) continue
@@ -602,6 +808,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
             ripples.add(Ripple(kr, x, y, SystemClock.uptimeMillis()))
             if (ripples.size > 12) ripples.removeAt(0)
         }
+        if (fxLuxe && theme.fancy && kr.key.kind == KeyKind.ENTER) spawnSparks(kr)
         listener?.onFeedback(kr.key.kind)
         armKey(p, kr)
         invalidate()

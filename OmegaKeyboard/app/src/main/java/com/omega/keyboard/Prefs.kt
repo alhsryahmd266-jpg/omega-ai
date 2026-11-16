@@ -48,11 +48,12 @@ class Prefs private constructor(ctx: Context) {
     var textColor by I("text_color", 0xFF2979FF.toInt())  // colour of the text you type; 0 = the field's own colour
     var textRainbow by B("text_rainbow", false)           // every letter in the next colour of the rainbow
     var textHighlight by B("text_highlight", false)       // highlighter pen: the colour goes behind the text
-    // Whatever is written is real text, always. A picture / sticker is an extra the user switches on (the two below, both off).
-    var colourOnSend by B("colour_on_send_v2", false)     // the send key of a chat box sends the text as a coloured picture (off: plain text)
-    var colourButton by B("colour_button", false)         // the round "send coloured" button above the keys (a picture / sticker, or colour codes)
-    var picAutoSend by B("pic_auto_send", true)           // presses the app's own "send" on the picture preview (needs the accessibility service)
-    var picStyle by S("pic_style", "sticker")             // sticker (see-through, no frame: looks like coloured writing) | clean (card) | neon
+    // Whatever is written is real text, always (no pictures, no stickers). The two below are extras, both off: colour travels as a game's colour codes.
+    var colourOnSend by B("colour_on_send_v2", false)     // the send key of a chat box sends the text with the colour's code, where the box reads colour codes (off: plain text)
+    var colourButton by B("colour_button", false)         // the round "send coloured" button above the keys (colour codes)
+    // text decoration (زخرفة): the look chosen last, and whether letters are decorated as they are typed
+    var decorStyle by S("decor_style", "royal")
+    var decorLive by B("decor_live", false)
     var colorCodes by S("color_codes", "auto")            // how colour travels as real text: a game / app format (ColorCodes.Format), or auto = by the app
     var keyColor by I("c_key", 0)
     var fnColor by I("c_fn", 0)
@@ -75,6 +76,7 @@ class Prefs private constructor(ctx: Context) {
         }
     var fxGlow by B("fx_glow", true)                      // light that follows the finger across the keys
     var fxRipple by B("fx_ripple", true)                  // ring that spreads from a pressed key
+    var fxLuxe by B("fx_luxe", true)                      // luxe look extras: metal catches the light as the phone tilts, gold sparks from the enter key, a glint when the keys appear
     var numberRow by B("number_row", false)
     var indicDigits by B("indic_digits", false)
     var haptic by B("haptic", true)
@@ -91,6 +93,7 @@ class Prefs private constructor(ctx: Context) {
     // ---- translation
     var screenTarget by S("screen_target", "ar")
     var typedTarget by S("typed_target", "en")
+    var typedSource by S("typed_source", "auto")
     var engineMode by S("engine_mode", "auto")        // auto | mlkit | gemma
     var translateOnSend by B("translate_on_send", false)
 
@@ -100,7 +103,7 @@ class Prefs private constructor(ctx: Context) {
     var apDelayMaxSec by I("ap_delay_max", 6)
     var apAutoSend by B("ap_auto_send", true)
     var apSide by S("ap_side", "auto")                 // auto | left | right: which edge my chat bubbles hug
-    var apColour by B("ap_colour", true)               // the autonomous mode writes in the chosen colour (picture / colour codes) when one is chosen
+    var apColour by B("ap_colour", true)               // the autonomous mode writes in the chosen colour (colour codes, real text) when one is chosen
     var apVision by S("ap_vision", "auto")             // auto | off: read a game's chat from a picture of the screen
     var apGameName by S("ap_game_name", "")            // my own name inside games, so my own lines are never answered
     var apThink by B("ap_think", false)                // the model thinks before it writes a reply: slower, usually smarter (experimental)
@@ -140,6 +143,10 @@ class Prefs private constructor(ctx: Context) {
         e.apply()
     }
     fun gameProfileCount(): Int = sp.all.keys.count { it.startsWith("game_") }
+
+    /** whether the person was told, once, what the autonomous mode does inside this game (and that some games may ban for automation) */
+    fun gameNoticed(pkg: String): Boolean = sp.getBoolean("noted_$pkg", false)
+    fun setGameNoticed(pkg: String) { sp.edit().putBoolean("noted_$pkg", true).apply() }
 
     /** which edge MY chat bubbles stick to in [pkg] (learned after the first message we send) */
     fun align(pkg: String): Align = if (sp.getString("align_$pkg", "R") == "L") Align.LEFT else Align.RIGHT

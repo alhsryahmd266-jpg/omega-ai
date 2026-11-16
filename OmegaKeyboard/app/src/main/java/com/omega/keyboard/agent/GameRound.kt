@@ -25,6 +25,12 @@ interface GameHost {
 
     /** a reply went out */
     fun replied(text: String)
+
+    /** something the person must be told plainly (it is also shown as a message that stays long enough to read) */
+    fun notice(text: String)
+
+    /** the game cannot be read: it forbids screenshots. The loop leaves it alone (and says so) until the person asks again */
+    fun protectedScreen(pkg: String, text: String)
 }
 
 /** What the autonomous mode keeps in mind about the game it is playing (one per game and screen orientation). */
@@ -38,7 +44,10 @@ class GameState(val pkg: String, val landscape: Boolean) {
     var rescouts = 0                     // times a place found by itself was given up because it showed no chat
     var rescoutAt = 0L
     var emptyReads = 0                   // reads in a row that showed no chat line at all
-    var blankLooks = 0                   // pictures in a row that were all black
+    var blankLooks = 0                   // pictures of the chat part in a row that were all black
+    var screenBlanks = 0                 // pictures of the whole screen in a row that were all black (a game that forbids screenshots)
+    var refusals = 0                     // screenshots in a row that the system refused
+    var noticed = false                  // this run already looked at whether the person was told about games
     var sendLooks = 0                    // looks for the game's send button that found none
     var lastGrid: IntArray? = null       // the chat picture at the last read
     var prevGrid: IntArray? = null       // the chat picture at the last look
@@ -89,6 +98,20 @@ object GameRound {
         screen.nodes.none { it.editable } && screen.nodes.count { it.visible && (it.text.isNotBlank() || it.desc.isNotBlank()) } <= 2
 
     private fun idleGap(n: Int): Long = minOf(30_000L, 3_000L + 3_000L * n)
+
+    /** screens in a row that must come out black or refused before the game is called protected (a loading screen is black for a moment) */
+    const val PROTECTED_AFTER = 3
+
+    /** said once per game, before the first look: what this does in a game, and that nothing is hidden or bypassed */
+    const val GAME_NOTICE = "تنبيه: بعض الألعاب بتعتبر الردود الآلية مخالفة وممكن توقف الحساب. أنا بقرا الشاشة وبكتب من الكيبورد بشكل ظاهر، ومش بخبّي حاجة ومش بتخطّى أي حماية. استخدمه على مسؤوليتك."
+
+    fun refusedText(): String = when (Shot.lastCode) {
+        -2 -> "تصوير الشاشة محتاج أندرويد ١١ أو أحدث، والأندرويد عندك أقدم. مقدرش أقرا اللعبة"
+        else -> "النظام رفض يصوّر شاشة اللعبة (كود ${Shot.lastCode}). غالبًا اللعبة بتمنع التصوير كحماية، ومش هحاول أتخطّى الحماية"
+    }
+
+    fun blackText(): String =
+        "الصورة طالعة سودا بالكامل، يعني اللعبة بتمنع تصوير الشاشة (حماية). مش هقدر أقراها ومش هحاول أتخطّى الحماية"
 
     private fun trim(list: ArrayList<String>) { while (list.size > 12) list.removeAt(0) }
 
@@ -146,6 +169,15 @@ object GameRound {
             g.profileLoaded = true
         }
 
+        // ---- told once, openly: what this does in a game
+        if (!g.noticed) {
+            g.noticed = true
+            if (!prefs.gameNoticed(g.pkg)) {
+                prefs.setGameNoticed(g.pkg)
+                host.notice(GAME_NOTICE)
+            }
+        }
+
         // ---- no way to type into this game is known yet: the model looks for its chat and buttons on the screen
         if (!g.profile.canType) {
             if (g.scoutFails < MAX_SCOUTS) {
@@ -172,7 +204,21 @@ object GameRound {
 
         // ---- a look at the chat part of the screen
         val look = GameEyes.look(ctx, svc, g.profile.chat)
-        if (look == null) { host.say("مقدرتش آخد صورة للشاشة. ممكن اللعبة تكون محمية من التصوير", true); return }
+        if (look == null) {
+            g.refusals++
+            if (g.refusals >= PROTECTED_AFTER) { host.protectedScreen(g.pkg, refusedText()); return }
+            host.say("مقدرتش آخد صورة للشاشة. هجرّب تاني...", true)
+            return
+        }
+        g.refusals = 0
+        if (look.screenBlank) {
+            // the whole screen came out black: the game forbids screenshots (or has not drawn anything yet). Said openly, not worked around.
+            g.screenBlanks++
+            if (g.screenBlanks >= PROTECTED_AFTER) { host.protectedScreen(g.pkg, blackText()); return }
+            host.say("الشاشة طالعة سودا دلوقتي، هستنى لحظة...")
+            return
+        }
+        g.screenBlanks = 0
         if (look.blank) {
             g.blankLooks++
             host.say(
@@ -285,7 +331,7 @@ object GameRound {
         // the game's send button is looked for on the screen (slowly) only when none is known and the box's own action key sends nothing
         var findSend: (() -> FPoint?)? = null
         if (g.profile.send == null && g.sendLooks < 2) {
-            findSend = { GameScout.findSend(ctx, svc, host).also { if (it == null) g.sendLooks++ } }
+            findSend = { GameScout.findSend(ctx, svc, g, host).also { if (it == null) g.sendLooks++ } }
         }
         val res = GameTyper.send(svc, ime, g.pkg, g.profile, coloured, g.chatOpen, { host.stopped() }, findSend)
         if (res.ok) {

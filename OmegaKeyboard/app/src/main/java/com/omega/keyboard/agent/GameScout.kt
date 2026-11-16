@@ -37,11 +37,22 @@ object GameScout {
     }
 
     /** One picture of the whole screen, one question for the model. */
-    private fun look(ctx: Context, svc: ScreenAgentService, host: GameHost, tag: String): GameLocate.Found {
+    private fun look(ctx: Context, svc: ScreenAgentService, g: GameState, host: GameHost, tag: String): GameLocate.Found {
         val kbTop = keyboardTop(svc)
         val shot = GameEyes.look(ctx, svc, null, name = "game_scout")
-            ?: throw Fail("مقدرتش آخد صورة للشاشة. ممكن اللعبة تكون محمية من التصوير")
-        if (shot.blank) throw Fail("صورة الشاشة طلعت سودا: اللعبة بتمنع التصوير، فمش هقدر أقراها")
+        if (shot == null) {
+            // the system refused the screenshot: said openly after a few tries, never worked around
+            g.refusals++
+            if (g.refusals >= GameRound.PROTECTED_AFTER) host.protectedScreen(g.pkg, GameRound.refusedText())
+            throw Fail("مقدرتش آخد صورة للشاشة. ممكن اللعبة تكون محمية من التصوير")
+        }
+        g.refusals = 0
+        if (shot.blank || shot.screenBlank) {
+            g.screenBlanks++
+            if (g.screenBlanks >= GameRound.PROTECTED_AFTER) host.protectedScreen(g.pkg, GameRound.blackText())
+            throw Fail("صورة الشاشة طلعت سودا: اللعبة بتمنع التصوير، فمش هقدر أقراها")
+        }
+        g.screenBlanks = 0
         if (!Llm.visionReady()) host.say("بحمّل جزء الصور في النموذج (أول مرة بس، ممكن ياخد دقيقة)...")
         val raw = try {
             Llm.generate(
@@ -93,7 +104,7 @@ object GameScout {
         }
 
         try {
-            val a = look(ctx, svc, host, "screen")
+            val a = look(ctx, svc, g, host, "screen")
             if (!a.any) {
                 host.say("مش لاقي شات ولا زراير على الشاشة دي. افتح الشات في اللعبة وهحاول تاني", true)
                 return false
@@ -124,7 +135,7 @@ object GameScout {
                 } else if (!stop()) {
                     nap(1000)
                     host.say("بدوّر على خانة الكتابة بعد ما فتحت الشات...")
-                    val b = look(ctx, svc, host, "chat open")
+                    val b = look(ctx, svc, g, host, "chat open")
                     if (b.chat != null) chat = b.chat
                     if (b.send != null) send = b.send
                     b.input?.let { box ->
@@ -180,10 +191,10 @@ object GameScout {
      * The game's own send button, looked for on the screen while the message sits typed in the box (the box's action key did not send it).
      * Null when none was found. Blocking.
      */
-    fun findSend(ctx: Context, svc: ScreenAgentService, host: GameHost): FPoint? {
+    fun findSend(ctx: Context, svc: ScreenAgentService, g: GameState, host: GameHost): FPoint? {
         host.say("بدوّر على زرار الإرسال في اللعبة...")
         return try {
-            look(ctx, svc, host, "send button").send?.let { GameLocate.center(it) }
+            look(ctx, svc, g, host, "send button").send?.let { GameLocate.center(it) }
         } catch (_: Stopped) {
             null
         } catch (f: Fail) {

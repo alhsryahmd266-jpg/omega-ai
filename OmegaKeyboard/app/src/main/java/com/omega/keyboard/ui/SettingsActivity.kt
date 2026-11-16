@@ -149,7 +149,6 @@ class SettingsActivity : BaseActivity() {
 
         // ---------------------------------------------------------------- coloured writing
         h.addView(UiKit.section(this, p, "الكتابة الملونة"))
-        val picStyles = listOf("sticker" to "ملصق شفاف (بدون إطار)", "clean" to "كارت عادي (كلامك بلونه)", "neon" to "نيون مضيء")
         val codeChoices = ColorCodes.Format.values().map { it.id to it.label }
         h.addView(UiKit.group(
             this, p,
@@ -159,15 +158,8 @@ class SettingsActivity : BaseActivity() {
             ) {
                 choose("كود ألوان الألعاب", codeChoices, prefs.colorCodes) { prefs.colorCodes = it }
             },
-            sw("زرار الإرسال الملوّن (اختياري)", "دايرة ملونة فوق الكيبورد: تبعت الكلام بكود الألوان، أو كملصق/صورة في التطبيقات اللي بتقبل صور. مقفول لحد ما تفتحه", prefs.colourButton) { prefs.colourButton = it },
-            sw("زرار الإرسال يبعت صورة ملونة (اختياري)", "مقفول: زرار الإرسال بيبعت نص عادي دايماً. لو فتحته: في واتساب وتليجرام وماسنجر الكلام يتحوّل لملصق/صورة بلونك (واتساب مبيقبلش نص ملوّن، فالصورة هي الطريقة الوحيدة للون هناك)", prefs.colourOnSend) { prefs.colourOnSend = it },
-            sw("إرسال تلقائي للصورة", "يدوس \"إرسال\" لوحده في معاينة الصورة (محتاج تفعيل خدمة إمكانية الوصول للكيبورد)", prefs.picAutoSend) { prefs.picAutoSend = it },
-            UiKit.valueRow(
-                this, p, "شكل الصورة", picStyles.firstOrNull { it.first == prefs.picStyle }?.second ?: "ملصق شفاف (بدون إطار)",
-                "للصور والملصقات الاختيارية بس. في واتساب الكلام بيتبعت ملصق شفاف من غير إطار، وباقي التطبيقات بتاخد الكارت"
-            ) {
-                choose("شكل الصورة الملونة", picStyles, prefs.picStyle) { prefs.picStyle = it }
-            },
+            sw("زرار الإرسال الملوّن (اختياري)", "دايرة ملونة فوق الكيبورد: تحوّل الكلام لنص بكود اللون وتبعته. بتظهر بس في الألعاب والتطبيقات اللي ليها كود ألوان. مقفول لحد ما تفتحه", prefs.colourButton) { prefs.colourButton = it },
+            sw("زرار الإدخال يبعت بكود اللون (اختياري)", "مقفول: زرار الإدخال بيبعت نص عادي دايماً. لو فتحته وفيه لون مختار والتطبيق ليه كود ألوان، الكلام بيتبعت بكود اللون", prefs.colourOnSend) { prefs.colourOnSend = it },
         ))
 
         // ---------------------------------------------------------------- translation
@@ -188,7 +180,7 @@ class SettingsActivity : BaseActivity() {
             UiKit.valueRow(this, p, "محرك الترجمة", engines.firstOrNull { it.first == prefs.engineMode }?.second ?: "تلقائي", "السريع بيحتاج حزمة لغة صغيرة تتنزّل مرة واحدة") {
                 choose("محرك الترجمة", engines, prefs.engineMode) { prefs.engineMode = it; Translator.clearCache() }
             },
-            sw("ترجمة عند الإرسال", "لما شريط \"ترجم\" يكون مفتوح، زرار الإدخال بيترجم الأول وبعدين يبعت", prefs.translateOnSend) { prefs.translateOnSend = it },
+            sw("إرسال بعد الترجمة", "لما شريط \"ترجم\" يكون مفتوح، ✓ بيثبّت الترجمة في الخانة وبيبعت على طول", prefs.translateOnSend) { prefs.translateOnSend = it },
         ))
 
         // ---------------------------------------------------------------- autonomous mode
