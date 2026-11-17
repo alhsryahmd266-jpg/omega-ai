@@ -21,7 +21,7 @@ for split in ("val", "test"):
     except Exception as e:
         rep[split + "_error"] = str(e)[:300]; traceback.print_exc()
     json.dump(rep, open("out/convert_report.json", "w"), indent=2, default=str)
-for fmt, kw in (("onnx", {}), ("tflite", {"half": True})):
+for fmt, kw in (("onnx", {}), ("tflite", {})):
     try:
         YOLO("weights.pt").export(format=fmt, imgsz=imgsz, **kw)
         cands = [c for c in glob.glob(f"**/*.{fmt}", recursive=True) if not c.startswith("out/") and "int8" not in c]
