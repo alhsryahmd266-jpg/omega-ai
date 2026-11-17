@@ -6,7 +6,7 @@ permissions:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 380
+    timeout-minutes: 390
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -66,7 +66,7 @@ jobs:
         env:
           KU: ${{ secrets.KAGGLE_USERNAME }}
         run: |
-          for i in $(seq 1 330); do
+          for i in $(seq 1 345); do
             sleep 60
             s=$(kaggle kernels status "${KU}/gamebot-yolo26-cod" 2>&1 | tr 'A-Z' 'a-z')
             echo "[$i min] $s"
@@ -92,7 +92,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: gamebot-yolo26-cod-v${{ github.run_number }}
-          name: GameBot YOLO26 COD (Warzone+Mobile) + TFLite #${{ github.run_number }}
+          name: GameBot YOLO26 COD two-stage + TFLite #${{ github.run_number }}
           files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
