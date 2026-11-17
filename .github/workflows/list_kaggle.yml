@@ -25,14 +25,28 @@ jobs:
           echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
           echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
-      - name: List my datasets and kernels
+      - name: Probe Kaggle auth methods and list assets
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
           mkdir -p logs
           exec > >(tee logs/list.txt) 2>&1
-          echo "== pip kaggle"; pip show kaggle | head -3
-          echo "== kaggle --version"; kaggle --version || true
-          echo "== datasets (mine)"; kaggle datasets list --mine --page-size 50 || true
-          echo "== kernels (mine)"; kaggle kernels list --mine --page-size 50 || true
+          pip install requests -q 2>/dev/null
+          python3 - <<'PY'
+          import os, requests
+          u=os.environ['KAGGLE_USERNAME']; k=os.environ['KAGGLE_KEY']
+          print('user:',u,'| key length:',len(k),'| looks like KGAT token:',k.startswith('KGAT'))
+          for name,kw in (('basic',{'auth':(u,k)}),('bearer',{'headers':{'Authorization':'Bearer '+k}})):
+              for ep,params in (('kernels/list',{'user':u,'pageSize':20}),('datasets/list',{'user':u,'pageSize':20})):
+                  try:
+                      r=requests.get('https://www.kaggle.com/api/v1/'+ep,params=params,timeout=30,**kw)
+                      print(name,ep,r.status_code,r.text[:700].replace(k,'***'))
+                  except Exception as e: print(name,ep,'ERR',e)
+          PY
+          echo "== CLI with legacy env vars"
+          kaggle kernels list --mine --page-size 20 || true
+          kaggle datasets list --mine --page-size 20 || true
           sleep 2
       - name: Publish log to branch
         if: always()
