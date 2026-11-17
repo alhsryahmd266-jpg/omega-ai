@@ -1,0 +1,85 @@
+name: GameBot Convert Weights
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: yolo-data
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -q ultralytics onnx onnxruntime onnxslim
+      - name: Inspect, validate, export
+        run: |
+          mkdir -p out
+          unzip -q dataset.zip -d ds
+          printf "path: $PWD/ds\ntrain: train/images\nval: valid/images\ntest: test/images\nnc: 1\nnames: ['enemy']\n" > ds/abs.yaml
+          python3 - << 'PY' 2>&1 | tee out/convert.log
+          import json, glob, shutil, traceback
+          from ultralytics import YOLO
+          import ultralytics
+          rep = {"ultralytics": ultralytics.__version__}
+          m = YOLO("weights.pt")
+          ck = m.ckpt or {}
+          ta = ck.get("train_args", {}) or {}
+          imgsz = ta.get("imgsz", 960)
+          rep.update(names=m.names, task=m.task, imgsz=imgsz, epoch=ck.get("epoch"),
+                     best_fitness=str(ck.get("best_fitness")), date=ck.get("date"),
+                     train_data=str(ta.get("data")), epochs=ta.get("epochs"))
+          print(rep, flush=True)
+          for split in ("val", "test"):
+              try:
+                  r = m.val(data="ds/abs.yaml", imgsz=imgsz, split=split, device="cpu")
+                  rep[split] = dict(map50=float(r.box.map50), map50_95=float(r.box.map), precision=float(r.box.mp), recall=float(r.box.mr))
+              except Exception as e:
+                  rep[split + "_error"] = str(e)[:300]; traceback.print_exc()
+          shutil.copy("weights.pt", "out/enemy_yolo26s_best.pt")
+          for fmt, kw in (("onnx", {}), ("tflite", {"half": True})):
+              try:
+                  YOLO("weights.pt").export(format=fmt, imgsz=imgsz, **kw)
+                  cands = glob.glob(f"**/*.{fmt}", recursive=True)
+                  cands = [c for c in cands if not c.startswith("out/") and "int8" not in c]
+                  if fmt == "tflite":
+                      cands = [c for c in cands if "float16" in c] or cands
+                  if cands:
+                      dst = f"out/enemy_yolo26s_{imgsz}.{fmt}"
+                      shutil.copy(cands[0], dst); rep[fmt] = dst
+                  else:
+                      rep[fmt + "_error"] = "no file produced"
+              except Exception as e:
+                  rep[fmt + "_error"] = str(e)[:400]; traceback.print_exc()
+          json.dump(rep, open("out/convert_report.json", "w"), indent=2, default=str)
+          print(json.dumps(rep, indent=2, default=str))
+          PY
+      - name: Publish logs
+        if: always()
+        run: |
+          mkdir -p /tmp/lg && cp out/convert.log out/convert_report.json /tmp/lg/ 2>/dev/null || true
+          cd /tmp/lg && git init -q -b yolo-convert-logs && git add . && git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m "convert logs" || true
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" yolo-convert-logs || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: enemy-yolo26s-${{ github.run_number }}
+          path: out/
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: gamebot-weights-v${{ github.run_number }}
+          name: GameBot enemy YOLO26s (user weights) #${{ github.run_number }}
+          files: |
+            out/*.tflite
+            out/*.onnx
+            out/*.pt
+            out/convert_report.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
