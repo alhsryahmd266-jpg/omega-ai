@@ -1,0 +1,66 @@
+name: COD Merge Dataset
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: yolo-data
+          path: mobsrc
+      - name: Download Warzone and merge
+        run: |
+          pip install -q pyyaml
+          mkdir -p wz mob out/pkg
+          curl -sSL -o wz.zip "https://app.roboflow.com/ds/IBlLSkxdiH?key=eNTzulMPEw"
+          unzip -q -o wz.zip -d wz
+          unzip -q -o mobsrc/dataset.zip -d mob
+          python3 - << 'PY' 2>&1 | tee out/merge_report.txt
+          import yaml, os, shutil, json, glob
+          names = yaml.safe_load(open("wz/data.yaml"))["names"]
+          if isinstance(names, dict): names = [names[k] for k in sorted(names)]
+          keep = {i for i, n in enumerate(names) if n in ("0", "enemy")}
+          print("names", names, "keep idx", keep)
+          os.makedirs("out/pkg/wz_clean/images", exist_ok=True); os.makedirs("out/pkg/wz_clean/labels", exist_ok=True)
+          rep = {"wz_images": 0, "wz_boxes": 0, "wz_skipped_no_enemy": 0}
+          for sp in ("train", "valid"):
+              imgs = {os.path.splitext(f)[0]: f for f in os.listdir(f"wz/{sp}/images")}
+              for lf in os.listdir(f"wz/{sp}/labels"):
+                  stem = os.path.splitext(lf)[0]
+                  rows = []
+                  for l in open(f"wz/{sp}/labels/{lf}"):
+                      p = l.split()
+                      if len(p) >= 5 and int(float(p[0])) in keep:
+                          rows.append("0 " + " ".join(p[1:5]))
+                  if not rows or stem not in imgs:
+                      rep["wz_skipped_no_enemy"] += 1; continue
+                  ext = os.path.splitext(imgs[stem])[1]
+                  shutil.copy(f"wz/{sp}/images/{imgs[stem]}", f"out/pkg/wz_clean/images/wz_{sp}_{stem}{ext}")
+                  open(f"out/pkg/wz_clean/labels/wz_{sp}_{stem}.txt", "w").write("\n".join(rows) + "\n")
+                  rep["wz_images"] += 1; rep["wz_boxes"] += len(rows)
+          for sp in ("train", "valid", "test"):
+              shutil.copytree(f"mob/{sp}", f"out/pkg/mobile/{sp}")
+              rep["mobile_" + sp] = len(os.listdir(f"mob/{sp}/images"))
+          json.dump(rep, open("out/merge_report.json", "w"), indent=2)
+          print(rep)
+          shutil.make_archive("out/merged_cod_dataset", "zip", "out/pkg")
+          print("zip MB", os.path.getsize("out/merged_cod_dataset.zip") / 1e6)
+          PY
+      - name: Publish report
+        if: always()
+        run: |
+          mkdir -p /tmp/o && cp out/merge_report.* /tmp/o/ 2>/dev/null || echo none > /tmp/o/none.txt
+          cd /tmp/o && git init -q -b cod-merge-logs && git add . && git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m report
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" cod-merge-logs
+      - name: Release dataset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cod-merged-dataset-v1
+          name: COD merged dataset (Warzone enemy + mobile)
+          files: out/merged_cod_dataset.zip
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
