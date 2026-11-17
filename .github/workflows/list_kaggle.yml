@@ -28,10 +28,12 @@ jobs:
       - name: List my datasets and kernels
         run: |
           mkdir -p logs
-          { echo "== kaggle version"; kaggle --version
-            echo "== datasets (mine)"; kaggle datasets list --mine --page-size 50 -v 2>&1 | head -80
-            echo "== kernels (mine)"; kaggle kernels list --mine --page-size 50 -v 2>&1 | head -80
-          } | tee logs/list.txt
+          exec > >(tee logs/list.txt) 2>&1
+          echo "== pip kaggle"; pip show kaggle | head -3
+          echo "== kaggle --version"; kaggle --version || true
+          echo "== datasets (mine)"; kaggle datasets list --mine --page-size 50 || true
+          echo "== kernels (mine)"; kaggle kernels list --mine --page-size 50 || true
+          sleep 2
       - name: Publish log to branch
         if: always()
         run: |
