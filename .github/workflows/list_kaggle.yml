@@ -1,0 +1,45 @@
+name: List Kaggle Assets
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Kaggle CLI
+        run: pip install kaggle -q
+      - name: Configure Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+          chmod 600 ~/.kaggle/access_token
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
+      - name: List my datasets and kernels
+        run: |
+          mkdir -p logs
+          { echo "== kaggle version"; kaggle --version
+            echo "== datasets (mine)"; kaggle datasets list --mine --page-size 50 -v 2>&1 | head -80
+            echo "== kernels (mine)"; kaggle kernels list --mine --page-size 50 -v 2>&1 | head -80
+          } | tee logs/list.txt
+      - name: Publish log to branch
+        if: always()
+        run: |
+          git config user.name "ci-bot"; git config user.email "ci-bot@users.noreply.github.com"
+          mkdir -p /tmp/lg && cp logs/* /tmp/lg/ 2>/dev/null || true
+          git checkout --orphan detector-logs-tmp
+          git rm -rf . -q || true
+          cp /tmp/lg/* . 2>/dev/null || echo "no logs" > empty.txt
+          git add -A
+          git commit -q -m "log run ${{ github.run_id }}"
+          git push -f origin HEAD:detector-logs
