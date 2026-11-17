@@ -22,8 +22,8 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: cod-merged-v1
-          name: COD merged dataset (Warzone + mobile)
+          tag_name: cod-merged-v2
+          name: COD merged dataset v2 (held-out Warzone valid)
           files: merged_cod.zip
           make_latest: false
         env:
