@@ -48,8 +48,20 @@ jobs:
           }
           EOF
           cd kpush
-          kaggle kernels push -p . 2>&1 | tee ../push.log
+          kaggle kernels push -p . > ../push.log 2>&1 || true
+          cat ../push.log
+          cp kernel-metadata.json ../push_meta.json
           grep -qi "successfully pushed" ../push.log || { echo "::error::push failed"; exit 1; }
+      - name: Publish debug logs
+        if: always()
+        run: |
+          mkdir -p /tmp/dbg
+          cp push.log push_meta.json /tmp/dbg/ 2>/dev/null || true
+          cd /tmp/dbg
+          git init -q -b ci-logs
+          git add . 2>/dev/null || true
+          git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m "yolo26 push log" || true
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-logs || true
       - name: Wait for kernel
         env:
           KU: ${{ secrets.KAGGLE_USERNAME }}
