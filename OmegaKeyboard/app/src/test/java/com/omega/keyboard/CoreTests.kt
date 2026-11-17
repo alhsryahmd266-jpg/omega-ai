@@ -1083,6 +1083,51 @@ object CoreTests {
         check("a lone mark is one press", Decor.unitBefore("\u064E") == 1)
         check("marks and bars are noticed", Decor.hasDecoration("ب\u064E") && Decor.hasDecoration("ع\u0640") && !Decor.hasDecoration("ب"))
 
+        // more Arabic looks
+        val qr = Decor.apply("quran", "كتاب")
+        check("quran marks: a sign on every letter but the alef", marksOf(qr) == 3 && Decor.plain(qr) == "كتاب") { qr }
+        check("small alef above every letter", Decor.apply("supalef", "عرف") == "ع\u0670ر\u0670ف\u0670")
+        check("shadda with a fatha", Decor.apply("shadda", "عر") == "ع\u0651\u064Eر\u0651\u064E")
+        val tw = Decor.apply("tanween", "عرف")
+        check("tanween: one of the three signs on each letter", marksOf(tw) == 3 && tw.filter { !Decor.isMark(it) } == "عرف" && Decor.plain(tw) == "عرف") { tw }
+        check("long stretch has four bars", Decor.apply("longkash", "عرف") == "ع\u0640\u0640\u0640\u0640رف")
+        check("long stretch comes off again", Decor.plain(Decor.apply("longkash", "كتاب")) == "كتاب")
+        check("typed long stretch: four bars in front of the next letter", Decor.typed(Decor.byId("longkash")!!, "ر", "ع", 0) == "\u0640\u0640\u0640\u0640ر")
+        check("backspace takes a long-stretched letter with all four bars", Decor.unitBefore("ع\u0640\u0640\u0640\u0640ر") == 5)
+        check("every typed Arabic look equals the whole-text one letter by letter", listOf("quran", "supalef", "shadda", "tanween", "double", "tashkeel").all { id ->
+            val st = Decor.byId(id)!!
+            var n = 0
+            val sb = StringBuilder()
+            for (ch in "عرفك") { sb.append(Decor.typed(st, ch.toString(), sb, n)); n++ }
+            sb.toString().filter { !Decor.isMark(it) } == "عرفك"
+        })
+
+        // more English looks
+        check("bold, italic and bold italic", Decor.apply("bold", "Ab1") == String(Character.toChars(0x1D400)) + String(Character.toChars(0x1D41B)) + String(Character.toChars(0x1D7CF)))
+        check("italic h is the old planck letter", Decor.apply("italic", "h") == "\u210E" && Decor.apply("italic", "Ab") == String(Character.toChars(0x1D434)) + String(Character.toChars(0x1D44F)))
+        check("cursive holes use the old letters", Decor.apply("cursive", "B") == "\u212C" && Decor.apply("cursive", "e") == "\u212F" && Decor.apply("cursive", "o") == "\u2134")
+        check("fraktur holes use the old letters", Decor.apply("fraktur", "C") == "\u212D" && Decor.apply("fraktur", "Z") == "\u2128" && Decor.apply("fraktur", "a") == String(Character.toChars(0x1D51E)))
+        check("sans digits and monospace digits", Decor.apply("sans", "1") == String(Character.toChars(0x1D7E3)) && Decor.apply("mono", "0") == String(Character.toChars(0x1D7F6)))
+        check("squares have one form for both cases", Decor.apply("squares", "aA") == String(Character.toChars(0x1F130)).repeat(2) && Decor.apply("blacksquares", "bB") == String(Character.toChars(0x1F171)).repeat(2))
+        check("black circles and their digits", Decor.apply("blackcircles", "a05") == String(Character.toChars(0x1F150)) + "\u24FF" + "\u277A")
+        check("parenthesised letters", Decor.apply("parens", "ab") == "\u249C\u249D" && Decor.apply("parens", "3") == "\u2476")
+        check("superscript", Decor.apply("superscript", "ab2") == "ᵃᵇ²" && Decor.apply("superscript", "N") == "ᴺ")
+        check("strike puts a mark after every letter and digit but not after spaces", Decor.apply("strike", "a 1") == "a\u0336 1\u0336")
+        check("underline marks come off again", Decor.plain(Decor.apply("underline", "Hello 12")) == "Hello 12")
+        check("a mark of the strike look goes with its letter on backspace", Decor.unitBefore("ab\u0336") == 2)
+        check("looks that keep case give the text back", listOf("script", "gothic", "struck", "bubble", "wide", "bold", "italic", "bolditalic", "cursive", "fraktur",
+            "sans", "sansbold", "sansitalic", "sansbolditalic", "mono", "strike", "underline", "dunder", "slash", "tilde").all { id ->
+            Decor.plain(Decor.apply(id, "Hello World 12")) == "Hello World 12" || (id == "italic" && Decor.plain(Decor.apply(id, "Hello World 12")).lowercase() == "hello world 12")
+        })
+        check("every English look: typed letter by letter equals the whole text", Decor.styles.filter { it.kind == Decor.Kind.LATIN }.all {
+            var out = ""
+            for (ch in "Hello 7") out += Decor.typed(it, ch.toString(), "", 0)
+            out == Decor.apply(it, "Hello 7")
+        })
+        check("another look replaces the first on the same text", Decor.apply("bold", Decor.apply("cursive", "Hello")) == Decor.apply("bold", "Hello"))
+        check("there are many looks, with unique ids", Decor.styles.size >= 40 && Decor.styles.map { it.id }.toSet().size == Decor.styles.size)
+        check("new frames come off again", listOf("stars", "flowers", "sparkle", "quote", "lens", "moon", "arrows", "lines", "ornament").all { Decor.plain(Decor.apply(it, "hi there")) == "hi there" })
+
         // the panel's previews
         check("previews use the user's own words when they fit the style", Decor.sampleFor(Decor.byId("royal"), "مرحبا") == "مرحبا" && Decor.sampleFor(Decor.byId("script"), "مرحبا") == "Omega Keyboard")
         check("previews use an example for an empty box", Decor.sampleFor(Decor.byId("royal"), "").isNotBlank() && Decor.sampleFor(null, "  ").isNotBlank())

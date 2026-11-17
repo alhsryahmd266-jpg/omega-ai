@@ -63,6 +63,9 @@ class Prefs private constructor(ctx: Context) {
     var bgStyle by I("bg_style", -1)                      // -1 theme, 0 flat, 1 gradient, 2 aurora (moves when you type)
     var glassKeys by I("glass_keys", -1)                  // -1 theme, 0 solid keys, 1 see-through glass keys
     var neonLetters by I("neon_letters", -1)              // -1 theme, 0 off, 1 letters glow
+    var keyShape by I("key_shape", -1)                    // -1 the theme's (a soft square), 0 sharp, 1 soft square, 2 rounded, 3 fully round
+    var bgPhotoRev by I("bg_photo_rev", 0)                // changes whenever the picture of the "my picture" theme is replaced (0: none chosen yet)
+    var arFont by S("ar_font", "")                        // the real Arabic font shown on the keys and in the typing preview ("" = the phone's own)
     var fontPct by I("font_pct", 100)                     // size of the letters on the keys, 80..140
     var widthPct by I("width_pct", 100)                   // width of the keys area, 60..100 (one-handed typing)
     var kbAlign by I("kb_align", 0)                       // where a narrower keyboard sits: 0 centre, 1 left, 2 right (the older three-way setting)

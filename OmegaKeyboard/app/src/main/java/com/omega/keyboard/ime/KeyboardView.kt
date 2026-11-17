@@ -20,6 +20,7 @@ import android.util.SparseArray
 import android.view.MotionEvent
 import android.view.View
 import com.omega.keyboard.core.ColorMath
+import com.omega.keyboard.core.Decor
 import com.omega.keyboard.core.Key
 import com.omega.keyboard.core.KeyKind
 import com.omega.keyboard.core.Layout
@@ -265,7 +266,23 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     private fun upper(): Boolean = shiftState != 0 && layout?.lang == "en"
 
-    private fun labelOf(k: Key): String = if (k.kind == KeyKind.CHAR && upper()) k.label.uppercase() else k.label
+    /** the look English letters are typed in right now (a fancy-letter style): the keys show it, so the user sees what will come out */
+    var capStyle: Decor.Style? = null
+        set(v) { if (field !== v) { field = v; invalidate() } }
+
+    /** a real font for the letters on the keys (an Arabic calligraphy face, say); null = the phone's own */
+    var capFace: Typeface? = null
+        set(v) { if (field !== v) { field = v; invalidate() } }
+
+    /** how big that font's letters are drawn compared with the phone's own (some faces run small or tall) */
+    var capScale: Float = 1f
+        set(v) { if (field != v) { field = v; invalidate() } }
+
+    private fun labelOf(k: Key): String {
+        val s = if (k.kind == KeyKind.CHAR && upper()) k.label.uppercase() else k.label
+        val st = capStyle
+        return if (st != null && st.kind == Decor.Kind.LATIN && k.kind == KeyKind.CHAR && s.length == 1) Decor.typed(st, s, "", 0) else s
+    }
 
     private fun ensureShaders(h: Float, t: KbTheme) {
         if (h == shaderH && t === shaderTheme && sheen != null) return
@@ -536,8 +553,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
         val sink = dp(1.4f) * p
         rf.set(kr.cell.left + insetX + sink, kr.cell.top + insetY + sink, kr.cell.right - insetX - sink, kr.cell.bottom - insetY - sink)
         // one corner for every key (the enter key and the page switchers used to be pills, which made the bottom row look like
-        // another keyboard): the rows read as one even grid
-        val radius = dp(12f)
+        // another keyboard): the rows read as one even grid. How round it is comes from the theme or the user's choice (a soft square
+        // by default, like the keys of Gboard); a key never rounds more than its shorter side allows.
+        val radius = min(dp(Themes.CORNER_DP[t.corner.coerceIn(0, Themes.CORNER_DP.size - 1)]), min(rf.width(), rf.height()) / 2f)
 
         val base = when (k.kind) {
             KeyKind.CHAR -> if (k.fn) t.keyFn else t.key
@@ -666,10 +684,11 @@ class KeyboardView(ctx: Context) : View(ctx) {
             KeyKind.CHAR -> {
                 val arabic = layout?.lang == "ar"
                 textPaint.color = if (k.fn) t.onFn else t.text
-                textPaint.typeface = letterFace
+                val face = capFace
+                textPaint.typeface = face ?: letterFace
                 textPaint.isFakeBoldText = false
                 // Arabic letters are drawn bigger (as Gboard does): at the English size they are hard to read
-                var size = (if (arabic) min(rowHeight * 0.50f, dp(27f)) else min(rowHeight * 0.42f, dp(24f))) * fontScale
+                var size = (if (arabic) min(rowHeight * 0.50f, dp(27f)) else min(rowHeight * 0.42f, dp(24f))) * fontScale * (if (face != null) capScale else 1f)
                 val lab = labelOf(k)
                 if (lab.length > 2) size = min(size, dp(19f) * fontScale)
                 size = min(size, min(kr.cell.width() * 0.92f, rowHeight * 0.62f))
@@ -1150,7 +1169,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     // ------------------------------------------------------------------ popups (drawn by the overlay)
 
-    class PreviewSpec(val rect: RectF, val text: String, val t0: Long = SystemClock.uptimeMillis())
+    class PreviewSpec(val rect: RectF, val text: String, val t0: Long = SystemClock.uptimeMillis(), val face: Typeface? = null, val scale: Float = 1f)
     data class AltSpec(val rect: RectF, val items: List<String>, val selected: Int, val cellW: Float, val pad: Float)
 
     private var previewSpec: PreviewSpec? = null
@@ -1164,7 +1183,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
         val h = dp(62f)
         val cx = kr.cell.centerX().coerceIn(w / 2 + dp(2f), width - w / 2 - dp(2f))
         val bottom = kr.cell.top + dp(8f)
-        previewSpec = PreviewSpec(RectF(cx - w / 2, bottom - h, cx + w / 2, bottom), txt)
+        previewSpec = PreviewSpec(RectF(cx - w / 2, bottom - h, cx + w / 2, bottom), txt, face = capFace, scale = capScale)
         pushOverlay()
     }
 
@@ -1213,9 +1232,10 @@ class PopupOverlay(ctx: Context) : View(ctx) {
     private fun dp(v: Float) = v * density
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1f * density }
+    private val plainFace: Typeface = try { Typeface.create("sans-serif-medium", Typeface.NORMAL) } catch (_: Throwable) { Typeface.DEFAULT }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
-        typeface = try { Typeface.create("sans-serif-medium", Typeface.NORMAL) } catch (_: Throwable) { Typeface.DEFAULT }
+        typeface = plainFace
     }
 
     init { isClickable = false; isFocusable = false }
@@ -1251,7 +1271,7 @@ class PopupOverlay(ctx: Context) : View(ctx) {
         fill.shader = null
         line.shader = null
         line.strokeWidth = density
-        line.color = if (t.neon != 0) ColorMath.withAlpha(t.neon, 0xE0) else ColorMath.withAlpha(t.accent, 0x70)
+        line.color = if (t.neon != 0) ColorMath.withAlpha(t.neon, 0xE0) else if (t.onPopup != 0) ColorMath.withAlpha(t.onPopup, 0x66) else ColorMath.withAlpha(t.accent, 0x70)
         c.drawRoundRect(r, radius, radius, line)
         if (t.neon != 0) {
             line.strokeWidth = dp(4f)
@@ -1275,12 +1295,14 @@ class PopupOverlay(ctx: Context) : View(ctx) {
             c.save()
             c.scale(sc, sc, p.rect.centerX(), p.rect.bottom)      // grows out of the key
             bubble(c, p.rect, dp(14f), t)
-            text.color = t.text
-            text.textSize = dp(31f)
+            text.color = if (t.onPopup != 0) t.onPopup else t.text
+            text.textSize = dp(31f) * (if (p.face != null) p.scale else 1f)
+            if (p.face != null) text.typeface = p.face
             if (t.neon != 0) text.setShadowLayer(dp(7f), 0f, 0f, ColorMath.withAlpha(t.neon, 0xF0))
             val fm = text.fontMetrics
             c.drawText(p.text, p.rect.centerX(), p.rect.centerY() - (fm.ascent + fm.descent) / 2f, text)
             text.clearShadowLayer()
+            text.typeface = plainFace
             c.restore()
         }
         alt?.let { a ->
@@ -1293,7 +1315,7 @@ class PopupOverlay(ctx: Context) : View(ctx) {
                     c.drawRoundRect(l + dp(2f), a.rect.top + dp(5f), l + a.cellW - dp(2f), a.rect.bottom - dp(5f), dp(11f), dp(11f), fill)
                     fill.shader = null
                     text.color = t.onAccent
-                } else text.color = t.text
+                } else text.color = if (t.onPopup != 0) t.onPopup else t.text
                 text.textSize = dp(if (s.length > 2) 18f else 24f)
                 val fm = text.fontMetrics
                 c.drawText(s, l + a.cellW / 2, a.rect.centerY() - (fm.ascent + fm.descent) / 2f, text)

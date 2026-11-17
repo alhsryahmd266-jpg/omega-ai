@@ -29,7 +29,7 @@ data class KbTheme(
     val onBg: Int = text,              // text and icons drawn straight on the background (suggestion strip, panels)
     val onBgSub: Int = textSub,
     val onFn: Int = text,              // icons and labels on function keys
-    val bgStyle: Int = 0,              // 0 flat, 1 gradient, 2 aurora
+    val bgStyle: Int = 0,              // 0 flat, 1 gradient, 2 aurora, 3 picture ([scene])
     val aurora: List<Int> = emptyList(),
     val glass: Boolean = false,        // see-through keys: no shadow, a bright rim and a stronger sheen
     val rim: Int = 0x26FFFFFF,         // light edge along the top of every key
@@ -45,6 +45,10 @@ data class KbTheme(
     val capBottom: Int = 0,
     val spot: Int = 0,                 // soft light at the top of the background
     val hair: Int = 0,                 // thin line at the very top of the keyboard
+    // picture themes: [scene] is painted behind everything when [bgStyle] is 3 ("photo" is the user's own picture)
+    val scene: String = "",
+    val corner: Int = 1,               // how round the keys are: an index of [Themes.CORNER_DP]
+    val onPopup: Int = 0,              // letters inside the key-preview bubble (0: the letter colour)
 ) {
     /** the luxe look needs solid keys: glass and glowing themes keep their own */
     val fancy: Boolean get() = luxe && !glass && neon == 0
@@ -72,10 +76,22 @@ data class KbTheme(
 }
 
 object Themes {
+    /** how round the keys are, in dp: sharp, soft square (the default, like Gboard), rounded, and fully round */
+    val CORNER_DP = floatArrayOf(3f, 6f, 10f, 99f)
+    val SHAPE_NAMES = listOf("حاد", "مربع ناعم", "مدوّر", "دائري")
+
     val choices = listOf(
         "auto" to "تلقائي (أسود فخم بالليل · لؤلؤي بالنهار)",
         "luxe" to "أسود فخم (ذهبي)",
         "pearl" to "لؤلؤي (ذهبي)",
+        "beach" to "شاطئ الغروب",
+        "deep" to "أعماق البحر",
+        "paint" to "ألوان سائلة",
+        "galaxy" to "مجرة",
+        "synth" to "ريترو نيون",
+        "photo" to "صورتي من المعرض",
+        "classic" to "كلاسيك (أزرار رمادي فاتح)",
+        "gboard" to "جوجل (أبيض ومفاتيح غامقة)",
         "light" to "فاتح",
         "dark" to "داكن",
         "amoled" to "أسود (AMOLED)",
@@ -91,6 +107,8 @@ object Themes {
 
     /** short names under the cards of the theme picker */
     val cardNames = mapOf(
+        "beach" to "شاطئ", "deep" to "أعماق", "paint" to "ألوان", "galaxy" to "مجرة", "synth" to "ريترو", "photo" to "صورتي",
+        "classic" to "كلاسيك", "gboard" to "جوجل",
         "auto" to "تلقائي", "luxe" to "أسود فخم", "pearl" to "لؤلؤي", "light" to "فاتح", "dark" to "داكن", "amoled" to "أسود",
         "ocean" to "المحيط", "sunset" to "الغروب", "aurora" to "أورورا", "neon" to "نيون", "rose" to "وردي", "forest" to "غابة",
         "mint" to "نعناع", "system" to "النظام",
@@ -148,6 +166,45 @@ object Themes {
     val MINT = KbTheme("mint", false, c("#DDF3EE"), c("#FFFFFF"), c("#B6DDD3"), c("#9CCFC2"), c("#0D2B26"), c("#5B8780"),
         c("#00897B"), c("#FFFFFF"), c("#FFFFFF"), c("#BBDDD5"), c("#26000000"), bg2 = c("#C9EAE2"), bgStyle = 1, rim = c("#B3FFFFFF"))
 
+    // ------------------------------------------------------------------ picture themes
+
+    /**
+     * The look of a picture theme, like the photo themes of phone keyboards: a picture behind everything, light see-through keys with
+     * coloured letters, a vivid bubble over the key that is pressed. [bg] and [bg2] show while the picture is being made.
+     */
+    private fun picture(
+        id: String, scene: String, bg: String, bg2: String, ink: String, accent: String, onAccent: String, popup: String, keyA: Int,
+    ): KbTheme {
+        val white = 0xFFFFFFFF.toInt()
+        val inkC = c(ink)
+        return KbTheme(
+            id, true, c(bg), ColorMath.withAlpha(white, keyA), ColorMath.withAlpha(white, keyA * 2 / 3), ColorMath.withAlpha(white, 0xE0),
+            inkC, ColorMath.withAlpha(inkC, 0xB0), c(accent), c(onAccent), c(popup), ColorMath.withAlpha(white, 0x33), 0,
+            bg2 = c(bg2), onBg = white, onBgSub = ColorMath.withAlpha(white, 0xBB), onFn = inkC,
+            bgStyle = 3, glass = true, rim = ColorMath.withAlpha(white, 0xD8), scene = scene, onPopup = white,
+        )
+    }
+
+    val BEACH = picture("beach", "beach", "#3F1F78", "#0B0824", "#4A1F7A", "#FFB347", "#3A1A00", "#FF8A1F", 0x9E)
+    val DEEP = picture("deep", "deep", "#0A5A7E", "#021A2E", "#0A3F5C", "#22D3EE", "#00323F", "#0FA3C4", 0x99)
+    val PAINT = picture("paint", "paint", "#3B1B6B", "#150A26", "#5B2BC0", "#FF4F9A", "#FFFFFF", "#8B3DFF", 0xB8)
+    val GALAXY = picture("galaxy", "galaxy", "#1C0C3E", "#04020C", "#3B1D8A", "#8B5CF6", "#FFFFFF", "#7C4DFF", 0xB2)
+    val SYNTH = picture("synth", "synth", "#37106A", "#070114", "#7A1A6E", "#FF3FB5", "#FFFFFF", "#FF2F9E", 0xA8)
+
+    /** the user's own picture from the gallery (a galaxy until one is chosen) */
+    val PHOTO = picture("photo", "photo", "#1A1A2E", "#0E0E1A", "#3B1D8A", "#FF9F43", "#3A1A00", "#8B3DFF", 0xB0)
+
+    /** a picture theme is painted by [SceneDrawable]; a photo is darkened a little so the strip's text stays readable */
+    const val PHOTO_SCRIM = 0x3A
+
+    /** flat, light and quiet: white page, light grey keys with a soft shadow, an orange bubble over the pressed key */
+    val CLASSIC = KbTheme("classic", false, c("#FAFBFC"), c("#EDEFF2"), c("#E1E4E9"), c("#CDD2DA"), c("#262A36"), c("#8A90A0"),
+        c("#7C4DFF"), c("#FFFFFF"), c("#FF8F1F"), c("#E3E6EB"), c("#22000000"), bg2 = c("#F1F3F6"), rim = c("#99FFFFFF"), onPopup = 0xFFFFFFFF.toInt())
+
+    /** Gboard's light look: grey page, white keys, dark function keys */
+    val GBOARD = KbTheme("gboard", false, c("#E8EAED"), c("#FFFFFF"), c("#3C4043"), c("#C8CCD2"), c("#1F2125"), c("#6B7078"),
+        c("#1A73E8"), c("#FFFFFF"), c("#FFFFFF"), c("#D5D8DE"), c("#2E000000"), bg2 = c("#DDE0E4"), onFn = c("#FFFFFF"), rim = c("#99FFFFFF"))
+
     fun isNight(ctx: Context): Boolean =
         (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
@@ -155,6 +212,14 @@ object Themes {
     fun base(ctx: Context, id: String): KbTheme = when (canon(id)) {
         "luxe" -> LUXE
         "pearl" -> PEARL
+        "beach" -> BEACH
+        "deep" -> DEEP
+        "paint" -> PAINT
+        "galaxy" -> GALAXY
+        "synth" -> SYNTH
+        "photo" -> PHOTO
+        "classic" -> CLASSIC
+        "gboard" -> GBOARD
         "light" -> LIGHT
         "dark" -> DARK
         "amoled" -> AMOLED
@@ -220,9 +285,11 @@ object Themes {
                 dark = !ColorMath.isLight(b),
                 aurora = if (t.bgStyle == 2) auroraFor(b, t.accent) else t.aurora,
                 spot = 0,                                   // the soft gold light only suits the theme's own background
+                bgStyle = if (t.bgStyle == 3) 1 else t.bgStyle,      // a colour of one's own replaces a picture
             )
         }
         if (p.bgStyle in 0..2) t = withStyle(t, p.bgStyle)
+        if (p.keyShape in 0 until CORNER_DP.size) t = t.copy(corner = p.keyShape)
 
         // solid or glass keys
         val wantGlass = if (p.glassKeys >= 0) p.glassKeys == 1 else t.glass

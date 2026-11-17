@@ -20,11 +20,25 @@ object Decor {
         Style("tashkeel", "تشكيل", Kind.ARABIC, true),
         Style("letters", "حروف مزخرفة", Kind.ARABIC, true),
         Style("kashida", "مطّ", Kind.ARABIC, true),
+        Style("longkash", "مطّ طويل", Kind.ARABIC, true),
+        Style("quran", "علامات المصحف", Kind.ARABIC, true),
+        Style("supalef", "ألف صغيرة", Kind.ARABIC, true),
+        Style("shadda", "شدّة", Kind.ARABIC, true),
+        Style("tanween", "تنوين", Kind.ARABIC, true),
         // frames round the whole text
         Style("brackets", "أقواس", Kind.FRAME, false, "﴿ ", " ﴾"),
         Style("crown", "تاج", Kind.FRAME, false, "꧁༺ ", " ༻꧂"),
         Style("hearts", "قلوب", Kind.FRAME, false, "♥ ", " ♥"),
         Style("wave", "موجة", Kind.FRAME, false, "ﮩ٨ـﮩﮩ٨ـ♡ ", " ♡ـﮩ٨ـﮩﮩ٨ـ"),
+        Style("stars", "نجوم", Kind.FRAME, false, "✦ ", " ✦"),
+        Style("flowers", "زهور", Kind.FRAME, false, "✿ ", " ✿"),
+        Style("sparkle", "لمعة", Kind.FRAME, false, "✨ ", " ✨"),
+        Style("quote", "اقتباس", Kind.FRAME, false, "❝ ", " ❞"),
+        Style("lens", "أقواس مربعة", Kind.FRAME, false, "【 ", " 】"),
+        Style("moon", "هلال", Kind.FRAME, false, "☪ ", " ☪"),
+        Style("arrows", "أسهم", Kind.FRAME, false, "«« ", " »»"),
+        Style("lines", "خطوط", Kind.FRAME, false, "━━ ", " ━━"),
+        Style("ornament", "زينة", Kind.FRAME, false, "•°¯`•• ", " ••´¯°•"),
         // English letters in fancy fonts
         Style("script", "Script", Kind.LATIN, true),
         Style("gothic", "Gothic", Kind.LATIN, true),
@@ -32,7 +46,34 @@ object Decor {
         Style("bubble", "Bubble", Kind.LATIN, true),
         Style("wide", "Wide", Kind.LATIN, true),
         Style("smallcaps", "Small caps", Kind.LATIN, true),
+        Style("bold", "Bold", Kind.LATIN, true),
+        Style("italic", "Italic", Kind.LATIN, true),
+        Style("bolditalic", "Bold Italic", Kind.LATIN, true),
+        Style("cursive", "Cursive", Kind.LATIN, true),
+        Style("fraktur", "Fraktur", Kind.LATIN, true),
+        Style("sans", "Sans", Kind.LATIN, true),
+        Style("sansbold", "Sans Bold", Kind.LATIN, true),
+        Style("sansitalic", "Sans Italic", Kind.LATIN, true),
+        Style("sansbolditalic", "Sans Bold Italic", Kind.LATIN, true),
+        Style("mono", "Mono", Kind.LATIN, true),
+        Style("squares", "Squares", Kind.LATIN, true),
+        Style("blacksquares", "Black Squares", Kind.LATIN, true),
+        Style("blackcircles", "Black Circles", Kind.LATIN, true),
+        Style("parens", "Parentheses", Kind.LATIN, true),
+        Style("superscript", "Superscript", Kind.LATIN, true),
+        Style("strike", "Strike", Kind.LATIN, true),
+        Style("underline", "Underline", Kind.LATIN, true),
+        Style("dunder", "Double Underline", Kind.LATIN, true),
+        Style("slash", "Slash", Kind.LATIN, true),
+        Style("tilde", "Tilde", Kind.LATIN, true),
     )
+
+    /** looks that keep the plain letter and put a combining mark after it (strike, underline...) */
+    private val COMBINING: Map<String, Char> = mapOf(
+        "strike" to '\u0336', "underline" to '\u0332', "dunder" to '\u0333', "slash" to '\u0338', "tilde" to '\u0334',
+    )
+
+    private fun isAlnum(cp: Int): Boolean = cp in 'A'.code..'Z'.code || cp in 'a'.code..'z'.code || cp in '0'.code..'9'.code
 
     fun byId(id: String): Style? = styles.firstOrNull { it.id == id }
 
@@ -60,7 +101,7 @@ object Decor {
 
     fun isMark(c: Char): Boolean =
         c in 'ً'..'ٟ' || c == 'ٰ' || c in 'ۖ'..'ۜ' || c in '۟'..'ۤ' ||
-            c == 'ۧ' || c == 'ۨ' || c in '۪'..'ۭ'
+            c == 'ۧ' || c == 'ۨ' || c in '۪'..'ۭ' || c in '\u0300'..'\u036F'
 
     /** letters that do not join the letter after them: no stretch bar goes behind them */
     private const val NO_JOIN_NEXT = "ءآأؤإادذرزوةىﮯٱ"
@@ -79,6 +120,19 @@ object Decor {
     private fun takesMarks(c: Char): Boolean = c != 'ا' && c != 'آ' && c != 'ٱ' && c != YEH_BARREE
 
     private fun royalMarks(c: Char, n: Int): String = ROYAL[Math.floorMod(c.code * 7 + n * 5 + n / 3, ROYAL.size)]
+
+    /** the small signs of the Qur'an's text (they sit above a letter) and the three tanween */
+    private const val QURAN = "\u06D6\u06D7\u06D8\u06D9\u06DA\u06DB\u06DC"
+    private const val TANWEEN = "\u064B\u064C\u064D"
+
+    /** the marks the newer Arabic looks put after a letter (null for a look that has none) */
+    private fun extraMarks(id: String, c: Char, n: Int): String? = when (id) {
+        "quran" -> QURAN[Math.floorMod(c.code + n * 3, QURAN.length)].toString()
+        "supalef" -> "\u0670"
+        "shadda" -> "\u0651" + FATHA
+        "tanween" -> TANWEEN[Math.floorMod(c.code + n, TANWEEN.length)].toString()
+        else -> null
+    }
 
     // ------------------------------------------------------------------ English letters in other fonts
 
@@ -106,9 +160,45 @@ object Decor {
             "bubble" -> if (up) 0x24B6 + u else if (lo) 0x24D0 + l else if (d == 0) 0x24EA else 0x2460 + d - 1
             "wide" -> if (up) 0xFF21 + u else if (lo) 0xFF41 + l else 0xFF10 + d
             "smallcaps" -> if (up) SMALL_CAPS[u].code else if (lo) SMALL_CAPS[l].code else cp
+            "bold" -> if (up) 0x1D400 + u else if (lo) 0x1D41A + l else 0x1D7CE + d
+            "italic" -> if (up) 0x1D434 + u else if (lo) (if (cp == 'h'.code) 0x210E else 0x1D44E + l) else cp
+            "bolditalic" -> if (up) 0x1D468 + u else if (lo) 0x1D482 + l else 0x1D7CE + d
+            "cursive" -> when {
+                up -> when (cp.toChar()) {
+                    'B' -> 0x212C; 'E' -> 0x2130; 'F' -> 0x2131; 'H' -> 0x210B; 'I' -> 0x2110; 'L' -> 0x2112; 'M' -> 0x2133; 'R' -> 0x211B
+                    else -> 0x1D49C + u
+                }
+                lo -> when (cp.toChar()) {
+                    'e' -> 0x212F; 'g' -> 0x210A; 'o' -> 0x2134
+                    else -> 0x1D4B6 + l
+                }
+                else -> cp
+            }
+            "fraktur" -> when {
+                up -> when (cp.toChar()) {
+                    'C' -> 0x212D; 'H' -> 0x210C; 'I' -> 0x2111; 'R' -> 0x211C; 'Z' -> 0x2128
+                    else -> 0x1D504 + u
+                }
+                lo -> 0x1D51E + l
+                else -> cp
+            }
+            "sans" -> if (up) 0x1D5A0 + u else if (lo) 0x1D5BA + l else 0x1D7E2 + d
+            "sansbold" -> if (up) 0x1D5D4 + u else if (lo) 0x1D5EE + l else 0x1D7EC + d
+            "sansitalic" -> if (up) 0x1D608 + u else if (lo) 0x1D622 + l else cp
+            "sansbolditalic" -> if (up) 0x1D63C + u else if (lo) 0x1D656 + l else 0x1D7EC + d
+            "mono" -> if (up) 0x1D670 + u else if (lo) 0x1D68A + l else 0x1D7F6 + d
+            "squares" -> if (up) 0x1F130 + u else if (lo) 0x1F130 + l else cp
+            "blacksquares" -> if (up) 0x1F170 + u else if (lo) 0x1F170 + l else cp
+            "blackcircles" -> if (up) 0x1F150 + u else if (lo) 0x1F150 + l else if (d == 0) 0x24FF else 0x2775 + d
+            "parens" -> if (up) 0x1F110 + u else if (lo) 0x249C + l else if (d == 0) cp else 0x2473 + d
+            "superscript" -> if (up) SUPER_UP[u].code else if (lo) SUPER_LO[l].code else SUPER_DIGITS[d].code
             else -> cp
         }
     }
+
+    private const val SUPER_LO = "ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖqʳˢᵗᵘᵛʷˣʸᶻ"
+    private const val SUPER_UP = "ᴬᴮᶜᴰᴱᶠᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾQᴿˢᵀᵁⱽᵂˣʸᶻ"
+    private const val SUPER_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
 
     /** every fancy English letter back to the plain one */
     private val latinBack: Map<Int, Int> by lazy {
@@ -125,6 +215,8 @@ object Decor {
             if (x != cp) m[x] = cp
         }
         m.remove('x'.code)           // the small cap x is the plain x
+        // superscript: the few capitals that have no raised form of their own share the lower case one
+        m.remove('Q'.code); m.remove('q'.code)
         m
     }
 
@@ -170,6 +262,10 @@ object Decor {
         return sb.toString()
     }
 
+    /** the text without the combining marks of the strike / underline looks */
+    private fun stripCombining(text: String): String =
+        if (text.none { it in '\u0300'..'\u036F' }) text else text.filter { it !in '\u0300'..'\u036F' }
+
     private fun unLatin(text: String): String {
         var any = false
         var i = 0
@@ -211,12 +307,14 @@ object Decor {
         val body = when (style.kind) {
             Kind.ARABIC -> arabic(style.id, unArabic(base))
             Kind.LATIN -> {
-                val src = unLatin(base)
+                val src = unLatin(stripCombining(base))
                 val sb = StringBuilder(src.length * 2)
+                val mark = COMBINING[style.id]
                 var i = 0
                 while (i < src.length) {
                     val cp = src.codePointAt(i)
                     sb.appendCodePoint(latin(style.id, cp))
+                    if (mark != null && isAlnum(cp)) sb.append(mark)
                     i += Character.charCount(cp)
                 }
                 sb.toString()
@@ -249,11 +347,14 @@ object Decor {
                     if (takesMarks(c)) sb.append(if (atEnd) SUKUN else PLAIN_MARKS[Math.floorMod(c.code + n++, PLAIN_MARKS.size)])
                 }
                 "letters" -> sb.append(variant(c))
-                "kashida" -> {
+                "kashida", "longkash" -> {
                     sb.append(c)
-                    if (!atEnd && joinsNext(c) && next != 'ء') sb.append(TATWEEL).append(TATWEEL)
+                    if (!atEnd && joinsNext(c) && next != 'ء') repeat(if (id == "longkash") 4 else 2) { sb.append(TATWEEL) }
                 }
-                else -> sb.append(c)
+                else -> {
+                    sb.append(c)
+                    if (takesMarks(c)) extraMarks(id, c, n)?.let { sb.append(it); n++ }
+                }
             }
         }
         if (id == "royal" && base.isNotBlank()) sb.append(ROYAL_END)
@@ -277,6 +378,8 @@ object Decor {
             val len = Character.charCount(cp)
             if (style.kind == Kind.LATIN) {
                 sb.appendCodePoint(latin(style.id, cp))
+                val mark = COMBINING[style.id]
+                if (mark != null && isAlnum(cp)) sb.append(mark)
             } else {
                 val c = text[i]
                 if (len == 1 && isLetter(c)) {
@@ -285,8 +388,11 @@ object Decor {
                         "double" -> { sb.append(c); if (takesMarks(c)) { val m = if (count++ % 5 == 4) KASRA else FATHA; sb.append(m).append(m) } }
                         "tashkeel" -> { sb.append(c); if (takesMarks(c)) sb.append(PLAIN_MARKS[Math.floorMod(c.code + count++, PLAIN_MARKS.size)]) }
                         "letters" -> sb.append(variant(c))
-                        "kashida" -> { if (joinsNext(prev) && c != 'ء') sb.append(TATWEEL).append(TATWEEL); sb.append(c) }
-                        else -> sb.append(c)
+                        "kashida", "longkash" -> { if (joinsNext(prev) && c != 'ء') repeat(if (style.id == "longkash") 4 else 2) { sb.append(TATWEEL) }; sb.append(c) }
+                        else -> {
+                            sb.append(c)
+                            if (takesMarks(c)) extraMarks(style.id, c, count)?.let { sb.append(it); count++ }
+                        }
                     }
                 } else sb.appendCodePoint(cp)
             }

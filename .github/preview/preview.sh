@@ -158,6 +158,106 @@ bar   kb-bar-dark-en   s:theme=dark s:last_lang=en
 bar   kb-bar-aurora-ar s:theme=aurora s:last_lang=ar
 bar   kb-bar-neon-en   s:theme=neon s:last_lang=en
 
+# --- like typed, and the text the box holds goes to the log too (a look changes what is typed)
+typedsay() {
+  local name="$1" text="$2"; shift 2
+  scenario "$name" "$@"; focus
+  $KB type "$text" 2>&1 | tee -a "$LOG"
+  sleep 1.2
+  shot "$name"
+  say "$name text: [$($KB text 2>/dev/null)]"
+}
+
+# --- the picture themes (a scene behind light, translucent keys with coloured letters), the flat looks of the popular keyboards, and the key shapes
+for t in beach deep paint galaxy synth photo classic gboard; do
+  look  "kb-$t-en" "s:theme=$t" s:last_lang=en
+  typed "kb-$t-typed-ar" "اهلا بيك يا صديقي" "s:theme=$t" s:last_lang=ar
+done
+typed kb-beach-typed-en "Hello world" s:theme=beach s:last_lang=en
+typed kb-deep-sugg-ar "مر" s:theme=deep s:last_lang=ar b:toolbar_open=false
+typed kb-gboard-sugg-en "hel" s:theme=gboard s:last_lang=en b:toolbar_open=false
+for n in 0 2 3; do look "kb-shape-$n" s:theme=classic s:last_lang=en "i:key_shape=$n"; done
+look kb-shape-3-beach s:theme=beach s:last_lang=ar i:key_shape=3
+look kb-shape-0-gboard s:theme=gboard s:last_lang=ar i:key_shape=0
+# the user's own picture: a busy sunset (made by mkphoto.py) kept where the look reads it, the keys must stay readable over it
+python3 "$HERE/mkphoto.py" "$RUNNER_TEMP/photo.png"
+adb push "$RUNNER_TEMP/photo.png" /data/local/tmp/bg_photo.jpg > /dev/null
+adb shell chmod 644 /data/local/tmp/bg_photo.jpg
+adb shell "run-as $PKG sh -c 'mkdir -p files && cp /data/local/tmp/bg_photo.jpg files/bg_photo.jpg'" 2>&1 | tee -a "$LOG"
+look  kb-photo-own-en s:theme=photo s:last_lang=en i:bg_photo_rev=1
+typed kb-photo-own-ar "مرحبا بكم" s:theme=photo s:last_lang=ar i:bg_photo_rev=1
+adb shell "run-as $PKG rm -f files/bg_photo.jpg"
+# the key bubble of the picture themes (vivid, with white letters) and of the flat ones
+scenario kb-popup-beach s:theme=beach s:last_lang=en
+focus
+held kb-popup-beach g
+scenario kb-popup-classic s:theme=classic s:last_lang=ar
+focus
+held kb-popup-classic ي
+scenario kb-popup-gboard s:theme=gboard s:last_lang=en
+focus
+held kb-popup-gboard e
+# the panels over a picture theme
+scenario kb-emoji-beach s:theme=beach s:last_lang=en
+focus
+$KB key EMOJI 2>&1 | tee -a "$LOG"; sleep 2; shot kb-emoji-beach
+scenario kb-symbols-deep s:theme=deep s:last_lang=ar
+focus
+$KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-deep
+scenario kb-clip-paint s:theme=paint s:last_lang=en
+focus
+$KB tool clip 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-clip-paint
+scenario kb-livetr-galaxy s:theme=galaxy s:last_lang=en s:typed_target=ar s:typed_source=auto
+focus
+$KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-livetr-galaxy
+
+# --- the bar of looks and the real Arabic fonts: the bar comes up while a look is on; the keys, the key bubble and the typing box draw in the font
+typedsay kb-font-ruqaa "اهلا بيك يا صديقي" s:theme=classic s:last_lang=ar s:ar_font=ruqaa
+typedsay kb-font-naskh "بسم الله الرحمن الرحيم" s:theme=beach s:last_lang=ar s:ar_font=amiri
+typedsay kb-font-kufi "مرحبا بكم" s:theme=gboard s:last_lang=ar s:ar_font=reemkufi
+typedsay kb-font-nastaliq "السلام عليكم" s:theme=luxe s:last_lang=ar s:ar_font=nastaliq
+typedsay kb-font-rakkas "اهلا وسهلا" s:theme=deep s:last_lang=ar s:ar_font=rakkas
+# the English looks of the same bar: what is typed comes out in the look, the keys show it too
+typedsay kb-look-script "Hello Omega" s:theme=beach s:last_lang=en b:decor_live=true s:decor_style=script
+typedsay kb-look-gothic "Good morning" s:theme=galaxy s:last_lang=en b:decor_live=true s:decor_style=gothic
+typedsay kb-look-bubble "Hello Omega" s:theme=gboard s:last_lang=en b:decor_live=true s:decor_style=bubble
+typedsay kb-look-royal "عرفك يا صديقي" s:theme=classic s:last_lang=ar b:decor_live=true s:decor_style=royal
+# tapping the chips: a real font, another font, an Arabic look (typed letters are decorated), back to normal (the bar goes away)
+scenario kb-fontbar s:theme=classic s:last_lang=ar s:ar_font=ruqaa
+focus
+$KB type "كيف حالك" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-fontbar-1
+$KB chip f:katibeh 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-fontbar-2
+$KB chip d:royal 2>&1 | tee -a "$LOG"; sleep 1.5
+$KB type "عرفك" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-fontbar-3
+say "fontbar after the royal look: [$($KB text 2>/dev/null)]"
+$KB chip normal 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-fontbar-4
+$KB type "ميم" 2>&1 | tee -a "$LOG"; sleep 1; say "fontbar back to normal: [$($KB text 2>/dev/null)]"
+# the English side: one look, a second one from the bar, a look with a mark under the letters
+scenario kb-fontbar-en s:theme=beach s:last_lang=en b:decor_live=true s:decor_style=bold
+focus
+$KB type "Hello" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-fontbar-en-1
+$KB chip d:script 2>&1 | tee -a "$LOG"; sleep 1.5
+$KB type " friend" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-fontbar-en-2
+say "fontbar english script: [$($KB text 2>/dev/null)]"
+$KB chip d:underline 2>&1 | tee -a "$LOG"; sleep 1.5
+$KB type " ok" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-fontbar-en-3
+say "fontbar english underline: [$($KB text 2>/dev/null)]"
+# the full list from the "Aa" chip is the decoration panel: the real fonts are in it too (scrolled to), a font is picked, back to the keys
+scenario kb-decor-fonts s:theme=classic s:last_lang=ar
+focus
+$KB type "اهلا بيك" 2>&1 | tee -a "$LOG"; sleep 1.2
+$KB tool decor 2>&1 | tee -a "$LOG"; sleep 1.8
+shot kb-decor-fonts-1
+$KB panel f:ruqaa 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-decor-fonts-2
+$KB panel close 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-decor-fonts-3
+scenario kb-decor-beach s:theme=beach s:last_lang=ar
+focus
+$KB type "اهلا بيك" 2>&1 | tee -a "$LOG"; sleep 1.2
+$KB tool decor 2>&1 | tee -a "$LOG"; sleep 1.8
+shot kb-decor-beach
+
 # --- the appearance sheet: colours, background colour (two switches), themes, size and effects
 scenario sheet s:theme=aurora s:last_lang=en
 focus
@@ -168,6 +268,21 @@ $KB tab 1 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-themes
 $KB tab 2 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-size
 $KB tab 0 2>&1 | tee -a "$LOG"; sleep 0.8
 $KB target 3 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-bg
+
+# --- the themes page with the new cards: the shape chips, the picture buttons; a card is tapped and the keyboard takes the theme at once
+scenario sheet-pics s:theme=luxe s:last_lang=ar
+focus
+$KB tool theme 2>&1 | tee -a "$LOG"
+sleep 2
+$KB tab 1 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-pics-1
+$KB card deep 2>&1 | tee -a "$LOG"; sleep 3; shot sheet-pics-2
+$KB card gboard 2>&1 | tee -a "$LOG"; sleep 2.5; shot sheet-pics-3
+$KB card beach 2>&1 | tee -a "$LOG"; sleep 3; shot sheet-pics-4
+scenario sheet-beach s:theme=beach s:last_lang=en
+focus
+$KB tool theme 2>&1 | tee -a "$LOG"
+sleep 2
+shot sheet-beach
 
 # --- the luxe look in the sheet and the panels
 scenario sheet-luxe s:theme=luxe s:last_lang=ar
@@ -370,6 +485,10 @@ $KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5
 shot kb-land-translate
 $KB strip tr:back 2>&1 | tee -a "$LOG"; sleep 1.2
 $KB tool theme 2>&1 | tee -a "$LOG"; sleep 2; shot kb-land-sheet
+scenario kb-land-beach s:theme=beach s:last_lang=en
+sleep 3
+focus
+shot kb-land-beach
 adb shell settings put system user_rotation 0
 
 adb logcat -d -b crash > "$OUT/logcat-crash.txt" 2>&1

@@ -25,7 +25,7 @@ private fun pill(color: Int, radiusDp: Float, ctx: Context) = GradientDrawable()
 abstract class ListPanel(ctx: Context) : LinearLayout(ctx) {
     protected val list = LinearLayout(ctx).apply { orientation = VERTICAL }
     private val title = TextView(ctx)
-    private val closeBtn = TextView(ctx)
+    protected val closeBtn = TextView(ctx)
     var onClose: (() -> Unit)? = null
     var theme: KbTheme = Themes.LIGHT
         set(v) { field = v; restyle() }
@@ -167,6 +167,7 @@ class AiPanel(ctx: Context) : ListPanel(ctx) {
  */
 class DecorPanel(ctx: Context) : ListPanel(ctx) {
     var onPick: ((String) -> Unit)? = null
+    var onFont: ((String) -> Unit)? = null
     var onLive: ((Boolean) -> Unit)? = null
     var onUndo: (() -> Unit)? = null
 
@@ -226,7 +227,7 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
     }
 
     /** [field]: what is written in the box (the previews use it), [selected]: the look the box has now, "" = none */
-    fun show(field: String, selected: String, live: Boolean, canUndo: Boolean) {
+    fun show(field: String, selected: String, live: Boolean, canUndo: Boolean, font: String = "") {
         setTitle("زخرفة النص")
         this.live = live
         this.canUndo = canUndo
@@ -241,11 +242,29 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
             setPadding(context.dpi(16f), context.dpi(8f), context.dpi(16f), context.dpi(2f))
         })
         var last: Decor.Kind? = null
+        var fontsDone = false
+        // the real Arabic fonts come after the Arabic decorations, before the frames
+        fun fonts() {
+            fontsDone = true
+            section("خطوط عربية حقيقية: رقعة ونسخ وكوفي ونستعليق… (بتظهر على الكيبورد بس)")
+            val arabicSample = Decor.sampleFor(Decor.byId("royal"), field).let { if (it.any { c -> Decor.isLetter(c) }) it else "لا يسيء الظن بك" }
+            for (f in FontLib.fonts) {
+                val v = row(arabicSample, f.label + "  ·  " + f.about, selected = f.id == font) { onFont?.invoke(f.id) }
+                ((v as LinearLayout).getChildAt(0) as TextView).apply {
+                    textSize = 20f
+                    setLineSpacing(0f, 1.15f)
+                    FontLib.face(context, f.id)?.let { typeface = it }
+                }
+                list.addView(v)
+                rows.add("f:" + f.id to v)
+            }
+        }
         for (st in Decor.styles) {
             if (st.kind != last) {
+                if (st.kind != Decor.Kind.ARABIC && !fontsDone) fonts()
                 last = st.kind
                 section(when (st.kind) {
-                    Decor.Kind.ARABIC -> "عربي: حركات وحروف مزخرفة"
+                    Decor.Kind.ARABIC -> "عربي: حركات وحروف مزخرفة (بتوصل نص حقيقي)"
                     Decor.Kind.FRAME -> "إطار حوالين الكلام"
                     Decor.Kind.LATIN -> "إنجليزي: خطوط مزخرفة"
                 })
@@ -257,7 +276,8 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
             rows.add(st.id to v)
         }
         list.addView(TextView(context).apply {
-            text = "الزخرفة نص حقيقي (مش صورة): بتوصل زي ما هي في واتساب وتليجرام والألعاب وأي مكان."
+            text = "الزخرفة نص حقيقي (مش صورة): بتوصل زي ما هي في أغلب التطبيقات، بس شكل بعض الرموز بيعتمد على خط تليفون اللي بيستقبل.\n" +
+                "الخطوط العربية الحقيقية بتظهر على الكيبورد وفي معاينة الكتابة بس: التطبيق اللي بيستلم الرسالة بيعرضها بخطه هو."
             textSize = 12f
             setTextColor(theme.onBgSub)
             setPadding(context.dpi(16f), context.dpi(10f), context.dpi(16f), context.dpi(12f))
@@ -278,6 +298,10 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
             val x = r.centerX() + onScreen[0] - inWindow[0]
             val y = r.centerY() + onScreen[1] - inWindow[1]
             sb.append("p:").append(tag).append('=').append(x).append(',').append(y).append(';')
+        }
+        if (closeBtn.isShown) {
+            closeBtn.getLocationOnScreen(onScreen)
+            sb.append("p:close=").append(onScreen[0] + closeBtn.width / 2).append(',').append(onScreen[1] + closeBtn.height / 2).append(';')
         }
         return sb.toString()
     }

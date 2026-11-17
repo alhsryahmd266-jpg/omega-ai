@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Helpers for preview.sh (emulator screenshots of the keyboard): prefs files, finding the text field, tapping keys, tools and
 sheet tabs by name. The keyboard (debug builds only) answers the broadcast com.omega.keyboard.DEBUG_DUMP by logging where its
-keys (OmegaKeys), strip buttons (OmegaStrip) and appearance-sheet tabs (OmegaSheet) are on the screen."""
+keys (OmegaKeys), strip buttons (OmegaStrip), appearance-sheet tabs and decoration-panel rows (OmegaSheet) and the chips of the bar
+of looks (OmegaFont) are on the screen."""
 import re
 import subprocess
 import sys
@@ -65,15 +66,19 @@ def find_edit():
     return None
 
 
+CHIPS = {}      # the chips of the bar of looks, from the last dump: "p:f:ruqaa" -> (x, y)
+
+
 def ask_dump():
-    """asks the keyboard where its keys, strip buttons and sheet tabs are; returns three {name: (x, y)} maps"""
+    """asks the keyboard where its keys, strip buttons and sheet tabs are; returns three {name: (x, y)} maps (the chips of the bar of looks
+    go to CHIPS)"""
     adb("logcat", "-c")
     adb("shell", "am", "broadcast", "-a", "com.omega.keyboard.DEBUG_DUMP", "-p", "com.omega.keyboard")
     time.sleep(1.0)
-    log = adb("logcat", "-d", "-v", "tag", "-s", "OmegaKeys:D", "OmegaStrip:D", "OmegaSheet:D").stdout
-    maps = {"OmegaKeys": {}, "OmegaStrip": {}, "OmegaSheet": {}}
+    log = adb("logcat", "-d", "-v", "tag", "-s", "OmegaKeys:D", "OmegaStrip:D", "OmegaSheet:D", "OmegaFont:D").stdout
+    maps = {"OmegaKeys": {}, "OmegaStrip": {}, "OmegaSheet": {}, "OmegaFont": {}}
     for line in log.splitlines():
-        m = re.match(r"^D/(OmegaKeys|OmegaStrip|OmegaSheet)\s*:\s*(.*)$", line.strip())
+        m = re.match(r"^D/(OmegaKeys|OmegaStrip|OmegaSheet|OmegaFont)\s*:\s*(.*)$", line.strip())
         if not m:
             continue
         target = maps[m.group(1)]
@@ -87,6 +92,8 @@ def ask_dump():
                 target[name] = (int(x), int(y))
             except ValueError:
                 pass
+    CHIPS.clear()
+    CHIPS.update(maps["OmegaFont"])
     return maps["OmegaKeys"], maps["OmegaStrip"], maps["OmegaSheet"]
 
 
@@ -236,23 +243,66 @@ def cmd_tab(index):
 
 
 def cmd_panel(name):
-    """taps a row or button of the panel that covers the keys (the decoration styles: p:<style>, p:undo, p:none, p:live).
+    """taps a row or button of the panel that covers the keys (the decoration styles: p:<style>, p:f:<font>, p:undo, p:none, p:live, p:close).
     A row that is not on the screen is looked for by scrolling the list: first towards its end, then back towards its start."""
-    fixed = ("p:live", "p:undo", "p:none")
+    fixed = ("p:live", "p:undo", "p:none", "p:close")
     for attempt in range(14):
         _k, _s, sheet = ask_dump()
         pos = sheet.get("p:" + name)
         if pos:
             adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
             return 0
-        rows = sorted((v for k, v in sheet.items() if k.startswith("p:") and k not in fixed), key=lambda v: v[1])
-        if rows:
-            x, y = rows[len(rows) // 2]
+        _w, h = screen_size()
+        # only rows that are really on the screen, in the part where the keyboard is, and clear of the bottom edge: a swipe that
+        # starts there is the phone's "go home" gesture, which is what a first version of this did
+        vis = sorted((v for k, v in sheet.items() if k.startswith("p:") and k not in fixed and 0.45 * h < v[1] < 0.86 * h), key=lambda v: v[1])
+        if vis:
+            x = vis[0][0]
+            top, bottom = vis[0][1], vis[-1][1]
+            if bottom - top < 150:
+                top, bottom = bottom - 260, bottom
             toward_end = attempt < 7
-            y0, y1 = (y + 120, y - 330) if toward_end else (y - 120, y + 330)
+            y0, y1 = (bottom, top) if toward_end else (top, bottom)
             adb("shell", "input", "swipe", str(x), str(y0), str(x), str(y1), "700")
         time.sleep(1.0)
     print(f"panel row {name} not found", file=sys.stderr)
+    return 1
+
+
+def cmd_chip(name):
+    """taps a chip of the bar of looks above the keys (normal, f:<font>, d:<look>); a chip that is out of sight is looked for by sliding the row"""
+    w, _h = screen_size()
+    for attempt in range(12):
+        ask_dump()
+        pos = CHIPS.get("p:" + name)
+        if pos:
+            adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+            return 0
+        if CHIPS:
+            y = sorted(v[1] for v in CHIPS.values())[0]
+            x0, x1 = (int(w * 0.78), int(w * 0.30)) if attempt < 6 else (int(w * 0.30), int(w * 0.78))
+            adb("shell", "input", "swipe", str(x0), str(y), str(x1), str(y), "500")
+        time.sleep(0.8)
+    print(f"chip {name} not found", file=sys.stderr)
+    return 1
+
+
+def cmd_card(theme_id):
+    """taps the card of a theme on the themes page of the appearance sheet; a card out of sight is looked for by sliding the row of cards"""
+    w, _h = screen_size()
+    for attempt in range(12):
+        _k, _s, sheet = ask_dump()
+        pos = sheet.get("card_" + theme_id)
+        if pos:
+            adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+            return 0
+        cards = [v for k, v in sheet.items() if k.startswith("card_")]
+        if cards:
+            y = cards[0][1]
+            x0, x1 = (int(w * 0.8), int(w * 0.2)) if attempt < 6 else (int(w * 0.2), int(w * 0.8))
+            adb("shell", "input", "swipe", str(x0), str(y), str(x1), str(y), "500")
+        time.sleep(0.8)
+    print(f"theme card {theme_id} not found", file=sys.stderr)
     return 1
 
 
@@ -326,6 +376,10 @@ def main(argv):
         return cmd_target(argv[2])
     if cmd == "panel":
         return cmd_panel(argv[2])
+    if cmd == "chip":
+        return cmd_chip(argv[2])
+    if cmd == "card":
+        return cmd_card(argv[2])
     if cmd == "drag":
         return cmd_drag(argv[2], argv[3], argv[4], argv[5] if len(argv) > 5 else "600")
     if cmd == "text":

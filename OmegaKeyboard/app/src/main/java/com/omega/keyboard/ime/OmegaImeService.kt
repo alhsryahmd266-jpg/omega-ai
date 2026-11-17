@@ -53,6 +53,7 @@ import com.omega.keyboard.core.Layouts
 import com.omega.keyboard.core.LlmPrompts
 import com.omega.keyboard.core.TextBox
 import com.omega.keyboard.core.TypedLang
+import com.omega.keyboard.ui.PhotoPickActivity
 import com.omega.keyboard.ui.SettingsActivity
 import com.omega.keyboard.voice.VoiceSession
 import org.json.JSONArray
@@ -75,6 +76,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
         /** a moment after the last key of the translate bar, the text is translated */
         private const val TR_DELAY = 320L
+        private const val TR_WAIT_AFTER = 2500L
+        private const val TR_WAIT = "بيجهّز الترجمة… أول مرة بيحمّل حزمة اللغة (محتاج نت)"
         private const val TR_HINT = "اكتب هنا وهتترجم لوحدها"
 
         private const val SEPARATORS = ".,!?;:)\"…،؛؟"
@@ -107,6 +110,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private var langPanel: LangPanel? = null
     private var aiPanel: AiPanel? = null
     private var decorPanel: DecorPanel? = null
+    private var fontBar: FontBar? = null             // the bar of looks above the keys while a look is on
+    private var fontChipsBuilt = false
+    private var fontNoteShown = false                // the short note that a real font only shows on the keyboard, said once a session
+    private var scene: SceneDrawable? = null         // the picture behind the keyboard in the picture themes
     private var decorLetters = 0                     // letters decorated so far while typing (so the marks vary from letter to letter)
     private var column: LinearLayout? = null
     private var appearance: AppearanceSheet? = null
@@ -161,6 +168,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private var trBusy = false
     private var trDetected: String? = null           // the language the automatic source found in the text
     private val trRunnable = Runnable { trTranslate(full = false, thenCommit = false) }
+    /** a translation is taking long (the first one downloads the language pack): the bar says so instead of only spinning */
+    private val trWait = Runnable {
+        if (translateBar && trBusy && trNote.isEmpty()) { trNote = TR_WAIT; trNoteWarn = false; trPush() }
+    }
     private var lastReplacement: Triple<String, String, Boolean>? = null   // original, new text, was it a selection
     private var voiceActive = false
     private var voiceText = ""
@@ -225,6 +236,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
                 if (bar != null && bar.visibility == View.VISIBLE) bar.dumpHits() else strip?.dumpHits()
                 appearance?.let { if (it.parent != null) it.dumpTabs() }
                 decorPanel?.let { if (it.parent != null) android.util.Log.d("OmegaSheet", it.rowsLine()) }
+                fontBar?.let { if (it.visibility == View.VISIBLE) android.util.Log.d("OmegaFont", it.chipsLine()) }
             }
         }
         val f = IntentFilter("com.omega.keyboard.DEBUG_DUMP")
@@ -265,6 +277,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val st = StripView(this).apply { listener = this@OmegaImeService; theme = this@OmegaImeService.theme }
         val tr = TranslateBar(this).apply { listener = this@OmegaImeService; theme = this@OmegaImeService.theme; visibility = View.GONE }
+        val fb = FontBar(this).apply { listener = fontBarListener; theme = this@OmegaImeService.theme; visibility = View.GONE }
         val ct = BaseFrame(this)
         val k = KeyboardView(this).apply {
             listener = this@OmegaImeService
@@ -273,6 +286,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         ct.addView(k, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(st, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(tr, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        column.addView(fb, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(ct, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         frame.addView(column, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val ov = PopupOverlay(this)
@@ -283,9 +297,11 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             v.setPadding(0, 0, 0, navInset(insets))
             insets
         }
-        root = frame; strip = st; trBar = tr; content = ct; kbd = k; overlay = ov; this.column = column
+        root = frame; strip = st; trBar = tr; content = ct; kbd = k; overlay = ov; this.column = column; fontBar = fb
         panel = null
         emojiPanel = null; clipPanel = null; langPanel = null; aiPanel = null; decorPanel = null
+        fontChipsBuilt = false
+        scene?.release(); scene = null
         appearance = null; appearanceBelow = false; aurora = null; bgSignature = emptyList()
         applyTheme()
         applyViewPrefs()
@@ -380,12 +396,16 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (r != null) {
             // the background (flat, gradient or the moving aurora) is painted once behind strip and keys; it is only
             // replaced when it really changed, so dragging a colour slider does not restart the animation
-            val sig = listOf(theme.bgStyle, theme.bg, theme.bg2, theme.spot, theme.hair) + theme.aurora
+            val sig = listOf(theme.bgStyle, theme.bg, theme.bg2, theme.spot, theme.hair, theme.scene.hashCode(),
+                if (theme.scene == "photo") prefs.bgPhotoRev else 0) + theme.aurora
             if (sig != bgSignature || r.background == null) {
                 bgSignature = sig
                 aurora?.stop()
                 aurora = null
+                scene?.release()
+                scene = null
                 r.background = when (theme.bgStyle) {
+                    3 -> pictureFor(theme).also { scene = it }
                     2 -> AuroraDrawable(theme.bg, theme.bg2, theme.aurora).also { aurora = it }
                     1 -> if (theme.spot != 0 || theme.hair != 0) LuxeBackground(theme.bg, theme.bg2, theme.spot, theme.hair)
                          else GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(theme.bg, theme.bg2))
@@ -395,6 +415,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         }
         strip?.theme = theme
         trBar?.theme = theme
+        fontBar?.theme = theme
         kbd?.theme = theme
         emojiPanel?.theme = theme
         clipPanel?.theme = theme
@@ -414,6 +435,11 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         } catch (_: Throwable) {
         }
     }
+
+    /** the picture behind the keys: one of the scenes, or the user's own photo (a galaxy until one is chosen) */
+    private fun pictureFor(t: KbTheme): SceneDrawable =
+        if (t.scene == "photo") SceneDrawable("photo", t.bg, t.bg2, photo = { Photos.load(applicationContext) }, scrim = Themes.PHOTO_SCRIM)
+        else SceneDrawable(t.scene, t.bg, t.bg2)
 
     private fun applyViewPrefs() {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -499,6 +525,13 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         override fun onSize() { applyViewPrefs() }
         override fun onClose() { hideAppearance() }
         override fun onDragResize() { startResize() }
+        override fun onPickPhoto() {
+            try {
+                startActivity(Intent(this@OmegaImeService, PhotoPickActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Throwable) {
+                flash("مقدرتش أفتح المعرض", true)
+            }
+        }
     }
 
     // ------------------------------------------------------------------ resize by hand
@@ -613,12 +646,75 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         return Decor.byId(prefs.decorStyle)?.takeIf { it.live }
     }
 
+    private val fontBarListener = object : FontBar.Listener {
+        override fun onChip(id: String) { fontChipPicked(id) }
+        override fun onMore() { showDecor() }
+    }
+
+    /** a chip of the bar of looks was tapped: "normal" (nothing), a real font (shown on the keyboard only), or a decoration (it travels) */
+    private fun fontChipPicked(id: String) {
+        when {
+            id == "normal" -> { prefs.decorLive = false; prefs.arFont = ""; decorLetters = 0 }
+            id.startsWith("f:") -> {
+                prefs.arFont = id.substring(2)
+                prefs.decorLive = false
+                if (!fontNoteShown) { fontNoteShown = true; flash("الخط بيظهر على الكيبورد بس، مش في الرسالة") }
+            }
+            id.startsWith("d:") -> {
+                val st = Decor.byId(id.substring(2)) ?: return
+                if (st.live) { prefs.decorStyle = st.id; prefs.decorLive = true; prefs.arFont = ""; decorLetters = 0 }
+                else decorPicked(st.id)
+            }
+        }
+        refreshDecor()
+        refreshSuggestions()
+    }
+
+    /** the chips: normal, the real fonts, then the decorations (Arabic, English, frames), each drawn in its own look */
+    private fun buildFontChips(fb: FontBar) {
+        val list = ArrayList<FontBar.Chip>()
+        list.add(FontBar.Chip("normal", "عادي", group = 0))
+        for (f in FontLib.fonts) list.add(FontBar.Chip("f:" + f.id, f.label, FontLib.face(this, f.id), if (f.scale < 0.8f) 0.9f else if (f.scale > 1.1f) 1.15f else 1f, group = 1))
+        for (st in Decor.styles) {
+            val group = when (st.kind) { Decor.Kind.ARABIC -> 2; Decor.Kind.LATIN -> 3; Decor.Kind.FRAME -> 4 }
+            val sample = when (st.kind) { Decor.Kind.ARABIC -> "عربي"; Decor.Kind.LATIN -> "Abc"; Decor.Kind.FRAME -> "نص" }
+            list.add(FontBar.Chip("d:" + st.id, Decor.apply(st, sample), group = group))
+        }
+        fb.chips = list
+        fontChipsBuilt = true
+    }
+
+    /**
+     * The keys, the key bubble and the bar of looks follow the look that is on: a decoration of English letters shows its letters on
+     * the keys, a real Arabic font draws the keys and the typing preview in it. The bar is up while a look is on.
+     */
+    private fun refreshLook() {
+        val k = kbd ?: return
+        val live = decorStyleLive()
+        val font = if (plain || numeric) null else FontLib.byId(prefs.arFont)
+        k.capStyle = live?.takeIf { it.kind == Decor.Kind.LATIN }
+        k.capFace = font?.let { FontLib.face(this, it.id) }
+        k.capScale = font?.scale ?: 1f
+        val fb = fontBar ?: return
+        val show = (live != null || font != null) && !translateBar && !resizing && panel == null
+        val v = if (show) View.VISIBLE else View.GONE
+        if (fb.visibility != v) fb.visibility = v
+        if (!show) return
+        if (!fontChipsBuilt) buildFontChips(fb)
+        fb.selected = if (font != null) "f:" + font.id else "d:" + (live?.id ?: "")
+        fb.previewFace = k.capFace
+        fb.previewScale = k.capScale
+        val typed = try { currentInputConnection?.getTextBeforeCursor(24, 0)?.toString().orEmpty() } catch (_: Throwable) { "" }
+        fb.preview = typed.replace('\n', ' ').trimStart().takeLast(16).ifEmpty { if (font != null) "نص تجريبي" else "" }
+    }
+
     private fun showDecor() {
         val p = decorPanel ?: DecorPanel(this).also { dp ->
             decorPanel = dp
             dp.onClose = { hidePanels(); refreshStrip() }
             dp.onPick = { id -> decorPicked(id) }
             dp.onLive = { on -> decorLiveChanged(on) }
+            dp.onFont = { id -> fontChipPicked("f:$id") }
             dp.onUndo = { undoReplacement(); refreshDecor() }
         }
         p.theme = theme
@@ -634,7 +730,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         val field = if (ic != null) readField(ic).first else ""
         val has = if (field.isBlank()) null else Decor.styles.firstOrNull { Decor.apply(it, field) == field }?.id
         val selected = has ?: if (decorStyleLive() != null) prefs.decorStyle else ""
-        p.show(field, selected, prefs.decorLive, lastReplacement != null)
+        p.show(field, selected, prefs.decorLive, lastReplacement != null, prefs.arFont)
     }
 
     /** a look was tapped: the whole text of the box takes it (or loses it, for "بدون"); with an empty box the look waits for what is typed */
@@ -643,9 +739,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (ic == null) { flash("اضغط على خانة الكتابة الأول", true); return }
         val style = Decor.byId(id)
         if (style != null) prefs.decorStyle = id
+        // a look that works letter by letter stays on for what is typed next; "بدون" switches it off
+        if (style != null && style.live) { prefs.decorLive = true; prefs.arFont = ""; decorLetters = 0 }
+        else if (style == null) { prefs.decorLive = false; prefs.arFont = "" }
         val (text, wasSelection) = readField(ic)
         if (text.isBlank()) {
-            if (style != null && style.live) { prefs.decorLive = true; flash("الحروف هتتزخرف وإنت بتكتب") }
+            if (style != null && style.live) flash("الحروف هتتزخرف وإنت بتكتب")
             else if (style != null) flash("الإطار بيتحط على الكلام بعد ما تكتبه", true)
             refreshDecor(); refreshSuggestions()
             return
@@ -1152,6 +1251,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     private fun refreshStrip() {
         val st = strip ?: return
+        refreshLook()
         st.tools = buildTools()
         st.swatch = if (prefs.textColor == 0) 0xFF2979FF.toInt() else prefs.textColor
         st.swatchRainbow = prefs.textRainbow
@@ -1523,6 +1623,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun trReset() {
         trGen++
         main.removeCallbacks(trRunnable)
+        main.removeCallbacks(trWait)
         tbox.clear()
         trShown = ""
         trShownFor = ""
@@ -1574,6 +1675,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         trNote = ""
         trNoteWarn = false
         main.removeCallbacks(trRunnable)
+        main.removeCallbacks(trWait)
         if (tbox.text.isBlank()) {
             trGen++                                  // an answer on its way is for text that is gone
             trBusy = false
@@ -1639,6 +1741,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         trNote = ""
         trNoteWarn = false
         trPush()
+        main.removeCallbacks(trWait)
+        main.postDelayed(trWait, TR_WAIT_AFTER)
         Bg.io {
             var out: Translator.Out? = null
             var err: String? = null
@@ -1661,6 +1765,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun trArrived(gen: Int, fgen: Int, text: String, out: Translator.Out?, err: String?, thenCommit: Boolean) {
         if (gen != trGen || fgen != fieldGen || !translateBar) return
         trBusy = false
+        main.removeCallbacks(trWait)
+        if (trNote == TR_WAIT) trNote = ""
         if (text != tbox.text) {
             // typed on while it was being translated: this answer is for older text
             if (thenCommit) trTranslate(full = true, thenCommit = true) else trPush()

@@ -53,6 +53,14 @@
             android:name=".ui.ModelActivity"
             android:exported="false" />
 
+        <!-- picking a picture from the gallery for the "my picture" keyboard look: a see-through screen opened by the keyboard -->
+        <activity
+            android:name=".ui.PhotoPickActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Omega.Translucent" />
+
         <!-- microphone permission request: a see-through screen opened by the keyboard -->
         <activity
             android:name=".voice.ActionActivity"

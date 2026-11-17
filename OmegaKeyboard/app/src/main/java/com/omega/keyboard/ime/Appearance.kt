@@ -2,9 +2,11 @@ package com.omega.keyboard.ime
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
@@ -275,6 +277,32 @@ class ThemeCard(ctx: Context, val themeId: String, private val name: String, pri
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
     private val box = RectF()
     private val key = RectF()
+    private val clip = Path()
+
+    // a picture theme shows a small copy of its picture, made once in the background
+    private var thumb: Bitmap? = null
+    private var thumbBusy = false
+
+    /** the number of the user's picture this card shows; when it changes the card makes its picture again */
+    var rev = 0
+        set(v) { if (field != v) { field = v; thumb = null; thumbBusy = false; invalidate() } }
+
+    private fun buildThumb() {
+        if (thumbBusy) return
+        thumbBusy = true
+        val w = (box.width() * 2f).toInt().coerceAtLeast(16)
+        val h = (box.height() * 2f).toInt().coerceAtLeast(16)
+        val app = context.applicationContext
+        val theme = t
+        Thread {
+            val made = try {
+                SceneDrawable.render(theme.scene, w, h, if (theme.scene == "photo") Photos.load(app) else null, theme.bg, theme.bg2)
+            } catch (_: Throwable) {
+                null
+            }
+            post { thumb = made; invalidate() }
+        }.start()
+    }
 
     override fun onMeasure(w: Int, h: Int) {
         setMeasuredDimension(dp(80f).toInt(), dp(112f).toInt())
@@ -286,6 +314,16 @@ class ThemeCard(ctx: Context, val themeId: String, private val name: String, pri
         if (t.bgStyle >= 1) paint.shader = LinearGradient(0f, box.top, 0f, box.bottom, t.bg, t.bg2, Shader.TileMode.CLAMP) else paint.color = t.bg
         c.drawRoundRect(box, rad, rad, paint)
         paint.shader = null
+        if (t.bgStyle == 3) {
+            val b = thumb
+            if (b == null) buildThumb() else {
+                clip.reset(); clip.addRoundRect(box, rad, rad, Path.Direction.CW)
+                c.save(); c.clipPath(clip)
+                paint.isFilterBitmap = true
+                c.drawBitmap(b, null, box, paint)
+                c.restore()
+            }
+        }
         if (t.bgStyle == 2) {
             for ((i, col) in t.aurora.withIndex()) {
                 val cx = box.left + box.width() * (0.2f + 0.3f * i)
@@ -375,6 +413,8 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
         fun onClose()
         /** "drag by hand": close the sheet and show the resize handles on the keyboard */
         fun onDragResize()
+        /** "a picture from the gallery": opens the picker (the keyboard cannot show one itself) */
+        fun onPickPhoto()
     }
 
     private enum class Target(val label: String) {
@@ -702,6 +742,22 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
             row.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.marginEnd = ctx.dpi(6f) })
         }
         col.addView(sv, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(118f)))
+        // the shape of the keys
+        val (shapeScroll, shapeRow) = hScroll()
+        val shapeLabel = TextView(ctx).apply { text = "شكل الأزرار"; textSize = 12.5f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, ctx.dpi(8f), 0) }
+        restylers.add { shapeLabel.setTextColor(theme.onBg) }
+        shapeRow.addView(shapeLabel)
+        for ((i, n) in Themes.SHAPE_NAMES.withIndex()) shapeRow.addView(chip(n, { theme.corner == i }) { prefs.keyShape = i; host.onLook(); restyle() })
+        col.addView(shapeScroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(36f)).also { it.topMargin = ctx.dpi(2f) })
+        // the user's own picture
+        val (photoScroll, photoRow) = hScroll()
+        photoRow.addView(chip("اختار صورة من المعرض", { prefs.theme == "photo" }) { host.onPickPhoto() })
+        photoRow.addView(chip("شيل صورتي", { false }) {
+            Photos.remove(ctx)
+            prefs.bgPhotoRev = prefs.bgPhotoRev + 1
+            host.onLook(); refreshCards(); restyle()
+        })
+        col.addView(photoScroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(36f)).also { it.topMargin = ctx.dpi(2f) })
         val hint = TextView(ctx).apply { text = "اختيار ثيم بيرجّع ألوان الأزرار والخلفية ليه. لون الكتابة بيفضل زي ما هو." ; textSize = 11.5f }
         restylers.add { hint.setTextColor(theme.onBgSub) }
         col.addView(hint, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = ctx.dpi(4f) })
@@ -709,7 +765,10 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
     }
 
     private fun refreshCards() {
-        for (c in cards) c.picked = c.themeId == Themes.canon(prefs.theme)
+        for (c in cards) {
+            c.picked = c.themeId == Themes.canon(prefs.theme)
+            if (c.themeId == "photo") c.rev = prefs.bgPhotoRev
+        }
     }
 
     private fun pickTheme(id: String) {
@@ -791,6 +850,15 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
             if (!t.isShown) continue
             t.getLocationOnScreen(loc)
             sb.append("target").append(i).append('=').append(loc[0] + t.width / 2).append(',').append(loc[1] + t.height / 2).append(';')
+        }
+        // the cards of the themes page: the visible part of each one (a card half out of the row is tapped on the part that shows)
+        val vis = android.graphics.Rect()
+        val inWin = IntArray(2)
+        for (c in cards) {
+            if (!c.isShown || !c.getGlobalVisibleRect(vis)) continue
+            c.getLocationInWindow(inWin)
+            c.getLocationOnScreen(loc)
+            sb.append("card_").append(c.themeId).append('=').append(vis.centerX() + loc[0] - inWin[0]).append(',').append(vis.centerY() + loc[1] - inWin[1]).append(';')
         }
         Log.d("OmegaSheet", sb.toString())
     }
