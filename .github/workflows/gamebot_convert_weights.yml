@@ -24,7 +24,7 @@ jobs:
           mkdir -p out
           {
             set -x
-            unzip -q dataset.zip -d ds
+            unzip -q -o dataset.zip -d ds
             printf "path: $PWD/ds\ntrain: train/images\nval: valid/images\ntest: test/images\nnc: 1\nnames: ['enemy']\n" > ds/abs.yaml
             python3 convert.py
           } > out/convert.log 2>&1
