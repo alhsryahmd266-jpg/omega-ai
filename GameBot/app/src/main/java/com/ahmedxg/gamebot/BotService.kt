@@ -218,7 +218,7 @@ class BotService : Service() {
         val tactics = Tactics(
             sneak = cfg.tacticSneak, ambush = cfg.tacticAmbush, dodge = cfg.tacticDodge, jump = cfg.tacticJump,
             crouch = cfg.tacticCrouch, style = cfg.style, mapAllies = cfg.allyMapEnabled, squad = cfg.squadFollow,
-            fovDeg = cfg.fovDeg.toFloat(), mapEnemies = cfg.enemyMapEnabled
+            fovDeg = cfg.fovDeg.toFloat(), mapEnemies = cfg.enemyMapEnabled, memory = cfg.tacticMemory
         )
         if (cfg.allyMapEnabled || cfg.enemyMapEnabled) mapReader = AllyMapReader(cfg)
         if (detector != null && cfg.tacticDodge) hitDetector = HitDetector(cfg.hitSensitivity)
@@ -504,7 +504,11 @@ class BotService : Service() {
 
         val act: Action = if (active && inGame && !inMacro) {
             policy?.decide(
-                Perception(now, dets, scrW, scrH, hit, health, marks?.allies ?: emptyList(), marks?.enemies ?: emptyList()), now
+                Perception(
+                    now, dets, scrW, scrH, hit, health, marks?.allies ?: emptyList(), marks?.enemies ?: emptyList(),
+                    zoneAngle = lastZone?.takeIf { it.valid && cfg.zoneHeadingUp }?.angleDeg ?: Float.NaN,
+                    zoneOutside = lastZone?.outside == true
+                ), now
             ) ?: Action.idle()
         } else {
             Action.idle()

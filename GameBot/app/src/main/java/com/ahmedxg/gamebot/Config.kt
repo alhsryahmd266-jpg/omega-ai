@@ -101,6 +101,7 @@ class Config {
     var zoneHeadingUp = true       // minimap rotates with the player (player icon at the center, facing up)
     var tacticSneak = true         // stalk / flank an enemy before striking
     var tacticAmbush = true        // hold the angle for a moment after losing an enemy at close range
+    var tacticMemory = true        // remember enemies/danger/explored ground; track enemies that left the screen
     var tacticDodge = true         // evasive strafe + jump when taking damage
     var tacticJump = true          // jump-peeks while strafing
     var tacticCrouch = false       // use the crouch button (toggle style) while stalking / ambushing
@@ -169,6 +170,7 @@ class Config {
         o.put("zoneHeadingUp", zoneHeadingUp)
         o.put("tacticSneak", tacticSneak)
         o.put("tacticAmbush", tacticAmbush)
+        o.put("tacticMemory", tacticMemory)
         o.put("tacticDodge", tacticDodge)
         o.put("tacticJump", tacticJump)
         o.put("tacticCrouch", tacticCrouch)
@@ -227,6 +229,7 @@ class Config {
         zoneHeadingUp = o.optBoolean("zoneHeadingUp", zoneHeadingUp)
         tacticSneak = o.optBoolean("tacticSneak", tacticSneak)
         tacticAmbush = o.optBoolean("tacticAmbush", tacticAmbush)
+        tacticMemory = o.optBoolean("tacticMemory", tacticMemory)
         tacticDodge = o.optBoolean("tacticDodge", tacticDodge)
         tacticJump = o.optBoolean("tacticJump", tacticJump)
         tacticCrouch = o.optBoolean("tacticCrouch", tacticCrouch)

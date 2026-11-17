@@ -19,7 +19,9 @@ class Perception(
     val hit: Boolean = false,     // true for ~0.6s after the screen edges flashed red (took damage)
     val health: Float = -1f,      // 0..1 from the HUD health bar, -1 = unknown
     val allyMarks: List<MapMark> = emptyList(),   // teammates seen on the minimap
-    val enemyMarks: List<MapMark> = emptyList()   // red enemy dots on the minimap
+    val enemyMarks: List<MapMark> = emptyList(),  // red enemy dots on the minimap
+    val zoneAngle: Float = Float.NaN,             // safe-zone center bearing from the minimap (deg, + = right), NaN = unknown
+    val zoneOutside: Boolean = false              // true when the player is outside the safe zone
 )
 
 /** Which tactical behaviors are allowed (the skill level decides how often they are used). */
@@ -33,7 +35,8 @@ class Tactics(
     val mapAllies: Boolean = false,   // use the minimap teammate markers (friend-or-foe check)
     val squad: Boolean = false,       // walk back to the squad when it is far and nobody is around
     val fovDeg: Float = 80f,          // horizontal field of view, used to turn a screen position into a bearing
-    val mapEnemies: Boolean = false   // react to red enemy dots on the minimap (turn toward them)
+    val mapEnemies: Boolean = false,  // react to red enemy dots on the minimap (turn toward them)
+    val memory: Boolean = false       // WorldMemory: remember enemies/danger/explored ground, track out-of-view enemies
 )
 
 /** What the bot wants to do right now. Translated into touches by [Controller]. */

@@ -96,6 +96,9 @@ class TacticalPolicy(
     private val monkey = MonkeyPolicy()
     private val tracker = Tracker()
     private val rnd = Random()
+    private val mem: WorldMemory? = if (tactics.memory) WorldMemory(tactics.fovDeg) else null
+    private var prevAct: Action? = null
+    val worldMemory: WorldMemory? get() = mem
 
     private var firstSeen = 0L
     private var lastSeen = 0L
@@ -122,6 +125,7 @@ class TacticalPolicy(
     override fun reset() {
         monkey.reset()
         tracker.reset()
+        mem?.reset(); prevAct = null
         firstSeen = 0L; lastSeen = 0L; lastDirX = 0f; lastBodyH = 0f
         strafeUntil = 0L; burstOn = false; burstUntil = 0L; settleUntil = 0L
         dodgeUntil = 0L; dodgeJumped = false; ambushUntil = 0L; engagedAt = 0L
@@ -133,6 +137,13 @@ class TacticalPolicy(
         abs(px - a.cx) <= a.w / 2f + 0.01f && abs(py - a.cy) <= a.h / 2f + 0.01f
 
     override fun decide(p: Perception, now: Long): Action {
+        mem?.integrate(now, prevAct, p.screenW)
+        val act = decideCore(p, now)
+        prevAct = act
+        return act
+    }
+
+    private fun decideCore(p: Perception, now: Long): Action {
         val hitEdge = p.hit && !prevHit
         prevHit = p.hit
 
@@ -145,6 +156,7 @@ class TacticalPolicy(
             else if (d.label.startsWith("ally") || d.label.startsWith("friend")) allies.add(d)
         }
         val seen = tracker.update(bodies, now)
+        mem?.observe(seen, now, crossX, p.screenW, p.screenH)
 
         var target: Track? = null
         var bestD = Float.MAX_VALUE
@@ -208,7 +220,8 @@ class TacticalPolicy(
 
         val hp = p.health
         val hpKnown = hp >= 0f
-        val lowHp = hpKnown && hp < style.retreatHp
+        val lowHp = hpKnown && hp < style.retreatHp + (mem?.cautionBonus() ?: 0f)
+        if (hitEdge) mem?.onHit(now)
 
         // took damage: evasive maneuver (rising edge only)
         if (hitEdge && tactics.dodge && skill != Skill.EASY && now >= dodgeUntil) {
@@ -328,6 +341,10 @@ class TacticalPolicy(
                 crouched = false
                 a.state = "SEARCH"
                 return a
+            }
+            if (mem != null) {
+                val ma = mem.search(p, now, style, skill, tactics, aimScale, rnd)
+                if (ma != null) return ma
             }
             val m = monkey.decide(p, now)
             m.fire = false
