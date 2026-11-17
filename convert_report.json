@@ -1,0 +1,30 @@
+{
+  "ultralytics": "8.4.215",
+  "names": {
+    "0": "0",
+    "1": "1",
+    "2": "enemy",
+    "3": "head"
+  },
+  "task": "detect",
+  "imgsz": 640,
+  "epoch": -1,
+  "best_fitness": "None",
+  "date": "2026-11-15T13:59:30.588470",
+  "train_data": "/train/cache/dataset/data.yaml",
+  "epochs": 300,
+  "val": {
+    "map50": 0.5334109597053796,
+    "map50_95": 0.20611013338556056,
+    "precision": 0.7677887723286516,
+    "recall": 0.4614833411380758
+  },
+  "test": {
+    "map50": 0.639489370278844,
+    "map50_95": 0.257785183727289,
+    "precision": 0.7692318389642048,
+    "recall": 0.4761935665315121
+  },
+  "onnx": "out/enemy_yolo26s_640.onnx",
+  "tflite_error": "duplicate registrations for aten.miopen_batch_norm.default"
+}

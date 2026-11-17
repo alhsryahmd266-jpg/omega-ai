@@ -1,0 +1,493 @@
++ unzip -q -o dataset.zip -d ds
++ printf 'path: /home/runner/work/omega-ai/omega-ai/ds\ntrain: train/images\nval: valid/images\ntest: test/images\nnc: 1\nnames: ['\''enemy'\'']\n'
++ python3 convert.py
+Creating new Ultralytics Settings v0.0.8 file ✅ 
+View Ultralytics Settings with 'yolo settings' or at '/home/runner/.config/Ultralytics/settings.json'
+Update Settings with 'yolo settings key=value', i.e. 'yolo settings runs_dir=path/to/dir'. For help see https://docs.ultralytics.com/usage/settings
+{'ultralytics': '8.4.215', 'names': {0: '0', 1: '1', 2: 'enemy', 3: 'head'}, 'task': 'detect', 'imgsz': 640, 'epoch': -1, 'best_fitness': 'None', 'date': '2026-11-15T13:59:30.588470', 'train_data': '/train/cache/dataset/data.yaml', 'epochs': 300}
+Ultralytics 8.4.215 🚀 Python-3.11.18 torch-2.15.0+cpu CPU (AMD EPYC 9V74 80-Core Processor)
+YOLO26s summary (fused): 120 layers, 9,466,728 parameters, 0 gradients, 20.8 GFLOPs
+Downloading https://ultralytics.com/assets/Arial.ttf to '/home/runner/.config/Ultralytics/Arial.ttf': 100% ━━━━━━━━━━━━ 755.1KB 16.5MB/s 0.0s
+[34m[1mval: [0mFast image access ✅ (ping: 0.0±0.0 ms, read: 4142.5±642.6 MB/s, size: 102.9 KB)
+[34m[1mval: [0mScanning /home/runner/work/omega-ai/omega-ai/ds/valid/labels... 41 images, 0 backgrounds, 0 corrupt: 100% ━━━━━━━━━━━━ 41/41 2.7Kit/s 0.0s
+[34m[1mval: [0mNew cache created: /home/runner/work/omega-ai/omega-ai/ds/valid/labels.cache
+                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100% ━━━━━━━━━━━━ 3/3 1.5s/it 4.4s
+                   all         41         43      0.768      0.461      0.533      0.206
+                     0         41         43      0.768      0.461      0.533      0.206
+Speed: 1.0ms preprocess, 101.3ms inference, 0.0ms loss, 0.5ms postprocess per image
+Results saved to [1m/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/tests/tmp/runs/detect/val[0m
+Ultralytics 8.4.215 🚀 Python-3.11.18 torch-2.15.0+cpu CPU (AMD EPYC 9V74 80-Core Processor)
+YOLO26s summary (fused): 120 layers, 9,466,728 parameters, 0 gradients, 20.8 GFLOPs
+[34m[1mval: [0mFast image access ✅ (ping: 0.0±0.0 ms, read: 3902.8±1120.2 MB/s, size: 102.6 KB)
+[34m[1mval: [0mScanning /home/runner/work/omega-ai/omega-ai/ds/test/labels... 20 images, 0 backgrounds, 0 corrupt: 100% ━━━━━━━━━━━━ 20/20 3.1Kit/s 0.0s
+[34m[1mval: [0mNew cache created: /home/runner/work/omega-ai/omega-ai/ds/test/labels.cache
+                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100% ━━━━━━━━━━━━ 2/2 1.1s/it 2.1s
+                   all         20         21      0.769      0.476      0.639      0.258
+                     0         20         21      0.769      0.476      0.639      0.258
+Speed: 0.5ms preprocess, 101.7ms inference, 0.0ms loss, 0.6ms postprocess per image
+Results saved to [1m/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/tests/tmp/runs/detect/val-2[0m
+Ultralytics 8.4.215 🚀 Python-3.11.18 torch-2.15.0+cpu CPU (AMD EPYC 9V74 80-Core Processor)
+YOLO26s summary (fused): 120 layers, 9,466,728 parameters, 0 gradients, 20.8 GFLOPs
+
+[34m[1mPyTorch:[0m starting from 'weights.pt' with input shape (1, 3, 640, 640) BCHW and output shape(s) (1, 8, 8400) (19.4 MB)
+
+[34m[1mONNX:[0m starting export with onnx 1.23.2 opset 18...
+[34m[1mONNX:[0m slimming with onnxslim 0.1.99...
+[0;93m2026-11-17 04:10:22.896823177 [W:onnxruntime:Default, device_discovery.cc:95 GetPciBusId] Skipping pci_bus_id for PCI path at "/sys/devices/LNXSYSTM:00/LNXSYBUS:00/ACPI0004:00/MSFT1000:00/5620e0c7-8062-4dce-aeb7-520c7ef76171" because filename "5620e0c7-8062-4dce-aeb7-520c7ef76171" did not match expected pattern of [0-9a-f]+:[0-9a-f]+:[0-9a-f]+[.][0-9a-f]+[m
+[34m[1mONNX:[0m export success ✅ 1.7s, saved as 'weights.onnx' (36.4 MB)
+
+Export complete (2.1s)
+Results saved to [1m/home/runner/work/omega-ai/omega-ai/weights.onnx[0m
+Predict:         yolo predict task=detect model=weights.onnx imgsz=640 
+Validate:        yolo val task=detect model=weights.onnx imgsz=640  
+Visualize:       https://netron.app
+WARNING ⚠️ format='tflite' is deprecated as of 8.4.83 and has been replaced by the unified Google LiteRT format. Exporting format='litert' instead. See https://docs.ultralytics.com/integrations/litert
+Ultralytics 8.4.215 🚀 Python-3.11.18 torch-2.15.0+cpu CPU (AMD EPYC 9V74 80-Core Processor)
+YOLO26s summary (fused): 120 layers, 9,466,728 parameters, 0 gradients, 20.8 GFLOPs
+
+[34m[1mPyTorch:[0m starting from 'weights.pt' with input shape (1, 3, 640, 640) BCHW and output shape(s) (1, 8, 8400) (19.4 MB)
+[31m[1mrequirements:[0m Ultralytics requirements ['litert-torch>=0.10.0', 'ai-edge-litert>=2.3.0'] not found, attempting AutoUpdate...
+Ignoring typer: markers 'python_version >= "3.14"' don't match your environment
+Collecting litert-torch>=0.10.0
+  Downloading litert_torch-0.10.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting ai-edge-litert>=2.3.0
+  Downloading ai_edge_litert-2.3.0-cp311-cp311-manylinux_2_27_x86_64.whl.metadata (2.2 kB)
+Collecting absl-py (from litert-torch>=0.10.0)
+  Downloading absl_py-2.5.1-py3-none-any.whl.metadata (3.3 kB)
+Requirement already satisfied: numpy in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from litert-torch>=0.10.0) (2.4.6)
+Collecting scipy (from litert-torch>=0.10.0)
+  Downloading scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting safetensors (from litert-torch>=0.10.0)
+  Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.2 kB)
+Collecting multipledispatch (from litert-torch>=0.10.0)
+  Downloading multipledispatch-1.0.0-py3-none-any.whl.metadata (3.8 kB)
+Collecting transformers (from litert-torch>=0.10.0)
+  Downloading transformers-5.23.0-py3-none-any.whl.metadata (31 kB)
+Collecting kagglehub (from litert-torch>=0.10.0)
+  Downloading kagglehub-1.0.3-py3-none-any.whl.metadata (40 kB)
+Collecting tabulate (from litert-torch>=0.10.0)
+  Downloading tabulate-0.10.0-py3-none-any.whl.metadata (40 kB)
+Collecting torch<2.15.0,>=2.4.0 (from litert-torch>=0.10.0)
+  Downloading torch-2.14.1-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (37 kB)
+Collecting ai-edge-quantizer==0.10.* (from litert-torch>=0.10.0)
+  Downloading ai_edge_quantizer-0.10.1-py3-none-any.whl.metadata (25 kB)
+Collecting litert-converter==0.5.* (from litert-torch>=0.10.0)
+  Downloading litert_converter-0.5.0-cp311-cp311-manylinux_2_27_x86_64.whl.metadata (1.8 kB)
+Collecting torchao>=0.17.0 (from litert-torch>=0.10.0)
+  Downloading torchao-0.18.0-cp310-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (21 kB)
+Collecting jax (from litert-torch>=0.10.0)
+  Downloading jax-0.10.2-py3-none-any.whl.metadata (13 kB)
+Collecting jaxtyping (from litert-torch>=0.10.0)
+  Downloading jaxtyping-0.3.11-py3-none-any.whl.metadata (6.2 kB)
+Collecting fire (from litert-torch>=0.10.0)
+  Downloading fire-0.7.1-py3-none-any.whl.metadata (5.8 kB)
+Collecting sentencepiece (from litert-torch>=0.10.0)
+  Downloading sentencepiece-0.2.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (34 kB)
+Collecting rich (from litert-torch>=0.10.0)
+  Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Collecting litert-lm-builder>=0.18.0 (from litert-torch>=0.10.0)
+  Downloading litert_lm_builder-0.19.2-py3-none-any.whl.metadata (878 bytes)
+Requirement already satisfied: pillow in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from litert-torch>=0.10.0) (13.0.0)
+Collecting backports.strenum (from ai-edge-litert>=2.3.0)
+  Downloading backports_strenum-1.2.8-py3-none-any.whl.metadata (3.6 kB)
+Requirement already satisfied: flatbuffers in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from ai-edge-litert>=2.3.0) (25.12.19)
+Collecting tqdm (from ai-edge-litert>=2.3.0)
+  Downloading tqdm-4.70.1-py3-none-any.whl.metadata (57 kB)
+Requirement already satisfied: typing-extensions in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from ai-edge-litert>=2.3.0) (4.16.0)
+Requirement already satisfied: protobuf in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from ai-edge-litert>=2.3.0) (7.36.2)
+Requirement already satisfied: ml_dtypes in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from ai-edge-litert>=2.3.0) (0.7.0)
+Collecting lark (from ai-edge-litert[model-utils]<2.4.0,>=2.3.0->litert-torch>=0.10.0)
+  Downloading lark-1.3.1-py3-none-any.whl.metadata (1.8 kB)
+Collecting xdsl==0.28.0 (from ai-edge-litert[model-utils]<2.4.0,>=2.3.0->litert-torch>=0.10.0)
+  Downloading xdsl-0.28.0-py3-none-any.whl.metadata (9.5 kB)
+Collecting immutabledict<4.2.2 (from xdsl==0.28.0->ai-edge-litert[model-utils]<2.4.0,>=2.3.0->litert-torch>=0.10.0)
+  Downloading immutabledict-4.2.1-py3-none-any.whl.metadata (3.5 kB)
+Collecting typing-extensions (from ai-edge-litert>=2.3.0)
+  Downloading typing_extensions-4.12.2-py3-none-any.whl.metadata (3.0 kB)
+Collecting ordered-set==4.1.0 (from xdsl==0.28.0->ai-edge-litert[model-utils]<2.4.0,>=2.3.0->litert-torch>=0.10.0)
+  Downloading ordered_set-4.1.0-py3-none-any.whl.metadata (5.3 kB)
+Requirement already satisfied: filelock in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (4.2.4)
+Requirement already satisfied: setuptools>=77.0.3 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (79.0.1)
+Requirement already satisfied: sympy>=1.13.3 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (3.6.1)
+Requirement already satisfied: jinja2 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (3.1.6)
+Requirement already satisfied: fsspec>=0.8.5 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (2026.9.0)
+Collecting cuda-toolkit==13.0.3 (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading cuda_toolkit-13.0.3.0-py2.py3-none-any.whl.metadata (17 kB)
+Collecting cuda-bindings<14,>=13.0.3 (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading cuda_bindings-13.5.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (2.5 kB)
+Collecting nvidia-cudnn-cu13==9.24.0.43 (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cudnn_cu13-9.24.0.43-py3-none-manylinux_2_27_x86_64.whl.metadata (1.9 kB)
+Collecting nvidia-cusparselt-cu13==0.8.1 (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl.metadata (12 kB)
+Collecting nvidia-nccl-cu13==2.30.7 (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl.metadata (2.1 kB)
+Collecting nvidia-nvshmem-cu13==3.4.5 (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_nvshmem_cu13-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.1 kB)
+Collecting triton~=3.8.0 (from torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading triton-3.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (978 bytes)
+Collecting nvidia-cublas==13.1.1.3.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-cuda-nvrtc==13.0.88.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cuda_nvrtc-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cuda-runtime==13.0.96.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cuda_runtime-13.0.96-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cufft==12.0.0.61.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cufft-12.0.0.61-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-nvjitlink<14,>=13.0.88 (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_nvjitlink-13.5.37-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-cufile==1.15.1.6.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cuda-cupti==13.0.85.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cuda_cupti-13.0.85-py3-none-manylinux_2_25_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-curand==10.4.0.35.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cusolver==12.0.4.66.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-cusparse==12.6.3.3.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-nvtx==13.0.85.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl.metadata (1.8 kB)
+Collecting cuda-pathfinder>=1.4.2 (from cuda-bindings<14,>=13.0.3->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0)
+  Downloading cuda_pathfinder-1.9.0-py3-none-any.whl.metadata (1.9 kB)
+Collecting tomli (from litert-lm-builder>=0.18.0->litert-torch>=0.10.0)
+  Downloading tomli-2.5.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from sympy>=1.13.3->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (1.3.0)
+Collecting termcolor (from fire->litert-torch>=0.10.0)
+  Downloading termcolor-3.3.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting jaxlib<=0.10.2,>=0.10.1 (from jax->litert-torch>=0.10.0)
+  Downloading jaxlib-0.10.2-cp311-cp311-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+Collecting opt_einsum (from jax->litert-torch>=0.10.0)
+  Downloading opt_einsum-3.4.0-py3-none-any.whl.metadata (6.3 kB)
+Collecting wadler-lindig>=0.1.3 (from jaxtyping->litert-torch>=0.10.0)
+  Downloading wadler_lindig-0.1.8-py3-none-any.whl.metadata (17 kB)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from jinja2->torch<2.15.0,>=2.4.0->litert-torch>=0.10.0) (3.0.3)
+Requirement already satisfied: certifi>=2026.10.19 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from kagglehub->litert-torch>=0.10.0) (2026.10.23)
+Collecting kagglesdk<1.0,>=0.1.38 (from kagglehub->litert-torch>=0.10.0)
+  Downloading kagglesdk-0.1.38-py3-none-any.whl.metadata (13 kB)
+Requirement already satisfied: packaging in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from kagglehub->litert-torch>=0.10.0) (26.3)
+Collecting pyyaml (from kagglehub->litert-torch>=0.10.0)
+  Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Requirement already satisfied: requests in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from kagglehub->litert-torch>=0.10.0) (2.34.2)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from requests->kagglehub->litert-torch>=0.10.0) (3.5.2)
+Requirement already satisfied: idna<4,>=2.5 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from requests->kagglehub->litert-torch>=0.10.0) (3.20)
+Requirement already satisfied: urllib3<3,>=1.26 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from requests->kagglehub->litert-torch>=0.10.0) (2.8.0)
+Collecting markdown-it-py>=2.2.0 (from rich->litert-torch>=0.10.0)
+  Downloading markdown_it_py-4.3.0-py3-none-any.whl.metadata (7.9 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich->litert-torch>=0.10.0)
+  Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich->litert-torch>=0.10.0)
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Collecting huggingface-hub<3.0,>=1.31.0 (from transformers->litert-torch>=0.10.0)
+  Downloading huggingface_hub-2.4.0-py3-none-any.whl.metadata (16 kB)
+Collecting regex>=2025.10.22 (from transformers->litert-torch>=0.10.0)
+  Downloading regex-2026.11.15-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+Collecting tokenizers<0.24.0,>=0.23.1 (from transformers->litert-torch>=0.10.0)
+  Downloading tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.8 kB)
+Collecting typer (from transformers->litert-torch>=0.10.0)
+  Downloading typer-0.29.1-py3-none-any.whl.metadata (16 kB)
+Collecting click<9.0.0,>=8.4.2 (from huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0)
+  Downloading click-8.5.1-py3-none-any.whl.metadata (2.6 kB)
+Collecting hf-xet<2.0.0,>=1.6.0 (from huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0)
+  Downloading hf_xet-1.8.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+Collecting httpx2<3,>=2.0.0 (from huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0)
+  Downloading httpx2-2.16.2-py3-none-any.whl.metadata (10.0 kB)
+Requirement already satisfied: anyio>=4.10 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0) (4.16.0)
+Collecting httpcore2==2.16.2 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0)
+  Downloading httpcore2-2.16.2-py3-none-any.whl.metadata (28 kB)
+Collecting truststore>=0.10 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0)
+  Downloading truststore-0.10.5-py3-none-any.whl.metadata (4.5 kB)
+Requirement already satisfied: h11>=0.16 in /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages (from httpcore2==2.16.2->httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0) (0.16.0)
+Collecting anyio>=4.10 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers->litert-torch>=0.10.0)
+  Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+INFO: pip is looking at multiple versions of anyio to determine which version is compatible with other requirements. This could take a while.
+  Downloading anyio-4.15.0-py3-none-any.whl.metadata (4.7 kB)
+  Downloading anyio-4.14.2-py3-none-any.whl.metadata (4.6 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.14.3-py3-none-any.whl.metadata (141 kB)
+Collecting shellingham>=1.3.0 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+Collecting annotated-doc>=0.0.2 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading annotated_doc-0.0.6-py3-none-any.whl.metadata (6.5 kB)
+Collecting annotated-types>=0.6.0 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.50.4 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.50.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.6 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.14.2-py3-none-any.whl.metadata (137 kB)
+Collecting pydantic-core==2.50.2 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.50.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.5 kB)
+INFO: pip is looking at multiple versions of pydantic to determine which version is compatible with other requirements. This could take a while.
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.14.1-py3-none-any.whl.metadata (133 kB)
+Collecting pydantic-core==2.50.1 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.50.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.14.0-py3-none-any.whl.metadata (131 kB)
+Collecting pydantic-core==2.50.0 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.50.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+Collecting pydantic-core==2.46.5 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.46.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.13.4-py3-none-any.whl.metadata (109 kB)
+Collecting pydantic-core==2.46.4 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.46.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.13.3-py3-none-any.whl.metadata (108 kB)
+Collecting pydantic-core==2.46.3 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.46.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.13.2-py3-none-any.whl.metadata (108 kB)
+Collecting pydantic-core==2.46.2 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.46.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+INFO: pip is still looking at multiple versions of pydantic to determine which version is compatible with other requirements. This could take a while.
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.13.1-py3-none-any.whl.metadata (108 kB)
+Collecting pydantic-core==2.46.1 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.46.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.13.0-py3-none-any.whl.metadata (107 kB)
+Collecting pydantic-core==2.46.0 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.46.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.12.5-py3-none-any.whl.metadata (90 kB)
+Collecting pydantic-core==2.41.5 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.41.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.12.4-py3-none-any.whl.metadata (89 kB)
+  Downloading pydantic-2.12.3-py3-none-any.whl.metadata (87 kB)
+Collecting pydantic-core==2.41.4 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.41.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+INFO: This is taking longer than usual. You might need to provide the dependency resolver with stricter constraints to reduce runtime. See https://pip.pypa.io/warnings/backtracking for guidance. If you want to abort this run, press Ctrl + C.
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.12.2-py3-none-any.whl.metadata (85 kB)
+  Downloading pydantic-2.12.0-py3-none-any.whl.metadata (83 kB)
+Collecting pydantic-core==2.41.1 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.41.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+Collecting pydantic>=2.5.3 (from typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic-2.11.10-py3-none-any.whl.metadata (68 kB)
+Collecting pydantic-core==2.33.2 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading pydantic_core-2.33.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.8 kB)
+Collecting typing-inspection>=0.4.0 (from pydantic>=2.5.3->typer->transformers->litert-torch>=0.10.0)
+  Downloading typing_inspection-0.4.5-py3-none-any.whl.metadata (2.6 kB)
+  Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+INFO: pip is looking at multiple versions of typing-inspection to determine which version is compatible with other requirements. This could take a while.
+  Downloading typing_inspection-0.4.3-py3-none-any.whl.metadata (2.6 kB)
+  Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+Downloading litert_torch-0.10.0-py3-none-any.whl (977 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 977.1/977.1 kB 32.0 MB/s  0:00:00
+Downloading ai_edge_litert-2.3.0-cp311-cp311-manylinux_2_27_x86_64.whl (21.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 21.8/21.8 MB 68.5 MB/s  0:00:00
+Downloading xdsl-0.28.0-py3-none-any.whl (1.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 193.3 MB/s  0:00:00
+Downloading ordered_set-4.1.0-py3-none-any.whl (7.6 kB)
+Downloading ai_edge_quantizer-0.10.1-py3-none-any.whl (483 kB)
+Downloading immutabledict-4.2.1-py3-none-any.whl (4.7 kB)
+Downloading litert_converter-0.5.0-cp311-cp311-manylinux_2_27_x86_64.whl (70.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 70.4/70.4 MB 76.8 MB/s  0:00:00
+Downloading torch-2.14.1-cp311-cp311-manylinux_2_28_x86_64.whl (554.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 554.6/554.6 MB 99.8 MB/s  0:00:05
+Downloading cuda_toolkit-13.0.3.0-py2.py3-none-any.whl (2.5 kB)
+Downloading nvidia_cudnn_cu13-9.24.0.43-py3-none-manylinux_2_27_x86_64.whl (553.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 553.1/553.1 MB 128.5 MB/s  0:00:04
+Downloading nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl (170.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 170.1/170.1 MB 208.1 MB/s  0:00:00
+Downloading nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl (216.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 216.0/216.0 MB 191.8 MB/s  0:00:01
+Downloading nvidia_nvshmem_cu13-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (60.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 60.4/60.4 MB 215.4 MB/s  0:00:00
+Downloading cuda_bindings-13.5.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (8.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.4/8.4 MB 148.3 MB/s  0:00:00
+Downloading nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_x86_64.whl (423.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 423.1/423.1 MB 118.8 MB/s  0:00:03
+Downloading nvidia_cuda_cupti-13.0.85-py3-none-manylinux_2_25_x86_64.whl (10.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.7/10.7 MB 199.1 MB/s  0:00:00
+Downloading nvidia_cuda_nvrtc-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (90.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 90.2/90.2 MB 219.4 MB/s  0:00:00
+Downloading nvidia_cuda_runtime-13.0.96-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (2.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 182.5 MB/s  0:00:00
+Downloading nvidia_cufft-12.0.0.61-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (214.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 214.1/214.1 MB 164.7 MB/s  0:00:01
+Downloading nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 139.0 MB/s  0:00:00
+Downloading nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64.whl (59.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 59.5/59.5 MB 70.2 MB/s  0:00:00
+Downloading nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_x86_64.whl (200.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 200.9/200.9 MB 192.5 MB/s  0:00:01
+Downloading nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (145.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 145.9/145.9 MB 246.6 MB/s  0:00:00
+Downloading nvidia_nvjitlink-13.5.37-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (46.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 46.6/46.6 MB 232.5 MB/s  0:00:00
+Downloading nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl (148 kB)
+Downloading triton-3.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (247.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 247.9/247.9 MB 85.7 MB/s  0:00:02
+Downloading typing_extensions-4.12.2-py3-none-any.whl (37 kB)
+Downloading cuda_pathfinder-1.9.0-py3-none-any.whl (63 kB)
+Downloading litert_lm_builder-0.19.2-py3-none-any.whl (121 kB)
+Downloading torchao-0.18.0-cp310-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (3.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 164.8 MB/s  0:00:00
+Downloading absl_py-2.5.1-py3-none-any.whl (137 kB)
+Downloading backports_strenum-1.2.8-py3-none-any.whl (7.9 kB)
+Downloading fire-0.7.1-py3-none-any.whl (115 kB)
+Downloading jax-0.10.2-py3-none-any.whl (3.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.2/3.2 MB 110.2 MB/s  0:00:00
+Downloading jaxlib-0.10.2-cp311-cp311-manylinux_2_27_x86_64.whl (85.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 85.4/85.4 MB 100.4 MB/s  0:00:00
+Downloading scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.3/35.3 MB 240.0 MB/s  0:00:00
+Downloading jaxtyping-0.3.11-py3-none-any.whl (56 kB)
+Downloading wadler_lindig-0.1.8-py3-none-any.whl (20 kB)
+Downloading kagglehub-1.0.3-py3-none-any.whl (73 kB)
+Downloading kagglesdk-0.1.38-py3-none-any.whl (290 kB)
+Downloading lark-1.3.1-py3-none-any.whl (113 kB)
+Downloading multipledispatch-1.0.0-py3-none-any.whl (12 kB)
+Downloading opt_einsum-3.4.0-py3-none-any.whl (71 kB)
+Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 806.6/806.6 kB 130.0 MB/s  0:00:00
+Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 679.9 MB/s  0:00:00
+Downloading markdown_it_py-4.3.0-py3-none-any.whl (96 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+Downloading sentencepiece-0.2.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (1.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.7/1.7 MB 422.8 MB/s  0:00:00
+Downloading tabulate-0.10.0-py3-none-any.whl (39 kB)
+Downloading termcolor-3.3.0-py3-none-any.whl (7.7 kB)
+Downloading tomli-2.5.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (276 kB)
+Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+Downloading transformers-5.23.0-py3-none-any.whl (13.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.3/13.3 MB 193.5 MB/s  0:00:00
+Downloading huggingface_hub-2.4.0-py3-none-any.whl (857 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 857.0/857.0 kB 1.0 GB/s  0:00:00
+Downloading click-8.5.1-py3-none-any.whl (126 kB)
+Downloading hf_xet-1.8.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 422.7 MB/s  0:00:00
+Downloading httpx2-2.16.2-py3-none-any.whl (97 kB)
+Downloading httpcore2-2.16.2-py3-none-any.whl (85 kB)
+Downloading tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 302.1 MB/s  0:00:00
+Downloading anyio-4.14.2-py3-none-any.whl (125 kB)
+Downloading regex-2026.11.15-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 806.3/806.3 kB 388.3 MB/s  0:00:00
+Downloading truststore-0.10.5-py3-none-any.whl (19 kB)
+Downloading typer-0.29.1-py3-none-any.whl (121 kB)
+Downloading annotated_doc-0.0.6-py3-none-any.whl (5.3 kB)
+Downloading pydantic-2.11.10-py3-none-any.whl (444 kB)
+Downloading pydantic_core-2.33.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 199.7 MB/s  0:00:00
+Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+Installing collected packages: torchao, nvidia-cusparselt-cu13, multipledispatch, cuda-toolkit, wadler-lindig, typing-extensions, truststore, triton, tqdm, tomli, termcolor, tabulate, shellingham, sentencepiece, scipy, safetensors, regex, pyyaml, pygments, ordered-set, opt_einsum, nvidia-nvtx, nvidia-nvshmem-cu13, nvidia-nvjitlink, nvidia-nccl-cu13, nvidia-curand, nvidia-cufile, nvidia-cuda-runtime, nvidia-cuda-nvrtc, nvidia-cuda-cupti, mdurl, lark, immutabledict, hf-xet, cuda-pathfinder, click, backports.strenum, annotated-types, annotated-doc, absl-py, xdsl, typing-inspection, pydantic-core, nvidia-cusparse, nvidia-cufft, nvidia-cublas, markdown-it-py, litert-lm-builder, kagglesdk, jaxtyping, jaxlib, httpcore2, fire, cuda-bindings, anyio, ai-edge-litert, rich, pydantic, nvidia-cusolver, nvidia-cudnn-cu13, litert-converter, kagglehub, jax, httpx2, ai-edge-quantizer, typer, huggingface-hub, torch, tokenizers, transformers, litert-torch
+  Attempting uninstall: typing-extensions
+    Found existing installation: typing_extensions 4.16.0
+    Uninstalling typing_extensions-4.16.0:
+      Successfully uninstalled typing_extensions-4.16.0
+  Attempting uninstall: anyio
+    Found existing installation: anyio 4.16.0
+    Uninstalling anyio-4.16.0:
+      Successfully uninstalled anyio-4.16.0
+  Attempting uninstall: torch
+    Found existing installation: torch 2.15.0+cpu
+    Uninstalling torch-2.15.0+cpu:
+      Successfully uninstalled torch-2.15.0+cpu
+
+Successfully installed absl-py-2.5.1 ai-edge-litert-2.3.0 ai-edge-quantizer-0.10.1 annotated-doc-0.0.6 annotated-types-0.8.0 anyio-4.14.2 backports.strenum-1.2.8 click-8.5.1 cuda-bindings-13.5.0 cuda-pathfinder-1.9.0 cuda-toolkit-13.0.3.0 fire-0.7.1 hf-xet-1.8.0 httpcore2-2.16.2 httpx2-2.16.2 huggingface-hub-2.4.0 immutabledict-4.2.1 jax-0.10.2 jaxlib-0.10.2 jaxtyping-0.3.11 kagglehub-1.0.3 kagglesdk-0.1.38 lark-1.3.1 litert-converter-0.5.0 litert-lm-builder-0.19.2 litert-torch-0.10.0 markdown-it-py-4.3.0 mdurl-0.1.2 multipledispatch-1.0.0 nvidia-cublas-13.1.1.3 nvidia-cuda-cupti-13.0.85 nvidia-cuda-nvrtc-13.0.88 nvidia-cuda-runtime-13.0.96 nvidia-cudnn-cu13-9.24.0.43 nvidia-cufft-12.0.0.61 nvidia-cufile-1.15.1.6 nvidia-curand-10.4.0.35 nvidia-cusolver-12.0.4.66 nvidia-cusparse-12.6.3.3 nvidia-cusparselt-cu13-0.8.1 nvidia-nccl-cu13-2.30.7 nvidia-nvjitlink-13.5.37 nvidia-nvshmem-cu13-3.4.5 nvidia-nvtx-13.0.85 opt_einsum-3.4.0 ordered-set-4.1.0 pydantic-2.11.10 pydantic-core-2.33.2 pygments-2.21.0 pyyaml-6.0.3 regex-2026.11.15 rich-15.0.0 safetensors-0.8.0 scipy-1.17.1 sentencepiece-0.2.3 shellingham-1.5.4 tabulate-0.10.0 termcolor-3.3.0 tokenizers-0.23.3 tomli-2.5.0 torch-2.14.1 torchao-0.18.0 tqdm-4.70.1 transformers-5.23.0 triton-3.8.0 truststore-0.10.5 typer-0.29.1 typing-extensions-4.12.2 typing-inspection-0.4.2 wadler-lindig-0.1.8 xdsl-0.28.0
+
+[31m[1mrequirements:[0m AutoUpdate success ✅ 82.4s
+WARNING ⚠️ [31m[1mrequirements:[0m [1mRestart runtime or rerun command for updates to take effect[0m
+
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1794888706.565682    2267 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Failed to load /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/_C_cutlass_90a.abi3.so: Could not load this library: /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/_C_cutlass_90a.abi3.so
+Failed to load /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/_C_mxfp8.cpython-310-x86_64-linux-gnu.so: Could not load this library: /opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/_C_mxfp8.cpython-310-x86_64-linux-gnu.so
+ERROR ❌ [34m[1mLiteRT:[0m export failure 83.1s: duplicate registrations for aten.miopen_batch_norm.default
+Export to tflite in the cloud with Ultralytics Platform: https://platform.ultralytics.com
+Traceback (most recent call last):
+  File "/home/runner/work/omega-ai/omega-ai/convert.py", line 26, in <module>
+    YOLO("weights.pt").export(format=fmt, imgsz=imgsz, **kw)
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/ultralytics/engine/model.py", line 798, in export
+    return Exporter(overrides=args, _callbacks=self.callbacks)(model=self.model)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/ultralytics/engine/exporter.py", line 1085, in __call__
+    f = getattr(self, f"export_{fmt}")()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/ultralytics/engine/exporter.py", line 562, in outer_func
+    f = inner_func(*args, **kwargs)  # exported file/dir or tuple of (file/dir, *)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/ultralytics/engine/exporter.py", line 1373, in export_litert
+    return torch2litert(
+           ^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/ultralytics/utils/export/litert.py", line 69, in torch2litert
+    import litert_torch
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/litert_torch/__init__.py", line 16, in <module>
+    from litert_torch import converter_v2
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/litert_torch/converter_v2.py", line 22, in <module>
+    from litert_torch._convert.converter_v2 import convert
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/litert_torch/_convert/converter_v2.py", line 43, in <module>
+    from litert_torch._convert import core
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/litert_torch/_convert/core.py", line 26, in <module>
+    from litert_torch._convert import fx_passes
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/litert_torch/_convert/fx_passes/__init__.py", line 21, in <module>
+    from litert_torch._convert.fx_passes.lower_torchao_pass import LowerTorchAOPass
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/litert_torch/_convert/fx_passes/lower_torchao_pass.py", line 59, in <module>
+    import torchao  # pylint: disable=unused-import,g-import-not-at-top
+    ^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/__init__.py", line 107, in <module>
+    from torchao.quantization import (
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/quantization/__init__.py", line 15, in <module>
+    from .linear_quant_modules import (
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/quantization/linear_quant_modules.py", line 20, in <module>
+    from .quant_primitives import (
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/quantization/quant_primitives.py", line 222, in <module>
+    register_custom_op = _register_custom_op(quant_lib)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torchao/utils.py", line 234, in _register_custom_op
+    from torch._inductor.decomposition import register_decomposition
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torch/_inductor/decomposition.py", line 1131, in <module>
+    @register_decomposition(aten.miopen_batch_norm)
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torch/_decomp/__init__.py", line 240, in decomposition_decorator
+    pytree.tree_map_(register, aten_op)
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torch/utils/_pytree.py", line 1633, in tree_map_
+    # These specializations help with type inference on the lambda passed to this
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torch/_decomp/__init__.py", line 237, in register
+    _add_op_to_registry(registry, op, fn)
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/torch/_decomp/__init__.py", line 86, in _add_op_to_registry
+    raise RuntimeError(f"duplicate registrations for {op_overload}")
+RuntimeError: duplicate registrations for aten.miopen_batch_norm.default
+{
+  "ultralytics": "8.4.215",
+  "names": {
+    "0": "0",
+    "1": "1",
+    "2": "enemy",
+    "3": "head"
+  },
+  "task": "detect",
+  "imgsz": 640,
+  "epoch": -1,
+  "best_fitness": "None",
+  "date": "2026-11-15T13:59:30.588470",
+  "train_data": "/train/cache/dataset/data.yaml",
+  "epochs": 300,
+  "val": {
+    "map50": 0.5334109597053796,
+    "map50_95": 0.20611013338556056,
+    "precision": 0.7677887723286516,
+    "recall": 0.4614833411380758
+  },
+  "test": {
+    "map50": 0.639489370278844,
+    "map50_95": 0.257785183727289,
+    "precision": 0.7692318389642048,
+    "recall": 0.4761935665315121
+  },
+  "onnx": "out/enemy_yolo26s_640.onnx",
+  "tflite_error": "duplicate registrations for aten.miopen_batch_norm.default"
+}
+exit=0
