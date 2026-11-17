@@ -1,0 +1,66 @@
+name: COD Dataset Analyze
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download and analyze
+        run: |
+          pip install -q pillow pyyaml
+          mkdir -p cod out && cd cod
+          curl -sSL -o cod.zip "https://app.roboflow.com/ds/IBlLSkxdiH?key=eNTzulMPEw"
+          ls -la cod.zip; unzip -q -o cod.zip; ls
+          cd ..
+          python3 - << 'PY' 2>&1 | tee out/report.txt
+          import yaml, glob, os, collections, random
+          from PIL import Image, ImageDraw
+          y = yaml.safe_load(open("cod/data.yaml"))
+          names = y["names"]; print("names:", names, "nc:", y.get("nc"))
+          if isinstance(names, dict): names = [names[k] for k in sorted(names)]
+          cnt = collections.Counter(); area = collections.defaultdict(list); wh = collections.defaultdict(list)
+          files = {}
+          for sp in ("train", "valid", "test"):
+              fl = glob.glob(f"cod/{sp}/labels/*.txt"); print(sp, len(fl), "label files")
+              for f in fl:
+                  rows = [l.split() for l in open(f) if l.strip()]
+                  files[f] = rows
+                  for r in rows:
+                      c = int(float(r[0])); cnt[names[c]] += 1
+                      w, h = float(r[3]), float(r[4]); area[names[c]].append(w * h); wh[names[c]].append((w, h))
+          for n in names:
+              a = area[n]
+              if a: print(n, "boxes", cnt[n], "avg_area %.4f" % (sum(a)/len(a)), "avg_w %.3f avg_h %.3f" % (sum(x for x,_ in wh[n])/len(a), sum(y for _,y in wh[n])/len(a)))
+          # per-image class co-occurrence
+          co = collections.Counter()
+          for f, rows in files.items():
+              co[tuple(sorted(set(names[int(float(r[0]))] for r in rows)))] += 1
+          print("co-occurrence per image:"); [print("  ", k, v) for k, v in co.most_common(10)]
+          colors = {n: c for n, c in zip(names, [(255,0,0),(0,255,0),(255,255,0),(0,160,255),(255,0,255)])}
+          random.seed(5)
+          keys = list(files)
+          # pick images that contain each class
+          picked = []
+          for n in names:
+              cand = [f for f in keys if any(names[int(float(r[0]))] == n for r in files[f])]
+              random.shuffle(cand); picked += cand[:2]
+          os.makedirs("out/samples", exist_ok=True)
+          for i, f in enumerate(dict.fromkeys(picked)):
+              ip = f.replace("/labels/", "/images/").rsplit(".", 1)[0]
+              cand = glob.glob(ip + ".*")
+              if not cand: continue
+              im = Image.open(cand[0]).convert("RGB"); W, H = im.size; d = ImageDraw.Draw(im)
+              for r in files[f]:
+                  c = int(float(r[0])); cx, cy, w, h = map(float, r[1:5])
+                  box = [(cx-w/2)*W, (cy-h/2)*H, (cx+w/2)*W, (cy+h/2)*H]
+                  d.rectangle(box, outline=colors[names[c]], width=3); d.text((box[0], max(0, box[1]-12)), names[c], fill=colors[names[c]])
+              im.thumbnail((960, 960)); im.save(f"out/samples/s{i}.jpg", quality=80)
+          print("sample sizes:", [Image.open(p).size for p in glob.glob("cod/train/images/*")[:3]])
+          PY
+      - name: Publish
+        if: always()
+        run: |
+          cd out && git init -q -b cod-analysis && git add . && git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m analysis
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" cod-analysis
