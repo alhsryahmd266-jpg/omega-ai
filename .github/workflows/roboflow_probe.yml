@@ -1,0 +1,50 @@
+name: Roboflow Probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe key and datasets
+        env:
+          RAW: ${{ secrets.ROBOFLOW_KEY_RAW }}
+        run: |
+          python3 - << 'PY' > /tmp/rf.txt 2>&1 || true
+          import os, json, urllib.request, urllib.error
+          def get(u):
+              try:
+                  with urllib.request.urlopen(u, timeout=40) as r:
+                      return r.status, json.loads(r.read().decode())
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode()[:200]
+              except Exception as e:
+                  return -1, str(e)[:200]
+          parts = [p.strip() for p in os.environ["RAW"].splitlines() if p.strip()]
+          cands = ["".join(parts)] + parts
+          print("candidate lengths:", [len(c) for c in cands])
+          good = None
+          for i, k in enumerate(cands):
+              s, d = get("https://api.roboflow.com/?api_key=" + k)
+              print("candidate", i, "->", s, (d.get("workspace") if s == 200 and isinstance(d, dict) else str(d)[:80]))
+              if s == 200 and good is None:
+                  good = k
+          if good:
+              for ws, pj in [("josuedev", "cod-mobile-lqfcx-vwxdk"), ("fortnite-ai-aim", "cod-mw-warzone-catlb"), ("kolly-ku5ew", "cod-mw-warzone"), ("sky2506", "cod-mw-warzone-zixmg")]:
+                  s, d = get("https://api.roboflow.com/%s/%s?api_key=%s" % (ws, pj, good))
+                  if s != 200:
+                      print(ws, pj, "->", s, d if isinstance(d, str) else ""); continue
+                  p = d.get("project", {})
+                  print(ws, pj, "classes:", p.get("classes"), "images:", p.get("images"), "license:", p.get("license"))
+                  print("   versions:", [(v.get("id"), v.get("images")) for v in d.get("versions", [])][-3:])
+          else:
+              print("NO VALID KEY")
+          PY
+          cat /tmp/rf.txt
+      - name: Publish result
+        if: always()
+        run: |
+          mkdir -p /tmp/o && cp /tmp/rf.txt /tmp/o/rf_probe.txt
+          cd /tmp/o && git init -q -b roboflow-probe-logs && git add . && git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m probe
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" roboflow-probe-logs
