@@ -1,0 +1,3 @@
+names ['0', '1', 'enemy', 'head'] keep idx {0, 2}
+{'wz_images': 3112, 'wz_boxes': 3333, 'wz_skipped_no_enemy': 46, 'mobile_train': 432, 'mobile_valid': 41, 'mobile_test': 20}
+zip MB 129.227504
