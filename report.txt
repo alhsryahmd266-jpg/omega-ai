@@ -1,0 +1,16 @@
+names: ['0', '1', 'enemy', 'head'] nc: 4
+train 2558 label files
+valid 600 label files
+test 0 label files
+0 boxes 1121 avg_area 0.0228 avg_w 0.077 avg_h 0.196
+1 boxes 852 avg_area 0.0030 avg_w 0.032 avg_h 0.057
+enemy boxes 2212 avg_area 0.1056 avg_w 0.213 avg_h 0.348
+head boxes 1869 avg_area 0.0103 avg_w 0.081 avg_h 0.085
+co-occurrence per image:
+   ('enemy', 'head') 1751
+   ('0', '1') 792
+   ('enemy',) 313
+   ('0',) 256
+   ('head',) 32
+   ('1',) 14
+sample sizes: [(320, 320), (320, 320), (320, 320)]
