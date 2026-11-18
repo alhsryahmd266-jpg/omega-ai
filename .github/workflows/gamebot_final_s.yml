@@ -1,0 +1,99 @@
+name: GameBot FINAL mixed train (s)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 380
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Kaggle CLI
+        run: pip install "kaggle==1.6.17" six -q
+      - name: Configure Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then echo "::error::KAGGLE secrets missing"; exit 1; fi
+          mkdir -p ~/.kaggle
+          echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+          chmod 600 ~/.kaggle/access_token
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
+      - name: Push kernel
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          mkdir -p kpush
+          cp GameBot/training/kaggle_yolo26/train_final.py kpush/train.py
+          sed -i 's/__MODEL__/s/' kpush/train.py
+          cat > kpush/kernel-metadata.json << EOF
+          {
+            "id": "${KU}/gamebot-final-s",
+            "title": "gamebot-final-s",
+            "code_file": "train.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_internet": true,
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": []
+          }
+          EOF
+          cd kpush
+          kaggle kernels push -p . > ../push.log 2>&1 || true
+          cat ../push.log
+          cp kernel-metadata.json ../push_meta.json
+          grep -qi "successfully pushed" ../push.log || { echo "::error::push failed"; exit 1; }
+      - name: Publish debug logs
+        if: always()
+        run: |
+          mkdir -p /tmp/dbg
+          cp push.log push_meta.json /tmp/dbg/ 2>/dev/null || true
+          cd /tmp/dbg
+          git init -q -b ci-logs
+          git add . 2>/dev/null || true
+          git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m "yolo26 push log" || true
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-logs || true
+      - name: Wait for kernel
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          for i in $(seq 1 340); do
+            sleep 60
+            s=$(kaggle kernels status "${KU}/gamebot-final-s" 2>&1 | tr 'A-Z' 'a-z')
+            echo "[$i min] $s"
+            case "$s" in *complete*) break;; *error*|*cancel*|*fail*) echo "kernel ended badly"; break;; esac
+          done
+      - name: Download output
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          mkdir -p kout
+          for a in 1 2 3; do kaggle kernels output "${KU}/gamebot-final-s" -p kout && break || sleep 30; done
+          find kout -type f | head -50
+          cat kout/far_result.json 2>/dev/null || echo "no result json"
+          mkdir -p release
+          find kout -type f \( -name "*.tflite" -o -name "*.onnx" -o -name "*_best.pt" -o -name "far_result.json" \) -exec cp {} release/ \;
+          cp kout/*.log release/kaggle_kernel.log 2>/dev/null || true
+          ls -la release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gamebot-final-s-${{ github.run_number }}
+          path: release/
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: gamebot-final-s-v${{ github.run_number }}
+          name: GameBot FINAL mixed P2 (s) #${{ github.run_number }}
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
