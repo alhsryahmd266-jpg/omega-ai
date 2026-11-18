@@ -1,0 +1,31 @@
+name: Kaggle Status
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  st:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List kernels and their status
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+          KK: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          pip install -q "kaggle==1.6.17" six
+          mkdir -p ~/.kaggle
+          echo "$KK" > ~/.kaggle/access_token; chmod 600 ~/.kaggle/access_token
+          echo "{\"username\":\"$KU\",\"key\":\"$KK\"}" > ~/.kaggle/kaggle.json; chmod 600 ~/.kaggle/kaggle.json
+          mkdir -p /tmp/o
+          kaggle kernels list --mine --page-size 60 -v > /tmp/o/list.csv 2>&1 || true
+          head -3 /tmp/o/list.csv
+          : > /tmp/o/status.txt
+          for s in $(tail -n +2 /tmp/o/list.csv | cut -d, -f1 | head -60); do
+            echo "$s -> $(kaggle kernels status "$s" 2>&1 | tail -1)" >> /tmp/o/status.txt
+          done
+          cat /tmp/o/status.txt
+      - name: Publish
+        if: always()
+        run: |
+          cd /tmp/o && git init -q -b kaggle-status && git add . && git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m st
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" kaggle-status
