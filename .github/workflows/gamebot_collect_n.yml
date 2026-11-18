@@ -1,0 +1,62 @@
+name: GameBot FINAL collect (n)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 380
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Kaggle CLI
+        run: pip install "kaggle==1.6.17" six -q
+      - name: Configure Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then echo "::error::KAGGLE secrets missing"; exit 1; fi
+          mkdir -p ~/.kaggle
+          echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+          chmod 600 ~/.kaggle/access_token
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "KAGGLE_API_TOKEN=$KAGGLE_KEY" >> "$GITHUB_ENV"
+      - name: Wait for kernel
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          for i in $(seq 1 340); do
+            sleep 60
+            s=$(kaggle kernels status "${KU}/gamebot-final-n" 2>&1 | tr 'A-Z' 'a-z')
+            echo "[$i min] $s"
+            case "$s" in *complete*) break;; *error*|*cancel*|*fail*) echo "kernel ended badly"; break;; esac
+          done
+      - name: Download output
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          mkdir -p kout
+          for a in 1 2 3; do kaggle kernels output "${KU}/gamebot-final-n" -p kout && break || sleep 30; done
+          find kout -type f | head -50
+          cat kout/far_result.json 2>/dev/null || echo "no result json"
+          mkdir -p release
+          find kout -type f \( -name "*.tflite" -o -name "*.onnx" -o -name "*_best.pt" -o -name "far_result.json" \) -exec cp {} release/ \;
+          cp kout/*.log release/kaggle_kernel.log 2>/dev/null || true
+          ls -la release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gamebot-final-n-${{ github.run_number }}
+          path: release/
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: gamebot-final-n-v${{ github.run_number }}
+          name: GameBot FINAL mixed P2 (n) #${{ github.run_number }}
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
