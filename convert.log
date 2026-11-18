@@ -1,0 +1,90 @@
++ for m in n s
++ onnx2tf -i yolo26n_960.onnx -o sm_n -osd
++ tail -30
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['onnxsim', 'yolo26n_960.onnx', 'yolo26n_960.onnx']' returned non-zero exit status 1.
+
+[33mWARNING:[0m Failed to optimize the onnx file.
+
+[07mAutomatic generation of each OP name started[0m ========================================
+[32mAutomatic generation of each OP name complete![0m
+
+[07mModel loaded[0m ========================================================================
+
+[07mModel conversion started[0m ============================================================
+[32mINFO:[0m [32minput_op_name[0m: images [32mshape[0m: [1, 3, 960, 960] [32mdtype[0m: float32
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/bin/onnx2tf", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/onnx2tf/onnx2tf.py", line 2605, in main
+    model = convert(
+            ^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/onnx2tf/onnx2tf.py", line 1021, in convert
+    test_data: np.ndarray = download_test_image_data()
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/onnx2tf/utils/common_functions.py", line 4191, in download_test_image_data
+    test_image_data: np.ndarray = np.load(f)
+                                  ^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/numpy/lib/npyio.py", line 462, in load
+    raise ValueError("Cannot load file containing pickled data "
+ValueError: Cannot load file containing pickled data when allow_pickle=False
++ ls -la sm_n
+total 8
+drwxr-xr-x 2 runner runner 4096 Nov 18 19:18 .
+drwxr-xr-x 3 runner runner 4096 Nov 18 19:18 ..
+++ ls 'sm_n/*float32.tflite'
+++ head -1
++ f=
++ '[' -n '' ']'
+++ ls 'sm_n/*float16.tflite'
+++ head -1
++ g=
++ '[' -n '' ']'
++ for m in n s
++ onnx2tf -i yolo26s_960.onnx -o sm_s -osd
++ tail -30
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['onnxsim', 'yolo26s_960.onnx', 'yolo26s_960.onnx']' returned non-zero exit status 1.
+
+[33mWARNING:[0m Failed to optimize the onnx file.
+
+[07mAutomatic generation of each OP name started[0m ========================================
+[32mAutomatic generation of each OP name complete![0m
+
+[07mModel loaded[0m ========================================================================
+
+[07mModel conversion started[0m ============================================================
+[32mINFO:[0m [32minput_op_name[0m: images [32mshape[0m: [1, 3, 960, 960] [32mdtype[0m: float32
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/bin/onnx2tf", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/onnx2tf/onnx2tf.py", line 2605, in main
+    model = convert(
+            ^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/onnx2tf/onnx2tf.py", line 1021, in convert
+    test_data: np.ndarray = download_test_image_data()
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/onnx2tf/utils/common_functions.py", line 4191, in download_test_image_data
+    test_image_data: np.ndarray = np.load(f)
+                                  ^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/numpy/lib/npyio.py", line 462, in load
+    raise ValueError("Cannot load file containing pickled data "
+ValueError: Cannot load file containing pickled data when allow_pickle=False
++ ls -la sm_s
+total 8
+drwxr-xr-x 2 runner runner 4096 Nov 18 19:18 .
+drwxr-xr-x 4 runner runner 4096 Nov 18 19:18 ..
+++ ls 'sm_s/*float32.tflite'
+++ head -1
++ f=
++ '[' -n '' ']'
+++ ls 'sm_s/*float16.tflite'
+++ head -1
++ g=
++ '[' -n '' ']'
