@@ -14,6 +14,10 @@ class Ghost(var bearing: Float, var rangeM: Float, val firstSeen: Long) {
     var lastSeen = firstSeen
     var lateral = 0f        // bearing change in deg/s (which way it was moving across our view)
     var sightings = 1
+    // last ~0.7 s of (time, bearing relative to the first sample): the rate is a least-squares slope, which averages out
+    // noise and the short mismatch between our commands and the camera actually turning
+    val hist = ArrayList<Pair<Long, Float>>()
+    var histBase = 0f
 }
 
 /**
@@ -46,6 +50,7 @@ class WorldMemory(private val fovDeg: Float) {
     var degPerPx = 0.04f; private set
     var engagements = 0; private set
     var hitsTaken = 0; private set
+    var calibUpdates = 0; private set        // how many look-sensitivity measurements we have (lead needs plenty)
 
     private var baseDegPerPx = 0.04f
     private var calibrated = false
@@ -70,6 +75,7 @@ class WorldMemory(private val fovDeg: Float) {
         glanceUntil = 0L; nextGlanceAt = 0L
         engagements = 0; hitsTaken = 0
         degPerPx = baseDegPerPx
+        // calibUpdates is kept on purpose: the phone's look sensitivity does not change between matches
     }
 
     // ---- bookkeeping -------------------------------------------------------------------------
@@ -138,6 +144,7 @@ class WorldMemory(private val fovDeg: Float) {
                 val kObs = (-(t.cx - px) * fovDeg) / prevLookDx
                 if (kObs > 0f) {
                     degPerPx = (degPerPx * 0.97f + kObs * 0.03f).coerceIn(baseDegPerPx * 0.3f, baseDegPerPx * 3f)
+                    calibUpdates++
                 }
             }
         }
@@ -160,11 +167,14 @@ class WorldMemory(private val fovDeg: Float) {
                 if (dg < bd) { bd = dg; g = c }
             }
             if (g == null) {
-                ghosts.add(Ghost(world, range, now))
+                val ng = Ghost(world, range, now)
+                ng.histBase = world
+                ng.hist.add(Pair(now, 0f))
+                ghosts.add(ng)
             } else {
-                val dt = max(0.016f, (now - g.lastSeen) / 1000f)
-                val lat = norm(world - g.bearing) / dt
-                g.lateral = g.lateral * 0.7f + lat.coerceIn(-90f, 90f) * 0.3f
+                g.hist.add(Pair(now, norm(world - g.histBase)))
+                while (g.hist.size > 1 && now - g.hist[0].first > 700L) g.hist.removeAt(0)
+                g.lateral = slope(g.hist)
                 g.bearing = world
                 g.rangeM = range
                 g.lastSeen = now
@@ -173,6 +183,21 @@ class WorldMemory(private val fovDeg: Float) {
             val s = sectorOf(world)
             danger[s] = min(6f, danger[s] + 0.06f)
         }
+    }
+
+    /** deg/s of the least-squares line through (time, bearing); 0 when there are too few/short samples. */
+    private fun slope(h: List<Pair<Long, Float>>): Float {
+        if (h.size < 6 || h.last().first - h.first().first < 300L) return 0f
+        val t0 = h.first().first
+        var st = 0f; var sb = 0f
+        for (p in h) { st += (p.first - t0) / 1000f; sb += p.second }
+        val mt = st / h.size; val mb = sb / h.size
+        var num = 0f; var den = 0f
+        for (p in h) {
+            val dt = (p.first - t0) / 1000f - mt
+            num += dt * (p.second - mb); den += dt * dt
+        }
+        return if (den < 1e-6f) 0f else (num / den).coerceIn(-90f, 90f)
     }
 
     fun onHit(now: Long) {
@@ -198,6 +223,24 @@ class WorldMemory(private val fovDeg: Float) {
     }
 
     fun ghostCount(): Int = ghosts.size
+
+    /**
+     * How far (screen fraction) to aim ahead of the enemy at screen offset [relScreen] from the crosshair: its
+     * world bearing rate (our own turning already removed) times the loop latency. Small rates are ignored as noise.
+     */
+    fun leadFrac(relScreen: Float, latencySec: Float, maxFrac: Float): Float {
+        val world = norm(yaw + relScreen * fovDeg)
+        var best: Ghost? = null
+        var bd = 8f
+        for (g in ghosts) {
+            val d = abs(norm(g.bearing - world))
+            if (d < bd) { bd = d; best = g }
+        }
+        val g = best ?: return 0f
+        if (calibUpdates < 80) return 0f                 // own turning not measured well enough yet: a wrong yaw would fake target motion
+        if (g.sightings < 8 || abs(g.lateral) < 6f) return 0f
+        return (g.lateral * latencySec / fovDeg).coerceIn(-maxFrac, maxFrac)
+    }
 
     /** 0..0.15: how much earlier to retreat after taking many hits per fight. */
     fun cautionBonus(): Float {
@@ -234,7 +277,7 @@ class WorldMemory(private val fovDeg: Float) {
         // 2) an enemy stepped out of view a moment ago: keep tracking where it went
         if (g != null) {
             val age = now - g.lastSeen
-            val predicted = norm(g.bearing + g.lateral.coerceIn(-40f, 40f) * min(age, 2000L) / 1000f)
+            val predicted = norm(g.bearing + (g.lateral.coerceIn(-40f, 40f) * min(age, 2000L) / 1000f).coerceIn(-30f, 30f))
             val rel = relBearing(predicted)
             if (style.avoidFar) {
                 val away = norm(rel + 180f)

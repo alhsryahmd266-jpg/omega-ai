@@ -102,6 +102,8 @@ class Config {
     var tacticSneak = true         // stalk / flank an enemy before striking
     var tacticAmbush = true        // hold the angle for a moment after losing an enemy at close range
     var tacticMemory = true        // remember enemies/danger/explored ground; track enemies that left the screen
+    var tacticLead = true          // aim slightly ahead of strafing enemies (only once the look sensitivity has been learned)
+    var zoomRoi = true             // second detection pass on magnified windows while nothing confident is on screen (far enemies)
     var tacticDodge = true         // evasive strafe + jump when taking damage
     var tacticJump = true          // jump-peeks while strafing
     var tacticCrouch = false       // use the crouch button (toggle style) while stalking / ambushing
@@ -171,6 +173,8 @@ class Config {
         o.put("tacticSneak", tacticSneak)
         o.put("tacticAmbush", tacticAmbush)
         o.put("tacticMemory", tacticMemory)
+        o.put("zoomRoi", zoomRoi)
+        o.put("tacticLead", tacticLead)
         o.put("tacticDodge", tacticDodge)
         o.put("tacticJump", tacticJump)
         o.put("tacticCrouch", tacticCrouch)
@@ -230,6 +234,8 @@ class Config {
         tacticSneak = o.optBoolean("tacticSneak", tacticSneak)
         tacticAmbush = o.optBoolean("tacticAmbush", tacticAmbush)
         tacticMemory = o.optBoolean("tacticMemory", tacticMemory)
+        zoomRoi = o.optBoolean("zoomRoi", zoomRoi)
+        tacticLead = o.optBoolean("tacticLead", tacticLead)
         tacticDodge = o.optBoolean("tacticDodge", tacticDodge)
         tacticJump = o.optBoolean("tacticJump", tacticJump)
         tacticCrouch = o.optBoolean("tacticCrouch", tacticCrouch)

@@ -157,7 +157,10 @@ class Detector(private val cfg: Config) {
         return "$delegateName ${inW}x$inH: avg ${"%.1f".format(avg)} ms (min ${"%.1f".format(t.minOrNull() ?: 0f)}, max ${"%.1f".format(t.maxOrNull() ?: 0f)}) ≈ ${(1000f / avg).toInt()} FPS"
     }
 
-    fun detect(src: Bitmap, srcW: Int, srcH: Int): List<Det> {
+    fun detect(src: Bitmap, srcW: Int, srcH: Int): List<Det> = detectRoi(src, 0, 0, srcW, srcH)
+
+    /** Detects inside the window (rx, ry, srcW, srcH) of [src]; boxes are normalized to that window. */
+    fun detectRoi(src: Bitmap, rx: Int, ry: Int, srcW: Int, srcH: Int): List<Det> {
         val ip = interp ?: return emptyList()
         val ib = inBuf ?: return emptyList()
         val ob = outBuf ?: return emptyList()
@@ -172,7 +175,7 @@ class Detector(private val cfg: Config) {
         val padX = (inW - nw) / 2f
         val padY = (inH - nh) / 2f
         c.drawColor(Color.rgb(114, 114, 114))
-        srcRect.set(0, 0, srcW, srcH)
+        srcRect.set(rx, ry, rx + srcW, ry + srcH)
         dstRect.set(padX, padY, padX + nw, padY + nh)
         c.drawBitmap(src, srcRect, dstRect, paint)
         wb.getPixels(pixels, 0, inW, 0, 0, inW, inH)

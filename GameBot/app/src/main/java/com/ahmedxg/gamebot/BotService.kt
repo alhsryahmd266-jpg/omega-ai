@@ -97,6 +97,7 @@ class BotService : Service() {
     private var emaInj = 0f
     private var nDets = 0
     private var state = ""
+    private val zoomSched = ZoomDetect.Scheduler()
     private var thermal = 0
     private var guardOk = true
     private var guardFg = ""
@@ -218,7 +219,7 @@ class BotService : Service() {
         val tactics = Tactics(
             sneak = cfg.tacticSneak, ambush = cfg.tacticAmbush, dodge = cfg.tacticDodge, jump = cfg.tacticJump,
             crouch = cfg.tacticCrouch, style = cfg.style, mapAllies = cfg.allyMapEnabled, squad = cfg.squadFollow,
-            fovDeg = cfg.fovDeg.toFloat(), mapEnemies = cfg.enemyMapEnabled, memory = cfg.tacticMemory
+            fovDeg = cfg.fovDeg.toFloat(), mapEnemies = cfg.enemyMapEnabled, memory = cfg.tacticMemory, lead = cfg.tacticLead
         )
         if (cfg.allyMapEnabled || cfg.enemyMapEnabled) mapReader = AllyMapReader(cfg)
         if (detector != null && cfg.tacticDodge) hitDetector = HitDetector(cfg.hitSensitivity)
@@ -470,6 +471,12 @@ class BotService : Service() {
         if (d != null && active && inGame && !inMacro) {
             dets = d.detect(bmp, w, h)
             detMs = d.lastMs
+            if (cfg.zoomRoi && ZoomDetect.needZoom(dets, cfg.conf)) {
+                val roi = zoomSched.next(ZoomDetect.windows(w, h, cfg.crossX, cfg.crossY))
+                val zd = ZoomDetect.toFull(d.detectRoi(bmp, roi.x, roi.y, roi.w, roi.h), roi, w, h)
+                if (zd.isNotEmpty()) dets = ZoomDetect.merge(dets, zd, cfg.iou)
+                detMs += d.lastMs
+            }
         }
         nDets = dets.size
 

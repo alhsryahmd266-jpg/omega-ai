@@ -31,6 +31,28 @@ private fun freshMemory(turnDeg: Float = 0f): WorldMemory {
     return m
 }
 
+/** Closed-loop aim test: an enemy strafes at a constant world bearing rate; how far off is the crosshair on average? */
+fun aimError(lead: Boolean, rateDegPerSec: Float): Float {
+    val pol = TacticalPolicy(Skill.PRO, 1f, 0.5f, 0.5f, Tactics(memory = true, lead = lead))
+    val k = 0.015f                        // true deg/px of this simulated phone/game (lower than the 0.042 first guess)
+    var now = 100_000L
+    var yaw = 0f
+    var bearing = 5f
+    var errSum = 0f; var n = 0
+    val delayed = ArrayDeque<Float>()
+    val warm = 500
+    for (i in 0 until warm + 240) {       // 500 frames of swinging target (it learns its sensitivity), then 8 s of the real test
+        if (i < warm) bearing = 12f * Math.sin(i * 0.07).toFloat() else bearing += rateDegPerSec * 0.033f
+        val cx = (0.5f + (bearing - yaw) / 80f).coerceIn(0.02f, 0.98f)
+        val a = pol.decide(Perception(now, listOf(Det(0, "enemy", 0.9f, cx, 0.5f, 0.045f, 0.15f)), 1920, 1080), now)
+        delayed.addLast(a.lookDx)                     // detection + touch injection latency: ~4 frames (130 ms)
+        if (delayed.size > 4) yaw += delayed.removeFirst() * k
+        if (i >= warm + 120) { errSum += Math.abs(bearing - yaw); n++ }
+        now += 33
+    }
+    return errSum / n
+}
+
 fun main() {
     // 1) nothing around: it explores (moves a lot, covers ground, never fires)
     run {
@@ -51,29 +73,35 @@ fun main() {
         check("explore: covers many distinct cells in 3 min (" + cells.size + ")", cells.size >= 25)
     }
 
-    // 3) an enemy steps out of view to the right: after the sweep it keeps tracking to the right
+    // 3+4) an enemy strafes right and then ducks behind cover (closed loop: the camera follows our look commands)
+    fun duck(style: Style): Run {
+        val r = Run(Skill.NORMAL, style)
+        val k = 0.015f
+        var yaw = 0f
+        for (i in 0 until 45) {                                   // 1.5 s visible, running to the right at 30 deg/s
+            val bearing = 5f + 30f * (i * 0.033f)
+            val cx = 0.5f + (bearing - yaw) / 80f
+            val a = r.step(listOf(enemy(cx.coerceIn(0.05f, 0.95f), 0.5f, 0.10f)))
+            yaw += a.lookDx * k
+        }
+        repeat(90) { val a = r.step(emptyList()); yaw += a.lookDx * k }   // gone
+        return r
+    }
     run {
-        val r = Run(Skill.NORMAL)
-        repeat(45) { r.step(listOf(enemy(0.70f, 0.5f, 0.10f))) }
-        val tLost = r.now - r.t0
-        repeat(90) { r.step(emptyList()) }
-        val after = r.between(tLost + 700, tLost + 2900)
-        val tr = after.filter { it.second.state == "TRACK" }
+        val r = duck(Style.BALANCED)
+        val tLost = 45 * 33L
+        val tr = r.between(tLost + 700, tLost + 2900).filter { it.second.state == "TRACK" }
         check("ghost: TRACK appears after the sweep", tr.isNotEmpty())
-        check("ghost: first TRACK turns toward where it went (right)", tr.firstOrNull()?.second?.lookDx ?: -1f > 0f)
+        check("ghost: first TRACK turns toward where it went (right)", (tr.firstOrNull()?.second?.lookDx ?: -1f) > 0f)
         check("ghost: remembered one enemy", r.pol.worldMemory!!.ghostCount() == 1)
         check("ghost: never fires while tracking", r.log.none { it.second.state == "TRACK" && it.second.fire })
     }
-
-    // 4) survivor plan: slips away from the last known enemy instead of hunting it
     run {
-        val r = Run(Skill.NORMAL, Style.SURVIVOR)
-        repeat(45) { r.step(listOf(enemy(0.70f, 0.5f, 0.10f))) }
-        val tLost = r.now - r.t0
-        repeat(90) { r.step(emptyList()) }
+        val r = duck(Style.SURVIVOR)
+        val tLost = 45 * 33L
         val ev = r.between(tLost + 700, tLost + 2900).filter { it.second.state == "EVADE" }
         check("survivor: EVADE after losing an enemy", ev.isNotEmpty())
-        check("survivor: turns away (left) from an enemy that went right", ev.first().second.lookDx < 0f)
+        check("survivor: turns away from where the enemy went", (ev.firstOrNull()?.second?.lookDx ?: 1f) < 0f)
     }
 
     // 5) hit by somebody we cannot see: looks around in both directions
@@ -190,6 +218,18 @@ fun main() {
         check("reset: ghosts and counters cleared", m.ghostCount() == 0 && m.engagements == 0 && m.hitsTaken == 0)
     }
 
+
+    // 14) aim lead: against a strafing enemy the crosshair stays closer to it; against a still one nothing gets worse
+    run {
+        val e0 = aimError(false, 25f); val e1 = aimError(true, 25f)
+        check("lead: strafing 25 deg/s - mean error " + "%.2f".format(e0) + " -> " + "%.2f".format(e1) + " deg", e1 < e0 * 0.8f)
+        val s0 = aimError(false, 0f); val s1 = aimError(true, 0f)
+        check("lead: still target - error not worse (" + "%.2f".format(s0) + " vs " + "%.2f".format(s1) + " deg)", s1 <= s0 + 0.25f)
+        val f0 = aimError(false, 60f); val f1 = aimError(true, 60f)
+        check("lead: fast strafe 60 deg/s - error " + "%.2f".format(f0) + " -> " + "%.2f".format(f1) + " deg", f1 < f0)
+    }
+
     println(if (failures == 0) "\nALL MEMORY CHECKS PASSED" else "\n$failures MEMORY CHECK(S) FAILED")
     if (failures > 0) System.exit(1)
 }
+

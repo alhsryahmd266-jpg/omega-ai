@@ -36,7 +36,8 @@ class Tactics(
     val squad: Boolean = false,       // walk back to the squad when it is far and nobody is around
     val fovDeg: Float = 80f,          // horizontal field of view, used to turn a screen position into a bearing
     val mapEnemies: Boolean = false,  // react to red enemy dots on the minimap (turn toward them)
-    val memory: Boolean = false       // WorldMemory: remember enemies/danger/explored ground, track out-of-view enemies
+    val memory: Boolean = false,      // WorldMemory: remember enemies/danger/explored ground, track out-of-view enemies
+    val lead: Boolean = false         // aim slightly ahead of a target that strafes (needs memory)
 )
 
 /** What the bot wants to do right now. Translated into touches by [Controller]. */

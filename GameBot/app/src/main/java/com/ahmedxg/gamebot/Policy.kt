@@ -234,7 +234,8 @@ class TacticalPolicy(
         val a = Action()
         var aligned = false
         if (have) {
-            val ex = tx - crossX
+            val lead = if (tactics.lead && body != null && body.hits >= 8) (mem?.leadFrac(tx - crossX, 0.12f, body.w * 0.4f) ?: 0f) else 0f
+            val ex = tx - crossX + lead
             val ey = ty - crossY
             lastDirX = ex
             val gain = (skill.aimGain * aimScale).coerceIn(0.05f, 1.2f)
