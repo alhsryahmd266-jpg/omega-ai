@@ -27,7 +27,7 @@ jobs:
           {
             set -x
             for m in n s; do
-              onnx2tf -i yolo26${m}_960.onnx -o sm_${m} -osd -cotof -nuo 2>&1 | tail -25 || true
+              onnx2tf -i yolo26${m}_960.onnx -o sm_${m} -osd 2>&1 | tail -30 || true
               ls -la sm_${m} || true
               f=$(ls sm_${m}/*float32.tflite 2>/dev/null | head -1)
               [ -n "$f" ] && cp "$f" ../out/yolo26${m}_final_p2_960_nhwc_fp32.tflite
