@@ -1,0 +1,114 @@
+name: Vision Round (continual - ONE model, bigger data each time)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  round:
+    runs-on: ubuntu-latest
+    timeout-minutes: 375
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Kaggle CLI
+        run: pip install "kaggle==1.6.17" six -q
+      - name: Configure Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+          chmod 600 ~/.kaggle/access_token
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+      - name: Push kernel (waits while the GPU slots are busy)
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          mkdir -p kpush
+          cp GameBot/training/kaggle_yolo26/train_continue.py kpush/train.py
+          cat > kpush/kernel-metadata.json << EOF
+          {
+            "id": "${KU}/gamebot-vision-round",
+            "title": "gamebot-vision-round",
+            "code_file": "train.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_internet": true,
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": []
+          }
+          EOF
+          cd kpush
+          for i in $(seq 1 30); do
+            kaggle kernels push -p . > ../push.log 2>&1 || true
+            cat ../push.log
+            grep -qi "successfully pushed" ../push.log && exit 0
+            grep -qi "Maximum batch GPU session count\|quota" ../push.log || { echo "::error::push failed"; exit 1; }
+            sleep 600
+          done
+          echo "::error::GPU slots stayed busy"; exit 1
+      - name: Wait for kernel
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          for i in $(seq 1 340); do
+            sleep 60
+            s=$(kaggle kernels status "${KU}/gamebot-vision-round" 2>&1 | tr 'A-Z' 'a-z')
+            echo "[$i min] $s"
+            case "$s" in *complete*) break;; *error*|*cancel*|*fail*) echo "kernel ended badly"; break;; esac
+          done
+      - name: Download output
+        id: out
+        env:
+          KU: ${{ secrets.KAGGLE_USERNAME }}
+        run: |
+          mkdir -p kout release
+          for a in 1 2 3; do kaggle kernels output "${KU}/gamebot-vision-round" -p kout && break || sleep 30; done
+          find kout -type f | head -30
+          find kout -type f \( -name "enemy_vision.*" -o -name "rejected_candidate.*" -o -name "vision_history.json" -o -name "labels.txt" -o -name "far_result.json" \) -exec cp {} release/ \;
+          ls -la release
+          python3 - << 'PY'
+          import json, os
+          acc = False
+          try:
+              acc = bool(json.load(open("release/far_result.json")).get("accepted"))
+          except Exception as e:
+              print("no result:", e)
+          open(os.environ["GITHUB_OUTPUT"], "a").write("accepted=" + ("true" if acc else "false") + "\n")
+          print("accepted:", acc)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vision-round-${{ github.run_number }}
+          path: release/
+      - name: Publish the update (only if nothing regressed)
+        if: steps.out.outputs.accepted == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: vision-latest
+          name: Vision model - latest (one file, always the newest)
+          body: Stable links. enemy_vision.tflite = the app model (NHWC 1152). enemy_vision.pt = the checkpoint the next round continues from. vision_history.json = every round with its numbers.
+          files: |
+            release/enemy_vision.tflite
+            release/enemy_vision.pt
+            release/vision_history.json
+            release/labels.txt
+            release/far_result.json
+          overwrite_files: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish logs
+        if: always()
+        run: |
+          mkdir -p /tmp/lg && cp release/far_result.json release/vision_history.json /tmp/lg/ 2>/dev/null || echo none > /tmp/lg/none.txt
+          cd /tmp/lg && git init -q -b vision-logs && git add . && git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m round
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" vision-logs || true
