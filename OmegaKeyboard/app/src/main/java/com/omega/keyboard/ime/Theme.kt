@@ -218,8 +218,11 @@ object Themes {
         tint: Int = WHITE, pale: Boolean = false, shadow: Int = 0, shade: Int = 0, shadeTop: Int = 0,
     ): KbTheme {
         val on = if (pale) ink else WHITE
+        // the function keys of a pale theme are a little clearer than the letter keys; those of a dark one a little darker, so their white
+        // labels stay readable where the picture is light (the pale sand under the bottom row, say)
+        val fnA = (if (pale) keyA * 2 / 3 else keyA * 9 / 8).coerceAtMost(0xFF)
         return KbTheme(
-            id, !pale, bg, ColorMath.withAlpha(tint, keyA), ColorMath.withAlpha(tint, keyA * 2 / 3), ColorMath.withAlpha(WHITE, 0xE0),
+            id, !pale, bg, ColorMath.withAlpha(tint, keyA), ColorMath.withAlpha(tint, fnA), ColorMath.withAlpha(WHITE, 0xE0),
             ink, ColorMath.withAlpha(ink, 0xB0), accent, onAccent, popup, ColorMath.withAlpha(on, 0x33), 0,
             bg2 = bg2, onBg = on, onBgSub = ColorMath.withAlpha(on, 0xBB), onFn = ink,
             bgStyle = 3, glass = true, rim = ColorMath.withAlpha(WHITE, if (tint == WHITE) 0xD8 else 0xA0), scene = scene, onPopup = WHITE,

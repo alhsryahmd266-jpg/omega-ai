@@ -1,11 +1,15 @@
 package com.omega.keyboard.ime
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
@@ -191,6 +195,13 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private var streakH = 0f
     private val streakM = Matrix()
 
+    // the soft shadows round the see-through keys of a picture theme (see [drawGlassShadows])
+    private var shadowBmp: Bitmap? = null
+    private var shadowSig = 0L
+    private var shadowRev = 0
+    private val shadowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val shadowCut = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR) }
+
     // luxe extras: tilt of the phone (smoothed towards the sensor's value), sparks, the glint when the keys appear
     private var tiltX = 0f
     private var tiltY = 0f
@@ -244,6 +255,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     private fun computeKeys() {
         keys.clear()
+        shadowRev++
         val lay = layout ?: return
         if (width == 0) return
         val side = dp(2f)
@@ -324,6 +336,62 @@ class KeyboardView(ctx: Context) : View(ctx) {
         sheenPaint.shader = sheen
         rimShader = LinearGradient(0f, 0f, 0f, h, intArrayOf(t.rim, ColorMath.withAlpha(t.rim, 0)), floatArrayOf(0f, 0.75f), Shader.TileMode.CLAMP)
         rimPaint.shader = rimShader
+    }
+
+    /**
+     * A see-through key cannot carry a shadow underneath it (the shadow would show through the glass), so the shadow is laid round it:
+     * a wide soft one and a tight one just below each key, in one picture of the whole grid that is made once per layout, theme and size
+     * (every key's own shape is cut out of it, so the glass stays clear) and drawn under the keys. This is what lifts the keys off the picture.
+     */
+    private fun drawGlassShadows(c: Canvas, t: KbTheme) {
+        val w = width
+        val h = height
+        if (w <= 0 || h <= 0 || keys.isEmpty()) return
+        val ink = if (t.dark) 0xFF050A1E.toInt() else 0xFF0A2A4A.toInt()
+        val strength = if (t.dark) 0x5E else 0x48
+        val corner = t.corner.coerceIn(0, Themes.CORNER_DP.size - 1)
+        var sig = (w.toLong() * 31 + h) * 31 + shadowRev
+        sig = (sig * 31 + corner) * 31 + rowHeight.toInt()
+        sig = (sig * 31 + strength) * 31 + ink
+        val old = shadowBmp
+        if (sig != shadowSig || (old != null && (old.width != w || old.height != h))) {
+            shadowSig = sig
+            try {
+                val bmp = if (old != null && old.width == w && old.height == h) old.also { it.eraseColor(0) }
+                else Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                shadowBmp = bmp
+                val cv = Canvas(bmp)
+                val r = RectF()
+                // the same shape drawKey gives a key that is not pressed
+                fun shape(kr: KeyRect, grow: Float, dy: Float): Float {
+                    r.set(kr.cell.left + insetX, kr.cell.top + insetY, kr.cell.right - insetX, kr.cell.bottom - insetY)
+                    val rad = min(dp(Themes.CORNER_DP[corner]), min(r.width(), r.height()) / 2f) + grow
+                    r.set(r.left - grow, r.top - grow + dy, r.right + grow, r.bottom + grow + dy)
+                    return rad
+                }
+                // wide and soft, then tight and darker: together they fade out the way a real shadow does
+                val soft = BlurMaskFilter(dp(3.6f), BlurMaskFilter.Blur.NORMAL)
+                val tight = BlurMaskFilter(dp(1.2f), BlurMaskFilter.Blur.NORMAL)
+                for (layer in 0..1) {
+                    shadowFill.maskFilter = if (layer == 0) soft else tight
+                    shadowFill.color = ColorMath.withAlpha(ink, if (layer == 0) strength else strength * 3 / 4)
+                    val dy = dp(if (layer == 0) 2.4f else 0.9f)
+                    for (kr in keys) {
+                        val rad = shape(kr, 0f, dy)
+                        cv.drawRoundRect(r, rad, rad, shadowFill)
+                    }
+                }
+                shadowFill.maskFilter = null
+                for (kr in keys) {
+                    val rad = shape(kr, 0.6f, 0f)
+                    cv.drawRoundRect(r, rad, rad, shadowCut)
+                }
+            } catch (_: Throwable) {
+                shadowBmp = null
+                shadowFill.maskFilter = null
+            }
+        }
+        shadowBmp?.let { c.drawBitmap(it, 0f, 0f, null) }
     }
 
     /** soft light round a key: [GLOW_FRAC] rings of [color], strongest next to the key */
@@ -530,6 +598,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
         ripples.removeAll { now - it.t0 > RIPPLE_MS }
         ensureShaders(rowHeight - 2 * insetY, t)
         val tiltBusy = fxLuxe && t.fancy && stepTilt(dt)
+        if (t.glass) drawGlassShadows(c, t)
 
         for (kr in keys) {
             val target = if (pressed.contains(kr)) 1f else 0f
@@ -983,6 +1052,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         cancelAll()
+        shadowBmp = null
+        shadowSig = 0L
     }
 
     // ------------------------------------------------------------------ resize by hand
