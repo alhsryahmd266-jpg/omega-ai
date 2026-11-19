@@ -152,7 +152,7 @@ class EmojiPanel(ctx: Context) : View(ctx) {
 
     override fun onDraw(c: Canvas) {
         val t = theme
-        c.drawColor(if (t.bgStyle >= 1) t.bg2 else t.bg)
+        c.drawColor(if (t.bgStyle == 3) ColorMath.withAlpha(t.bg2, 0xE4) else if (t.bgStyle >= 1) t.bg2 else t.bg)       // a picture theme shows a little of its picture through
         val gridH = height - barH
         c.save()
         c.clipRect(0f, 0f, width.toFloat(), gridH)

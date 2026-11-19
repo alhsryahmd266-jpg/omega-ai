@@ -263,7 +263,7 @@ class ColorPreview(ctx: Context) : View(ctx) {
 }
 
 /** One theme of the picker: a tiny keyboard drawn in that theme's colours with its name below. */
-class ThemeCard(ctx: Context, val themeId: String, private val name: String, private val t: KbTheme) : View(ctx) {
+class ThemeCard(ctx: Context, val themeId: String, private val name: String, private var t: KbTheme) : View(ctx) {
     var picked = false
         set(v) { if (field != v) { field = v; invalidate() } }
     var ringColor = 0xFF2979FF.toInt()
@@ -283,9 +283,21 @@ class ThemeCard(ctx: Context, val themeId: String, private val name: String, pri
     private var thumb: Bitmap? = null
     private var thumbBusy = false
 
-    /** the number of the user's picture this card shows; when it changes the card makes its picture again */
+    /** the number of the user's pictures this card shows; when it changes the card makes its picture again */
     var rev = 0
         set(v) { if (field != v) { field = v; thumb = null; thumbBusy = false; invalidate() } }
+
+    /** a place for a picture of one's own that is still empty: the card shows a plus instead of a picture */
+    var empty = false
+        set(v) { if (field != v) { field = v; thumb = null; thumbBusy = false; invalidate() } }
+
+    /** the look of a card of the user's own picture changes with the picture: the colours are worked out of it */
+    fun showTheme(theme: KbTheme, revision: Int, isEmpty: Boolean) {
+        t = theme
+        empty = isEmpty
+        rev = revision
+        invalidate()
+    }
 
     private fun buildThumb() {
         if (thumbBusy) return
@@ -296,7 +308,10 @@ class ThemeCard(ctx: Context, val themeId: String, private val name: String, pri
         val theme = t
         Thread {
             val made = try {
-                SceneDrawable.render(theme.scene, w, h, if (theme.scene == "photo") Photos.load(app) else null, theme.bg, theme.bg2)
+                val source = Pictures.load(app, theme.scene, w, h)
+                val r = SceneDrawable.render(w, h, source)
+                source?.recycle()
+                r
             } catch (_: Throwable) {
                 null
             }
@@ -314,7 +329,7 @@ class ThemeCard(ctx: Context, val themeId: String, private val name: String, pri
         if (t.bgStyle >= 1) paint.shader = LinearGradient(0f, box.top, 0f, box.bottom, t.bg, t.bg2, Shader.TileMode.CLAMP) else paint.color = t.bg
         c.drawRoundRect(box, rad, rad, paint)
         paint.shader = null
-        if (t.bgStyle == 3) {
+        if (t.bgStyle == 3 && !empty) {
             val b = thumb
             if (b == null) buildThumb() else {
                 clip.reset(); clip.addRoundRect(box, rad, rad, Path.Direction.CW)
@@ -731,16 +746,41 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
 
     // ------------------------------------------------------------------ themes page
 
+    private var cardRow: LinearLayout? = null
+
+    private fun addCard(row: LinearLayout, id: String) {
+        val ctx = context
+        val slot = Photos.slotOf(id)
+        val name = Themes.cardNames[id] ?: (if (slot >= 0) Photos.nameOf(slot) else id)
+        val card = ThemeCard(ctx, id, name, Themes.base(ctx, id))
+        if (slot >= 0) {
+            card.empty = !Photos.has(ctx, slot)
+            card.rev = prefs.bgPhotoRev
+        }
+        // an empty place for a picture opens the gallery; any other card is a look to choose
+        card.setOnClickListener { if (slot >= 0 && !Photos.has(ctx, slot)) host.onPickPhoto() else pickTheme(id) }
+        cards.add(card)
+        row.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.marginEnd = ctx.dpi(6f) })
+        card.ringColor = theme.accent
+        card.labelColor = theme.onBg
+    }
+
+    /** the cards follow the user's own pictures: one more card appears for every picture that was added */
+    private fun syncCards() {
+        val row = cardRow ?: return
+        val want = Themes.cardIds(context)
+        if (want == cards.map { it.themeId }) return
+        row.removeAllViews()
+        cards.clear()
+        for (id in want) addCard(row, id)
+    }
+
     private fun buildThemesPage(): View {
         val ctx = context
         val col = LinearLayout(ctx).apply { orientation = VERTICAL; setPadding(ctx.dpi(8f), ctx.dpi(6f), ctx.dpi(8f), ctx.dpi(6f)) }
         val (sv, row) = hScroll()
-        for ((id, _) in Themes.choices) {
-            val card = ThemeCard(ctx, id, Themes.cardNames[id] ?: id, Themes.base(ctx, id))
-            card.setOnClickListener { pickTheme(id) }
-            cards.add(card)
-            row.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.marginEnd = ctx.dpi(6f) })
-        }
+        cardRow = row
+        for (id in Themes.cardIds(ctx)) addCard(row, id)
         col.addView(sv, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(118f)))
         // the shape of the keys
         val (shapeScroll, shapeRow) = hScroll()
@@ -749,13 +789,18 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
         shapeRow.addView(shapeLabel)
         for ((i, n) in Themes.SHAPE_NAMES.withIndex()) shapeRow.addView(chip(n, { theme.corner == i }) { prefs.keyShape = i; host.onLook(); restyle() })
         col.addView(shapeScroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(36f)).also { it.topMargin = ctx.dpi(2f) })
-        // the user's own picture
+        // the user's own pictures: up to six, each one gives its look its own colours
         val (photoScroll, photoRow) = hScroll()
-        photoRow.addView(chip("اختار صورة من المعرض", { prefs.theme == "photo" }) { host.onPickPhoto() })
-        photoRow.addView(chip("شيل صورتي", { false }) {
-            Photos.remove(ctx)
-            prefs.bgPhotoRev = prefs.bgPhotoRev + 1
-            host.onLook(); refreshCards(); restyle()
+        photoRow.addView(chip("اختار صورة من المعرض", { Photos.slotOf(Themes.canon(prefs.theme)) >= 0 }) { host.onPickPhoto() })
+        photoRow.addView(chip("شيل الصورة دي", { false }) {
+            val slot = Photos.slotOf(Themes.canon(prefs.theme))
+            if (slot >= 0) {
+                Photos.remove(ctx, slot)
+                prefs.bgPhotoRev = prefs.bgPhotoRev + 1
+                prefs.theme = "auto"
+                Themes.resetCustom(prefs)
+                host.onLook(); refreshCards(); restyle()
+            }
         })
         col.addView(photoScroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(36f)).also { it.topMargin = ctx.dpi(2f) })
         val hint = TextView(ctx).apply { text = "اختيار ثيم بيرجّع ألوان الأزرار والخلفية ليه. لون الكتابة بيفضل زي ما هو." ; textSize = 11.5f }
@@ -765,9 +810,11 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
     }
 
     private fun refreshCards() {
+        syncCards()
         for (c in cards) {
             c.picked = c.themeId == Themes.canon(prefs.theme)
-            if (c.themeId == "photo") c.rev = prefs.bgPhotoRev
+            val slot = Photos.slotOf(c.themeId)
+            if (slot >= 0) c.showTheme(Themes.base(context, c.themeId), prefs.bgPhotoRev, !Photos.has(context, slot))
         }
     }
 

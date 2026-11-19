@@ -35,6 +35,10 @@ class FontBar(ctx: Context) : View(ctx) {
     var chips: List<Chip> = emptyList()
         set(v) { field = v; laidOut = false; invalidate() }
 
+    /** a chip that stays on the left while the others slide (the one that switches the look off), drawn like the others */
+    var pinned: Chip? = null
+        set(v) { field = v; laidOut = false; invalidate() }
+
     /** id of the chosen chip (it is drawn in yellow and slid into view) */
     var selected: String = ""
         set(v) { if (field != v) { field = v; scrollToSelected = true; invalidate() } }
@@ -58,6 +62,7 @@ class FontBar(ctx: Context) : View(ctx) {
     private var xs = FloatArray(0)          // left edge of every chip inside the scrolling row
     private var ws = FloatArray(0)
     private var rowWidth = 0f
+    private var pinW = 0f                   // room the pinned chip takes, with the gap after it (0 without one)
     private var scroll = 0f
     private var scrollToSelected = false
     private var downX = 0f
@@ -73,7 +78,8 @@ class FontBar(ctx: Context) : View(ctx) {
 
     private fun previewW(): Float = min(width * 0.27f, dp(120f))
     private fun moreW(): Float = dp(44f)
-    private fun areaL(): Float = dp(8f) + previewW() + dp(6f)
+    private fun pinL(): Float = dp(8f) + previewW() + dp(6f)
+    private fun areaL(): Float = pinL() + pinW
     private fun areaR(): Float = width - dp(8f) - moreW() - dp(4f)
 
     private fun sizeFor(ch: Chip): Float = dp(15f) * ch.scale
@@ -81,6 +87,11 @@ class FontBar(ctx: Context) : View(ctx) {
     private fun layoutChips() {
         if (laidOut) return
         laidOut = true
+        pinW = pinned?.let {
+            ink.typeface = it.face ?: Typeface.DEFAULT
+            ink.textSize = sizeFor(it)
+            max(dp(46f), ink.measureText(it.text) + dp(22f)) + dp(6f)
+        } ?: 0f
         xs = FloatArray(chips.size)
         ws = FloatArray(chips.size)
         var x = 0f
@@ -132,9 +143,21 @@ class FontBar(ctx: Context) : View(ctx) {
             var shown = preview
             val room = box.width() - dp(14f)
             // the end of the text is what was typed last: keep that part when it does not fit
-            while (shown.length > 1 && ink.measureText(shown) > room) shown = shown.substring(1)
+            // (by whole characters: a decorated letter is two chars, and cutting between them would show a "?" box)
+            while (shown.codePointCount(0, shown.length) > 1 && ink.measureText(shown) > room) shown = shown.substring(Character.charCount(shown.codePointAt(0)))
             val fm = ink.fontMetrics
             c.drawText(shown, box.centerX(), cy - (fm.ascent + fm.descent) / 2f, ink)
+        }
+        // the pinned chip
+        pinned?.let { p ->
+            box.set(pinL(), cy - chipH / 2, pinL() + pinW - dp(6f), cy + chipH / 2)
+            fill.color = ColorMath.withAlpha(t.keyFn, max(0xAA, ColorMath.alpha(t.keyFn)))
+            c.drawRoundRect(box, r, r, fill)
+            ink.typeface = p.face ?: Typeface.DEFAULT_BOLD
+            ink.textSize = sizeFor(p)
+            ink.color = t.onFn
+            val pm = ink.fontMetrics
+            c.drawText(p.text, box.centerX(), cy - (pm.ascent + pm.descent) / 2f, ink)
         }
         // the row of chips
         c.save()
@@ -191,6 +214,7 @@ class FontBar(ctx: Context) : View(ctx) {
 
     private fun tap(x: Float) {
         if (x >= width - dp(8f) - moreW() - dp(2f)) { listener?.onMore(); return }
+        pinned?.let { p -> if (x >= pinL() && x <= pinL() + pinW - dp(6f)) { listener?.onChip(p.id); return } }
         if (x < areaL() || x > areaR()) return
         val px = x - areaL() + scroll
         for (i in chips.indices) if (px >= xs[i] && px <= xs[i] + ws[i]) { listener?.onChip(chips[i].id); return }
@@ -202,6 +226,7 @@ class FontBar(ctx: Context) : View(ctx) {
         val loc = IntArray(2)
         getLocationOnScreen(loc)
         val sb = StringBuilder()
+        pinned?.let { sb.append("p:").append(it.id).append('=').append((loc[0] + pinL() + (pinW - dp(6f)) / 2).toInt()).append(',').append((loc[1] + height / 2).toInt()).append(';') }
         for ((i, ch) in chips.withIndex()) {
             val x = areaL() - scroll + xs[i] + ws[i] / 2
             if (x < areaL() || x > areaR()) continue

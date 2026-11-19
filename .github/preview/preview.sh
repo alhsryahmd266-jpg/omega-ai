@@ -169,24 +169,28 @@ typedsay() {
 }
 
 # --- the picture themes (a scene behind light, translucent keys with coloured letters), the flat looks of the popular keyboards, and the key shapes
-for t in beach deep paint galaxy synth photo classic gboard; do
+for t in beach waves paint lagoon blush ruby navy aqua classic gboard; do
   look  "kb-$t-en" "s:theme=$t" s:last_lang=en
   typed "kb-$t-typed-ar" "اهلا بيك يا صديقي" "s:theme=$t" s:last_lang=ar
 done
 typed kb-beach-typed-en "Hello world" s:theme=beach s:last_lang=en
-typed kb-deep-sugg-ar "مر" s:theme=deep s:last_lang=ar b:toolbar_open=false
+typed kb-aqua-sugg-ar "مر" s:theme=aqua s:last_lang=ar b:toolbar_open=false
 typed kb-gboard-sugg-en "hel" s:theme=gboard s:last_lang=en b:toolbar_open=false
 for n in 0 2 3; do look "kb-shape-$n" s:theme=classic s:last_lang=en "i:key_shape=$n"; done
 look kb-shape-3-beach s:theme=beach s:last_lang=ar i:key_shape=3
 look kb-shape-0-gboard s:theme=gboard s:last_lang=ar i:key_shape=0
-# the user's own picture: a busy sunset (made by mkphoto.py) kept where the look reads it, the keys must stay readable over it
+# the user's own pictures: a busy dark one (slot 1) and a bright one (slot 2), made by mkphoto.py; the keys must stay readable over both,
+# and each look takes its colours from its picture
 python3 "$HERE/mkphoto.py" "$RUNNER_TEMP/photo.png"
+python3 "$HERE/mkphoto.py" "$RUNNER_TEMP/photo2.png" bright
 adb push "$RUNNER_TEMP/photo.png" /data/local/tmp/bg_photo.jpg > /dev/null
-adb shell chmod 644 /data/local/tmp/bg_photo.jpg
-adb shell "run-as $PKG sh -c 'mkdir -p files && cp /data/local/tmp/bg_photo.jpg files/bg_photo.jpg'" 2>&1 | tee -a "$LOG"
+adb push "$RUNNER_TEMP/photo2.png" /data/local/tmp/bg_photo2.jpg > /dev/null
+adb shell chmod 644 /data/local/tmp/bg_photo.jpg /data/local/tmp/bg_photo2.jpg
+adb shell "run-as $PKG sh -c 'mkdir -p files && cp /data/local/tmp/bg_photo.jpg files/bg_photo.jpg && cp /data/local/tmp/bg_photo2.jpg files/bg_photo2.jpg'" 2>&1 | tee -a "$LOG"
 look  kb-photo-own-en s:theme=photo s:last_lang=en i:bg_photo_rev=1
 typed kb-photo-own-ar "مرحبا بكم" s:theme=photo s:last_lang=ar i:bg_photo_rev=1
-adb shell "run-as $PKG rm -f files/bg_photo.jpg"
+look  kb-photo2-own-en s:theme=photo2 s:last_lang=en i:bg_photo_rev=2
+typed kb-photo2-own-ar "مرحبا بكم" s:theme=photo2 s:last_lang=ar i:bg_photo_rev=2
 # the key bubble of the picture themes (vivid, with white letters) and of the flat ones
 scenario kb-popup-beach s:theme=beach s:last_lang=en
 focus
@@ -201,25 +205,25 @@ held kb-popup-gboard e
 scenario kb-emoji-beach s:theme=beach s:last_lang=en
 focus
 $KB key EMOJI 2>&1 | tee -a "$LOG"; sleep 2; shot kb-emoji-beach
-scenario kb-symbols-deep s:theme=deep s:last_lang=ar
+scenario kb-symbols-lagoon s:theme=lagoon s:last_lang=ar
 focus
-$KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-deep
+$KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-symbols-lagoon
 scenario kb-clip-paint s:theme=paint s:last_lang=en
 focus
 $KB tool clip 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-clip-paint
-scenario kb-livetr-galaxy s:theme=galaxy s:last_lang=en s:typed_target=ar s:typed_source=auto
+scenario kb-livetr-navy s:theme=navy s:last_lang=en s:typed_target=ar s:typed_source=auto
 focus
-$KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-livetr-galaxy
+$KB tool typed 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-livetr-navy
 
 # --- the bar of looks and the real Arabic fonts: the bar comes up while a look is on; the keys, the key bubble and the typing box draw in the font
 typedsay kb-font-ruqaa "اهلا بيك يا صديقي" s:theme=classic s:last_lang=ar s:ar_font=ruqaa
 typedsay kb-font-naskh "بسم الله الرحمن الرحيم" s:theme=beach s:last_lang=ar s:ar_font=amiri
 typedsay kb-font-kufi "مرحبا بكم" s:theme=gboard s:last_lang=ar s:ar_font=reemkufi
 typedsay kb-font-nastaliq "السلام عليكم" s:theme=luxe s:last_lang=ar s:ar_font=nastaliq
-typedsay kb-font-rakkas "اهلا وسهلا" s:theme=deep s:last_lang=ar s:ar_font=rakkas
+typedsay kb-font-rakkas "اهلا وسهلا" s:theme=waves s:last_lang=ar s:ar_font=rakkas
 # the English looks of the same bar: what is typed comes out in the look, the keys show it too
 typedsay kb-look-script "Hello Omega" s:theme=beach s:last_lang=en b:decor_live=true s:decor_style=script
-typedsay kb-look-gothic "Good morning" s:theme=galaxy s:last_lang=en b:decor_live=true s:decor_style=gothic
+typedsay kb-look-gothic "Good morning" s:theme=navy s:last_lang=en b:decor_live=true s:decor_style=gothic
 typedsay kb-look-bubble "Hello Omega" s:theme=gboard s:last_lang=en b:decor_live=true s:decor_style=bubble
 typedsay kb-look-royal "عرفك يا صديقي" s:theme=classic s:last_lang=ar b:decor_live=true s:decor_style=royal
 # tapping the chips: a real font, another font, an Arabic look (typed letters are decorated), back to normal (the bar goes away)
@@ -275,9 +279,10 @@ focus
 $KB tool theme 2>&1 | tee -a "$LOG"
 sleep 2
 $KB tab 1 2>&1 | tee -a "$LOG"; sleep 1.2; shot sheet-pics-1
-$KB card deep 2>&1 | tee -a "$LOG"; sleep 3; shot sheet-pics-2
+$KB card aqua 2>&1 | tee -a "$LOG"; sleep 3; shot sheet-pics-2
 $KB card gboard 2>&1 | tee -a "$LOG"; sleep 2.5; shot sheet-pics-3
 $KB card beach 2>&1 | tee -a "$LOG"; sleep 3; shot sheet-pics-4
+adb shell "run-as $PKG rm -f files/bg_photo.jpg files/bg_photo2.jpg"
 scenario sheet-beach s:theme=beach s:last_lang=en
 focus
 $KB tool theme 2>&1 | tee -a "$LOG"

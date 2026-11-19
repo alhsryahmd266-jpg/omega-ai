@@ -396,8 +396,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (r != null) {
             // the background (flat, gradient or the moving aurora) is painted once behind strip and keys; it is only
             // replaced when it really changed, so dragging a colour slider does not restart the animation
-            val sig = listOf(theme.bgStyle, theme.bg, theme.bg2, theme.spot, theme.hair, theme.scene.hashCode(),
-                if (theme.scene == "photo") prefs.bgPhotoRev else 0) + theme.aurora
+            val sig = listOf(theme.bgStyle, theme.bg, theme.bg2, theme.spot, theme.hair, theme.scene.hashCode(), theme.scrim, theme.scrimTop,
+                if (Photos.slotOf(theme.scene) >= 0) prefs.bgPhotoRev else 0) + theme.aurora
             if (sig != bgSignature || r.background == null) {
                 bgSignature = sig
                 aurora?.stop()
@@ -436,10 +436,12 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         }
     }
 
-    /** the picture behind the keys: one of the scenes, or the user's own photo (a galaxy until one is chosen) */
-    private fun pictureFor(t: KbTheme): SceneDrawable =
-        if (t.scene == "photo") SceneDrawable("photo", t.bg, t.bg2, photo = { Photos.load(applicationContext) }, scrim = Themes.PHOTO_SCRIM)
-        else SceneDrawable(t.scene, t.bg, t.bg2)
+    /** the picture behind the keys: one of the keyboard's own backgrounds, or a picture of the user's own (a galaxy until one is chosen) */
+    private fun pictureFor(t: KbTheme): SceneDrawable {
+        val app = applicationContext
+        val scene = t.scene
+        return SceneDrawable(scene, t.bg, t.bg2, photo = { w, h -> Pictures.load(app, scene, w, h) }, scrim = t.scrim, scrimTop = t.scrimTop)
+    }
 
     private fun applyViewPrefs() {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -527,7 +529,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         override fun onDragResize() { startResize() }
         override fun onPickPhoto() {
             try {
-                startActivity(Intent(this@OmegaImeService, PhotoPickActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                // a new picture goes into the first free place; when all six are used it replaces the one that is on now
+                val now = Photos.slotOf(Themes.canon(prefs.theme))
+                val slot = Photos.firstFree(applicationContext).let { if (it >= 0) it else if (now >= 0) now else 0 }
+                startActivity(Intent(this@OmegaImeService, PhotoPickActivity::class.java).putExtra(PhotoPickActivity.EXTRA_SLOT, slot).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Throwable) {
                 flash("مقدرتش أفتح المعرض", true)
             }
@@ -673,7 +678,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     /** the chips: normal, the real fonts, then the decorations (Arabic, English, frames), each drawn in its own look */
     private fun buildFontChips(fb: FontBar) {
         val list = ArrayList<FontBar.Chip>()
-        list.add(FontBar.Chip("normal", "عادي", group = 0))
+        fb.pinned = FontBar.Chip("normal", "عادي")          // always in reach: the way back to plain text
         for (f in FontLib.fonts) list.add(FontBar.Chip("f:" + f.id, f.label, FontLib.face(this, f.id), if (f.scale < 0.8f) 0.9f else if (f.scale > 1.1f) 1.15f else 1f, group = 1))
         for (st in Decor.styles) {
             val group = when (st.kind) { Decor.Kind.ARABIC -> 2; Decor.Kind.LATIN -> 3; Decor.Kind.FRAME -> 4 }
@@ -705,7 +710,14 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         fb.previewFace = k.capFace
         fb.previewScale = k.capScale
         val typed = try { currentInputConnection?.getTextBeforeCursor(24, 0)?.toString().orEmpty() } catch (_: Throwable) { "" }
-        fb.preview = typed.replace('\n', ' ').trimStart().takeLast(16).ifEmpty { if (font != null) "نص تجريبي" else "" }
+        fb.preview = lastChars(typed.replace('\n', ' ').trimStart(), 16).ifEmpty { if (font != null) "نص تجريبي" else "" }
+    }
+
+    /** the last [n] characters of [s], counted as whole characters (a decorated letter is two chars and must not be cut in the middle) */
+    private fun lastChars(s: String, n: Int): String {
+        val count = s.codePointCount(0, s.length)
+        if (count <= n) return s
+        return s.substring(s.offsetByCodePoints(0, count - n))
     }
 
     private fun showDecor() {

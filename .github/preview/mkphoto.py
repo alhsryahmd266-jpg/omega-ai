@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Draws a busy, photo-like test picture (a sunset over the sea with sparkles and grain) as a PNG with the standard library only.
-preview.sh keeps it as the user's own picture so the "my picture" look can be seen with a real photo behind the keys.
-usage: mkphoto.py out.png"""
+"""Draws a busy, photo-like test picture as a PNG with the standard library only: a dark one (a dusk sky over water with sparkles and
+grain) or, with "bright", a pale one (a cream sky over mint water) so the other end of the range is tried too.
+preview.sh keeps them as the user's own pictures so the "my picture" looks can be seen with real pictures behind the keys.
+usage: mkphoto.py out.png [bright]"""
 import math
 import random
 import struct
@@ -15,9 +16,11 @@ def mix(a, b, t):
     return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
 
 
-def main(path):
+def main(path, bright=False):
     rnd = random.Random(7)
     sky = [(0.0, (22, 18, 74)), (0.35, (120, 40, 120)), (0.55, (240, 110, 70)), (0.62, (255, 200, 110))]
+    if bright:
+        sky = [(0.0, (250, 244, 210)), (0.35, (236, 238, 200)), (0.55, (214, 236, 214)), (0.62, (190, 232, 220))]
     horizon = int(H * 0.62)
     sunx, suny, sunr = W * 0.62, horizon - 40, 90
     img = [[(0, 0, 0)] * W for _ in range(H)]
@@ -40,7 +43,7 @@ def main(path):
                     c = mix(c, (255, 200, 120), max(0.0, 0.55 - (d - sunr) / 420.0))
             else:
                 t = (y - horizon) / (H - horizon)
-                c = mix((60, 40, 110), (8, 10, 40), t)
+                c = mix((60, 40, 110), (8, 10, 40), t) if not bright else mix((150, 214, 200), (96, 176, 170), t)
                 ripple = math.sin(y * 0.55 + math.sin(x * 0.03) * 3.0)
                 glit = max(0.0, 1.0 - abs(x - sunx) / (40 + 220 * t)) * (0.35 + 0.35 * ripple) * (1.0 - t * 0.6)
                 c = mix(c, (255, 190, 110), max(0.0, min(1.0, glit)))
@@ -49,7 +52,7 @@ def main(path):
     # sparkles and a few palm-like dark strokes: high-frequency detail that a keyboard must stay legible over
     for _ in range(260):
         cx, cy, r = rnd.randrange(W), rnd.randrange(H), rnd.randint(1, 4)
-        col = rnd.choice(((255, 255, 255), (255, 220, 140), (140, 200, 255)))
+        col = rnd.choice(((255, 255, 255), (255, 220, 140), (140, 200, 255))) if not bright else rnd.choice(((255, 255, 255), (250, 250, 235), (120, 180, 170)))
         for y in range(max(0, cy - r), min(H, cy + r + 1)):
             for x in range(max(0, cx - r), min(W, cx + r + 1)):
                 if (x - cx) ** 2 + (y - cy) ** 2 <= r * r:
@@ -61,7 +64,7 @@ def main(path):
             x, y = int(x0 + math.cos(ang) * s), int(y0 + math.sin(ang) * s + s * s * 0.004)
             for dx in (0, 1, 2):
                 if 0 <= x + dx < W and 0 <= y < H:
-                    img[y][x + dx] = (14, 12, 30)
+                    img[y][x + dx] = (14, 12, 30) if not bright else (60, 110, 96)
     raw = bytearray()
     for row in img:
         raw.append(0)
@@ -78,4 +81,4 @@ def main(path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], len(sys.argv) > 2 and sys.argv[2] == "bright")

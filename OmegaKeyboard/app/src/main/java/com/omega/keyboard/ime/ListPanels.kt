@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.omega.keyboard.core.ColorMath
 import com.omega.keyboard.core.Decor
 import com.omega.keyboard.core.Languages
 import com.omega.keyboard.core.TypedLang
@@ -58,23 +59,36 @@ abstract class ListPanel(ctx: Context) : LinearLayout(ctx) {
     protected fun setTitle(s: String) { title.text = s }
 
     protected open fun restyle() {
-        setBackgroundColor(if (theme.bgStyle >= 1) theme.bg2 else theme.bg)
+        setBackgroundColor(panelColor())
         title.setTextColor(theme.onBg)
         closeBtn.setTextColor(theme.onFn)
         closeBtn.background = pill(theme.keyFn, 12f, context)
     }
 
+    /** the colour of the panel: a picture theme lets a little of its picture show through (frosted), the others are solid */
+    protected fun panelColor(): Int = when {
+        theme.bgStyle == 3 -> ColorMath.withAlpha(theme.bg2, 0xE4)
+        theme.bgStyle >= 1 -> theme.bg2
+        else -> theme.bg
+    }
+
     protected fun row(text: String, sub: String? = null, selected: Boolean = false, onBackground: Boolean = false, onTap: () -> Unit): View {
         val ctx = context
+        // see-through (glass) keys are no good as a fill for a row of text: the row is a lighter tone of the panel, with the panel's text colour
+        val calm = theme.glass && !selected && !onBackground
         val box = LinearLayout(ctx).apply {
             orientation = VERTICAL
             setPadding(ctx.dpi(14f), ctx.dpi(10f), ctx.dpi(14f), ctx.dpi(10f))
-            background = pill(if (onBackground) Color.TRANSPARENT else if (selected) theme.accent else if (theme.glass) theme.popupBg else theme.key, 12f, ctx)
+            background = pill(
+                if (onBackground) Color.TRANSPARENT else if (selected) theme.accent
+                else if (theme.glass) ColorMath.blend(ColorMath.opaque(if (theme.bgStyle >= 1) theme.bg2 else theme.bg), theme.onBg, 0.14f) else theme.key,
+                12f, ctx,
+            )
             isClickable = true
             setOnClickListener { onTap() }
         }
-        val ink = if (selected) theme.onAccent else if (onBackground) theme.onBg else theme.text
-        val inkSub = if (selected) theme.onAccent else if (onBackground) theme.onBgSub else theme.textSub
+        val ink = if (selected) theme.onAccent else if (onBackground || calm) theme.onBg else theme.text
+        val inkSub = if (selected) theme.onAccent else if (onBackground || calm) theme.onBgSub else theme.textSub
         box.addView(TextView(ctx).apply {
             this.text = text
             textSize = 15f

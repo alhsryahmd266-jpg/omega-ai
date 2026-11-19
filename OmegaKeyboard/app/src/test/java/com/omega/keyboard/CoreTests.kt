@@ -19,7 +19,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask()
+        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask(); photoLook()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -1222,5 +1222,47 @@ object CoreTests {
         // the polarity can be forced: dark letters on a dark picture are not found when light ones are asked for
         val forced = TextMask.make(dark, w, h, lightText = false)
         check("mask: the other polarity shows the gaps instead", g(forced[30 * w + 33]) < 60 && g(forced[30 * w + 30]) > 240)
+    }
+
+    // ------------------------------------------------------------------ a theme made from the user's own picture
+    private fun photoLook() {
+        val w = 24
+        val h = 24
+        fun solid(c: Int) = IntArray(w * h) { c }
+        // a sunset: an orange sky over a dark purple sea
+        val sunset = IntArray(w * h) { if (it / w < h * 2 / 3) 0xFFF07A2A.toInt() else 0xFF2A1450.toInt() }
+        val a = PhotoLook.from(sunset, w, h)
+        val hueA = ColorMath.toHsv(a.accent)[0]
+        check("photo look: an orange picture gives an orange-ish accent", hueA in 15f..45f) { "$hueA" }
+        check("photo look: the accent is vivid", ColorMath.toHsv(a.accent)[1] >= 0.6f && ColorMath.toHsv(a.accent)[2] >= 0.95f)
+        check("photo look: white letters read on the bubble", ColorMath.contrast(a.popup, ColorMath.PAPER) >= 2.4f) { "${ColorMath.contrast(a.popup, ColorMath.PAPER)}" }
+        check("photo look: the letters on the keys are dark", ColorMath.contrast(a.ink, 0xFFFFFFFF.toInt()) >= 7f) { "${ColorMath.contrast(a.ink, 0xFFFFFFFF.toInt())}" }
+        check("photo look: the top and the bottom are dark enough for white text", ColorMath.contrast(a.top, ColorMath.PAPER) >= 7f && ColorMath.contrast(a.bottom, ColorMath.PAPER) >= 7f)
+        check("photo look: the top is the colour of the sky, the bottom of the sea", ColorMath.red(a.top) > ColorMath.red(a.bottom) || ColorMath.blue(a.bottom) > ColorMath.blue(a.top))
+        check("photo look: what is written on the accent can be read", ColorMath.contrast(a.accent, a.onAccent) >= 4.5f) { "${ColorMath.contrast(a.accent, a.onAccent)}" }
+        // a white picture needs a stronger darkening than a dark one, both inside limits
+        val white = PhotoLook.from(solid(0xFFFFFFFF.toInt()), w, h)
+        val dark = PhotoLook.from(solid(0xFF101018.toInt()), w, h)
+        check("photo look: a bright picture is darkened more than a dark one", white.scrim > dark.scrim) { "${white.scrim} ${dark.scrim}" }
+        check("photo look: the darkening stays inside limits", white.scrim in 0x30..0x98 && dark.scrim in 0x30..0x98)
+        // a grey picture has no colour to take: a calm blue, still readable
+        val grey = PhotoLook.from(solid(0xFF808080.toInt()), w, h)
+        val hueG = ColorMath.toHsv(grey.accent)[0]
+        check("photo look: a grey picture gets a calm blue", hueG in 200f..240f) { "$hueG" }
+        // every hue gives a readable bubble and readable letters
+        var ok = true
+        var worst = 99f
+        for (hh in 0 until 360 step 15) {
+            val l = PhotoLook.from(solid(ColorMath.fromHsv(hh.toFloat(), 0.9f, 0.9f)), w, h)
+            val c1 = ColorMath.contrast(l.popup, ColorMath.PAPER)
+            val c2 = ColorMath.contrast(l.ink, 0xFFFFFFFF.toInt())
+            worst = minOf(worst, c1, c2 / 2f)
+            if (c1 < 2.4f || c2 < 7f) ok = false
+        }
+        check("photo look: every colour of picture gives a readable look", ok) { "worst $worst" }
+        // bad input does not crash and gives the neutral look
+        val bad = PhotoLook.from(IntArray(3), 24, 24)
+        check("photo look: a too small input gives the neutral look", bad.accent == PhotoLook.neutral().accent)
+        check("photo look: an empty size gives the neutral look", PhotoLook.from(IntArray(0), 0, 0).ink == PhotoLook.neutral().ink)
     }
 }

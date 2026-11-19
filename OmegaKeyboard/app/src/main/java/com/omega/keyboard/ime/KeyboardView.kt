@@ -695,6 +695,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 textPaint.textSize = size
                 if (t.neon != 0) textPaint.setShadowLayer(dp(6f), 0f, 0f, ColorMath.withAlpha(t.neon, 0xE0))
                 else if (t.fancy && t.dark) textPaint.setShadowLayer(dp(0.9f), 0f, dp(0.9f), 0x80000000.toInt())
+                else if (t.letterShadow != 0) textPaint.setShadowLayer(dp(1.6f), 0f, dp(0.9f), t.letterShadow)
                 drawCentered(c, lab, cx, cy)
                 textPaint.clearShadowLayer()
                 textPaint.typeface = Typeface.DEFAULT

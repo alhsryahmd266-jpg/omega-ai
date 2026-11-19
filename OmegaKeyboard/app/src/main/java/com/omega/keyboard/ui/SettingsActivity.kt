@@ -111,7 +111,7 @@ class SettingsActivity : BaseActivity() {
         }
         h.addView(UiKit.group(
             this, p,
-            UiKit.valueRow(this, p, "المظهر", Themes.choices.firstOrNull { it.first == Themes.canon(prefs.theme) }?.second ?: "تلقائي") {
+            UiKit.valueRow(this, p, "المظهر", Themes.nameOf(prefs.theme) ?: "تلقائي") {
                 choose("المظهر", Themes.choices, Themes.canon(prefs.theme)) { prefs.theme = it; Themes.resetCustom(prefs) }
             },
             UiKit.valueRow(this, p, "لون الكتابة", textChoices.firstOrNull { it.first == textKey }?.second ?: "لون مخصص") {

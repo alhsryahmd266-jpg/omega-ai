@@ -49,6 +49,9 @@ data class KbTheme(
     val scene: String = "",
     val corner: Int = 1,               // how round the keys are: an index of [Themes.CORNER_DP]
     val onPopup: Int = 0,              // letters inside the key-preview bubble (0: the letter colour)
+    val scrim: Int = 0,                // picture themes: how much the whole picture is darkened (0..255)
+    val scrimTop: Int = 0,             // ... and how much more at the very top, where the text of the suggestion strip sits (0..255)
+    val letterShadow: Int = 0,         // non-zero: a soft dark shadow under the letters (white letters on a light picture)
 ) {
     /** the luxe look needs solid keys: glass and glowing themes keep their own */
     val fancy: Boolean get() = luxe && !glass && neon == 0
@@ -84,11 +87,14 @@ object Themes {
         "auto" to "تلقائي (أسود فخم بالليل · لؤلؤي بالنهار)",
         "luxe" to "أسود فخم (ذهبي)",
         "pearl" to "لؤلؤي (ذهبي)",
-        "beach" to "شاطئ الغروب",
-        "deep" to "أعماق البحر",
-        "paint" to "ألوان سائلة",
-        "galaxy" to "مجرة",
-        "synth" to "ريترو نيون",
+        "beach" to "شاطئ باستيل",
+        "waves" to "بحر رمادي",
+        "paint" to "ألوان مائية",
+        "lagoon" to "بحيرة (نعناع وأزرق)",
+        "blush" to "بينك (وردي وخوخي)",
+        "ruby" to "أحمر ياقوتي",
+        "navy" to "كحلي",
+        "aqua" to "ماء أزرق شفاف",
         "photo" to "صورتي من المعرض",
         "classic" to "كلاسيك (أزرار رمادي فاتح)",
         "gboard" to "جوجل (أبيض ومفاتيح غامقة)",
@@ -107,15 +113,43 @@ object Themes {
 
     /** short names under the cards of the theme picker */
     val cardNames = mapOf(
-        "beach" to "شاطئ", "deep" to "أعماق", "paint" to "ألوان", "galaxy" to "مجرة", "synth" to "ريترو", "photo" to "صورتي",
+        "beach" to "شاطئ", "waves" to "بحر", "paint" to "ألوان", "lagoon" to "بحيرة", "blush" to "بينك", "ruby" to "أحمر", "navy" to "كحلي",
+        "aqua" to "ماء شفاف", "photo" to "صورتي",
         "classic" to "كلاسيك", "gboard" to "جوجل",
         "auto" to "تلقائي", "luxe" to "أسود فخم", "pearl" to "لؤلؤي", "light" to "فاتح", "dark" to "داكن", "amoled" to "أسود",
         "ocean" to "المحيط", "sunset" to "الغروب", "aurora" to "أورورا", "neon" to "نيون", "rose" to "وردي", "forest" to "غابة",
         "mint" to "نعناع", "system" to "النظام",
     )
 
-    /** the id the picker knows a saved theme by ("gold", the old black-and-gold, is the luxe look now) */
-    fun canon(id: String): String = if (id == "gold") "luxe" else id
+    /**
+     * The id the picker knows a saved theme by: "gold" (the old black and gold) is the luxe look now, and the looks that were taken out
+     * (the sunset beach with palms, the sea with fish, the retro sun, the galaxy) are replaced by the nearest one that is still there.
+     */
+    fun canon(id: String): String = when (id) {
+        "gold" -> "luxe"
+        "deep" -> "aqua"
+        "synth" -> "blush"
+        "galaxy" -> "navy"
+        else -> id
+    }
+
+    /** the name of a theme for lists: one of [choices], or one of the user's own pictures ("صورتي 2"); null when the id is not known */
+    fun nameOf(id: String): String? {
+        val k = canon(id)
+        choices.firstOrNull { it.first == k }?.let { return it.second }
+        val slot = Photos.slotOf(k)
+        return if (slot >= 0) Photos.nameOf(slot) else null
+    }
+
+    /** the cards of the picker: [choices], and after "photo" one more for every extra picture of the user's own that was added */
+    fun cardIds(ctx: Context): List<String> {
+        val out = ArrayList<String>()
+        for ((id, _) in choices) {
+            out.add(id)
+            if (id == "photo") for (s in 1 until Photos.SLOTS) if (Photos.has(ctx, s)) out.add(Photos.idOf(s))
+        }
+        return out
+    }
 
     private fun c(s: String) = Color.parseColor(s)
 
@@ -168,34 +202,66 @@ object Themes {
 
     // ------------------------------------------------------------------ picture themes
 
+    private const val WHITE = 0xFFFFFFFF.toInt()
+
     /**
-     * The look of a picture theme, like the photo themes of phone keyboards: a picture behind everything, light see-through keys with
-     * coloured letters, a vivid bubble over the key that is pressed. [bg] and [bg2] show while the picture is being made.
+     * The look of a picture theme, like the picture themes of phone keyboards: a picture behind everything, see-through keys, a vivid
+     * bubble over the key that is pressed. [bg] and [bg2] show while the picture is being made and behind the panels, so they are dark
+     * enough for white text (or light enough for dark text when the picture is [pale]).
+     *  - [tint] is the colour of the see-through keys: white (pale keys with coloured letters) or a deep tone of the picture (dark keys
+     *    with white letters); [keyA] is how much of it a letter key has (0..255), a function key has two thirds
+     *  - [shade] darkens the whole picture and [shadeTop] its top, so the white text of the suggestion strip can be read
+     *  - [shadow] puts a soft shadow under white letters
      */
-    private fun picture(
-        id: String, scene: String, bg: String, bg2: String, ink: String, accent: String, onAccent: String, popup: String, keyA: Int,
+    private fun glassTheme(
+        id: String, scene: String, bg: Int, bg2: Int, ink: Int, accent: Int, onAccent: Int, popup: Int, keyA: Int,
+        tint: Int = WHITE, pale: Boolean = false, shadow: Int = 0, shade: Int = 0, shadeTop: Int = 0,
     ): KbTheme {
-        val white = 0xFFFFFFFF.toInt()
-        val inkC = c(ink)
+        val on = if (pale) ink else WHITE
         return KbTheme(
-            id, true, c(bg), ColorMath.withAlpha(white, keyA), ColorMath.withAlpha(white, keyA * 2 / 3), ColorMath.withAlpha(white, 0xE0),
-            inkC, ColorMath.withAlpha(inkC, 0xB0), c(accent), c(onAccent), c(popup), ColorMath.withAlpha(white, 0x33), 0,
-            bg2 = c(bg2), onBg = white, onBgSub = ColorMath.withAlpha(white, 0xBB), onFn = inkC,
-            bgStyle = 3, glass = true, rim = ColorMath.withAlpha(white, 0xD8), scene = scene, onPopup = white,
+            id, !pale, bg, ColorMath.withAlpha(tint, keyA), ColorMath.withAlpha(tint, keyA * 2 / 3), ColorMath.withAlpha(WHITE, 0xE0),
+            ink, ColorMath.withAlpha(ink, 0xB0), accent, onAccent, popup, ColorMath.withAlpha(on, 0x33), 0,
+            bg2 = bg2, onBg = on, onBgSub = ColorMath.withAlpha(on, 0xBB), onFn = ink,
+            bgStyle = 3, glass = true, rim = ColorMath.withAlpha(WHITE, if (tint == WHITE) 0xD8 else 0xA0), scene = scene, onPopup = WHITE,
+            scrim = shade, scrimTop = shadeTop, letterShadow = shadow,
         )
     }
 
-    val BEACH = picture("beach", "beach", "#3F1F78", "#0B0824", "#4A1F7A", "#FFB347", "#3A1A00", "#FF8A1F", 0x9E)
-    val DEEP = picture("deep", "deep", "#0A5A7E", "#021A2E", "#0A3F5C", "#22D3EE", "#00323F", "#0FA3C4", 0x99)
-    val PAINT = picture("paint", "paint", "#3B1B6B", "#150A26", "#5B2BC0", "#FF4F9A", "#FFFFFF", "#8B3DFF", 0xB8)
-    val GALAXY = picture("galaxy", "galaxy", "#1C0C3E", "#04020C", "#3B1D8A", "#8B5CF6", "#FFFFFF", "#7C4DFF", 0xB2)
-    val SYNTH = picture("synth", "synth", "#37106A", "#070114", "#7A1A6E", "#FF3FB5", "#FFFFFF", "#FF2F9E", 0xA8)
+    private fun picture(
+        id: String, bg: String, bg2: String, ink: String, accent: String, onAccent: String, popup: String, keyA: Int,
+        tint: String = "#FFFFFF", pale: Boolean = false, shadow: Int = 0, shade: Int = 0, shadeTop: Int = 0,
+    ): KbTheme = glassTheme(id, id, c(bg), c(bg2), c(ink), c(accent), c(onAccent), c(popup), keyA, c(tint), pale, shadow, shade, shadeTop)
 
-    /** the user's own picture from the gallery (a galaxy until one is chosen) */
-    val PHOTO = picture("photo", "photo", "#1A1A2E", "#0E0E1A", "#3B1D8A", "#FF9F43", "#3A1A00", "#8B3DFF", 0xB0)
+    private const val SOFT_SHADOW = 0x59000000
 
-    /** a picture theme is painted by [SceneDrawable]; a photo is darkened a little so the strip's text stays readable */
-    const val PHOTO_SCRIM = 0x3A
+    // The same kinds of pictures as the picture themes of the phone keyboards (tools/themes draws them): a pastel beach, a grey sea,
+    // paint, soft colour gradients. Dark see-through keys carry white letters; pale keys carry coloured letters.
+    val BEACH = picture("beach", "#C4566F", "#245C86", "#FFFFFF", "#FFFFFF", "#C2456B", "#E0557E", 0x60,
+        tint = "#1B2E58", shadow = SOFT_SHADOW, shadeTop = 0x4A)
+    val WAVES = picture("waves", "#4B4F57", "#23262B", "#5A24C8", "#7B2FD6", "#FFFFFF", "#7B2FD6", 0xDC, shadeTop = 0x30)
+    val PAINT = picture("paint", "#5B2B8E", "#1E0F36", "#6A2BD8", "#7B35E8", "#FFFFFF", "#8B3DFF", 0xD2, shade = 0x10, shadeTop = 0x78)
+    val LAGOON = picture("lagoon", "#2D7F86", "#2E3F7C", "#FFFFFF", "#FFFFFF", "#1B6F78", "#1E9C7B", 0x62,
+        tint = "#12405A", shadow = SOFT_SHADOW, shadeTop = 0x30)
+    val BLUSH = picture("blush", "#B14588", "#4E3A8E", "#FFFFFF", "#FFFFFF", "#B03A85", "#C03F8E", 0x60,
+        tint = "#4A1F66", shadow = SOFT_SHADOW, shadeTop = 0x34)
+    val RUBY = picture("ruby", "#B02B30", "#521A44", "#9B1B22", "#8A1220", "#FFFFFF", "#C62828", 0xC8, shadeTop = 0x1C)
+    val NAVY = picture("navy", "#0C1250", "#070A32", "#FFFFFF", "#4A6BFF", "#FFFFFF", "#3A57F0", 0x2E, shadow = 0x40000000)
+
+    /** clear water: pale glass keys with deep blue letters, so the picture (the lightest of all) is dark-on-light everywhere */
+    val AQUA = picture("aqua", "#9EE6F2", "#BFEFF8", "#0A3F73", "#0B73C4", "#FFFFFF", "#0F86D2", 0x78, pale = true)
+
+    /** what the "my picture" looks fall back to when their picture cannot be read: the galaxy that is drawn by [Scenes] */
+    private val GALAXY = picture("galaxy", "#1C0C3E", "#04020C", "#3B1D8A", "#8B5CF6", "#FFFFFF", "#7C4DFF", 0xB2)
+
+    /** a theme made of the picture in [slot]: the colours come from the picture itself, so every picture gets a look that suits it */
+    private fun photoTheme(ctx: Context, id: String, slot: Int): KbTheme {
+        if (!Photos.has(ctx, slot)) return GALAXY.copy(id = id, scene = id)
+        val look = Photos.look(ctx, slot)
+        return glassTheme(
+            id, id, look.top, look.bottom, look.ink, look.accent, look.onAccent, look.popup, 0xB0,
+            shade = look.scrim, shadeTop = minOf(0xB0, look.scrim + 0x28),
+        )
+    }
 
     /** flat, light and quiet: white page, light grey keys with a soft shadow, an orange bubble over the pressed key */
     val CLASSIC = KbTheme("classic", false, c("#FAFBFC"), c("#EDEFF2"), c("#E1E4E9"), c("#CDD2DA"), c("#262A36"), c("#8A90A0"),
@@ -209,29 +275,36 @@ object Themes {
         (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
     /** the theme as the picker offers it, without the user's own colours */
-    fun base(ctx: Context, id: String): KbTheme = when (canon(id)) {
-        "luxe" -> LUXE
-        "pearl" -> PEARL
-        "beach" -> BEACH
-        "deep" -> DEEP
-        "paint" -> PAINT
-        "galaxy" -> GALAXY
-        "synth" -> SYNTH
-        "photo" -> PHOTO
-        "classic" -> CLASSIC
-        "gboard" -> GBOARD
-        "light" -> LIGHT
-        "dark" -> DARK
-        "amoled" -> AMOLED
-        "ocean" -> OCEAN
-        "sunset" -> SUNSET
-        "aurora" -> AURORA
-        "neon" -> NEON
-        "rose" -> ROSE
-        "forest" -> FOREST
-        "mint" -> MINT
-        "system" -> system(ctx)
-        else -> if (isNight(ctx)) LUXE else PEARL
+    fun base(ctx: Context, id: String): KbTheme {
+        val key = canon(id)
+        val slot = Photos.slotOf(key)
+        if (slot >= 0) return photoTheme(ctx, key, slot)
+        return when (key) {
+            "luxe" -> LUXE
+            "pearl" -> PEARL
+            "beach" -> BEACH
+            "waves" -> WAVES
+            "paint" -> PAINT
+            "lagoon" -> LAGOON
+            "blush" -> BLUSH
+            "ruby" -> RUBY
+            "navy" -> NAVY
+            "aqua" -> AQUA
+            "classic" -> CLASSIC
+            "gboard" -> GBOARD
+            "light" -> LIGHT
+            "dark" -> DARK
+            "amoled" -> AMOLED
+            "ocean" -> OCEAN
+            "sunset" -> SUNSET
+            "aurora" -> AURORA
+            "neon" -> NEON
+            "rose" -> ROSE
+            "forest" -> FOREST
+            "mint" -> MINT
+            "system" -> system(ctx)
+            else -> if (isNight(ctx)) LUXE else PEARL
+        }
     }
 
     /** forgets every colour the user changed on top of a theme (the colour of the typed text is not part of the look) */

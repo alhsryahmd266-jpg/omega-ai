@@ -1,6 +1,7 @@
 package com.omega.keyboard.ui
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -138,6 +139,18 @@ class MainActivity : BaseActivity() {
         return s.split(':').any { it.startsWith("$packageName/") && it.endsWith("ScreenAgentService") }
     }
 
+    /** the settings page of this keyboard's accessibility service (its shortcut, the floating button, is switched off there); the general page where a phone has no such page */
+    private fun openAccessibilityPage() {
+        val service = ComponentName(this, ScreenAgentService::class.java).flattenToString()
+        val tries = listOf(
+            Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").putExtra(Intent.EXTRA_COMPONENT_NAME, service),
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+        )
+        for (i in tries) {
+            try { startActivity(i); return } catch (_: Throwable) {}
+        }
+    }
+
     private val wanted = arrayOf(Manifest.permission.RECORD_AUDIO)
 
     private fun permsGranted(): Boolean = wanted.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
@@ -192,6 +205,11 @@ class MainActivity : BaseActivity() {
             if (!a11y && Build.VERSION.SDK_INT >= 33) "معلومات التطبيق" to {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             } else null
+        ))
+        if (a11y) steps.addView(step(
+            0, "زرار بنفسجي عايم على الشاشة؟",
+            "ده مش من الكيبورد: ده اختصار بيحطّه أندرويد نفسه لما بتفعّل إمكانية الوصول. لقفله: إمكانية الوصول ← Omega Keyboard ← الاختصار (Shortcut) ← اقفله واضغط حفظ. الصلاحية والميزات بتفضل شغّالة. (أندرويد ١٤: ممكن كمان تسحب الزرار نفسه على علامة ✕ اللي بتظهر تحت.)",
+            "افتح صفحة الاختصار" to { openAccessibilityPage() },
         ))
         steps.addView(step(
             if (perms) 1 else 0, "٤) إذن الميكروفون (للكتابة بالصوت)",
