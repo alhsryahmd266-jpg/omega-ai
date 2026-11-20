@@ -77,12 +77,23 @@ object AutoPilot {
         paint(text, warn)
     }
 
-    private fun barActions(): List<ControlBar.Action> = listOf(
+    /** the last word on screen was taken for mine: "اعكس" is offered, in case the two sides of the chat were mixed up */
+    @Volatile private var flipOffer = false
+    @Volatile private var flipRequested = false
+
+    private fun barActions(): List<ControlBar.Action> = listOfNotNull(
         if (paused) ControlBar.Action("pause", "play_arrow", "كمّل", 0xFF1A73E8.toInt())
         else ControlBar.Action("pause", "pause", "استنى", 0xFFB26A00.toInt()),
+        if (flipOffer) ControlBar.Action("flip", "swap_horiz", "اعكس", 0xFF1E6B52.toInt()) else null,
         ControlBar.Action("teach", "touch_app", "ضبط", 0xFF3C4043.toInt()),
         ControlBar.Action("stop", "stop", "إيقاف", 0xFFD93025.toInt()),
     )
+
+    private fun setFlipOffer(on: Boolean) {
+        if (flipOffer == on) return
+        flipOffer = on
+        refreshBar()
+    }
 
     private fun refreshBar() {
         val svc = ScreenAgentService.instance ?: return
@@ -103,6 +114,8 @@ object AutoPilot {
         paused = false
         forget = false
         teachRequested = false
+        flipOffer = false
+        flipRequested = false
         GameRound.reset()
         protectedPkgs.clear()
         userScrollAt = 0L
@@ -121,6 +134,7 @@ object AutoPilot {
                     "stop" -> stop("وقفته من الزرار")
                     "pause" -> setPaused(!paused)
                     "teach" -> { teachRequested = true; wake.release() }
+                    "flip" -> { flipRequested = true; wake.release() }
                 }
             }
         }
@@ -269,11 +283,17 @@ object AutoPilot {
         return res
     }
 
-    private fun describe(reason: String, ctx: Context, pkg: String): String = when (reason) {
+    /** the start of a message, for the status line: what the loop is looking at, so a wrong reading can be seen at once */
+    private fun snippet(m: ChatMessage?): String {
+        val t = m?.text.orEmpty().replace(Regex("\\s+"), " ").trim()
+        return if (t.length > 26) t.take(26).trimEnd() + "…" else t
+    }
+
+    private fun describe(reason: String, ctx: Context, pkg: String, last: ChatMessage? = null): String = when (reason) {
         "no_input" -> "مفيش محادثة مفتوحة. افتح محادثة وأنا هرد (${appLabel(ctx, pkg)})"
         "no_messages" -> "مش شايف رسايل على الشاشة"
-        "last_is_mine" -> "مستني رد من الطرف التاني..."
-        "already_handled" -> "مستني رسالة جديدة..."
+        "last_is_mine" -> "مستني رد الطرف التاني. آخر رسالة شايفها (رسالتي): «${snippet(last)}». لو غلط دوس «اعكس»"
+        "already_handled" -> "آخر رسالة اتعاملت معاها: «${snippet(last)}». مستني رسالة جديدة..."
         else -> "براقب المحادثة..."
     }
 
@@ -380,14 +400,25 @@ object AutoPilot {
                     continue
                 }
                 val pkg = snap.screen.pkg
-                if (pkg.isBlank() || pkg == ctx.packageName) { snap.release(); publish("افتح المحادثة وأنا هرد"); continue }
+                if (pkg.isBlank() || pkg == ctx.packageName) { snap.release(); setFlipOffer(false); publish("افتح المحادثة وأنا هرد"); continue }
                 val sent = sentTexts[pkg] ?: ArrayList<String>().also { sentTexts[pkg] = it }
+                if (flipRequested) {
+                    // "اعكس": my bubbles are on the other edge in this app. Remembered for the app; delivery ticks, when they
+                    // show, still overrule it (they are proof, a tap is a guess)
+                    flipRequested = false
+                    val next = if (alignFor(prefs, pkg) == Align.LEFT) Align.RIGHT else Align.LEFT
+                    if (prefs.apSide != "auto") prefs.apSide = if (next == Align.LEFT) "left" else "right"
+                    prefs.setAlign(pkg, next)
+                    handled.remove(pkg)
+                    AppLog.d("autopilot", "sides flipped by hand in $pkg: my bubbles are on the ${next.name}")
+                }
                 var parsed = parseChat(snap.screen, prefs, sent)
                 val looksLikeChat = chatLike(snap.screen, parsed.input)
                 val moreBelow = looksLikeChat && ScrollLogic.listWithMoreBelow(snap.screen) != null
                 snap.release()
 
                 if (!looksLikeChat) {
+                    setFlipOffer(false)
                     // a game draws its own screen: no text to read, so it is looked at (and typed into through the keyboard)
                     val taught = prefs.gameProfile(GameProfile.key(pkg, snap.screen.width > snap.screen.height)).taught
                     if (pkg in protectedPkgs) { publish(protectedNote(ctx, pkg), warn = true); if (nap(4000)) break; continue }
@@ -423,9 +454,10 @@ object AutoPilot {
 
                 val decision = ReplyPolicy.decide(parsed, handled[pkg], force = false, unknownAsThem = true)
                 var workKey = decision.key
+                setFlipOffer(decision.reason == "last_is_mine")
                 if (!decision.reply) {
                     stale = 0
-                    publish(describe(decision.reason, ctx, pkg))
+                    publish(describe(decision.reason, ctx, pkg, parsed.last))
                     continue
                 }
 
@@ -473,7 +505,7 @@ object AutoPilot {
                     if (stopFlag) break
                     // the situation may have turned while we waited (the last message is mine now, or gone): decide again
                     val d2 = ReplyPolicy.decide(parsed, handled[pkg], force = false, unknownAsThem = true)
-                    if (!d2.reply) { publish(describe(d2.reason, ctx, pkg)); continue }
+                    if (!d2.reply) { setFlipOffer(d2.reason == "last_is_mine"); publish(describe(d2.reason, ctx, pkg, parsed.last)); continue }
                     workKey = d2.key
                     if (paused) continue
 

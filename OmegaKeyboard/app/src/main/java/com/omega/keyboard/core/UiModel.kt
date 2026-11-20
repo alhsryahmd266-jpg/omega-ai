@@ -107,7 +107,7 @@ object Matchers {
     )
     private val STATUS = Regex(
         """^\s*(read|delivered|sent|pending|seen|failed|edited|starred|تمت القراءة|تم التسليم|تم الإرسال|تم الارسال|مقروءة|""" +
-            """مقروء|تم الاستلام|قيد الإرسال|معدلة|تم التعديل|مُعدّلة)\s*$""",
+            """مقروء|تم الاستلام|قيد الإرسال|معدلة|تم التعديل|مُعدّلة|تمت المشاهدة|تم الاطلاع|تم الإيصال)\s*$""",
         RegexOption.IGNORE_CASE
     )
     private val PRESENCE = Regex(
@@ -140,15 +140,21 @@ object Matchers {
             """اكتب|اكتبي|رسالة|رساله|رسالتك|مراسلة|مراسله|اسأل|اسال|رد|ارسل|أرسل|ابعت|تحدث|قل|راسل|دردش|محادثة|كتابة)(?:\s|$|[.…:])""",
         RegexOption.IGNORE_CASE
     )
-    /** direction marks, zero-width characters and no-break spaces that apps put around text */
-    private val INVISIBLE = Regex("[\\u200B-\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF\\u00A0]")
+    /** direction marks, zero-width characters and (narrow) no-break spaces that apps put around text */
+    private val INVISIBLE = Regex("[\\u200B-\\u200F\\u202A-\\u202F\\u2060\\u2066-\\u2069\\uFEFF\\u00A0\\u2007\\u2009]")
     private fun visible(s: String) = INVISIBLE.replace(s, " ").trim()
+    /**
+     * What the clock / date / status checks look at: no direction marks, and Arabic-Indic digits ("١٠:٣٠ م", the way an
+     * Arabic phone writes the time under every bubble) turned into plain ones. Without this a time label was read as a
+     * message, usually as one of mine, and the chat looked as if its last word was mine.
+     */
+    private fun plain(s: String) = visible(ArabicText.toWesternDigits(s))
     private val ONLY_PUNCT_DIGITS = Regex("""^[\p{N}\p{P}\p{S}\s]*$""")
     private val URL = Regex("""^\s*(https?://|www\.)\S+\s*$""", RegexOption.IGNORE_CASE)
 
-    fun isTime(s: String) = TIME.matches(s)
-    fun isDateOrDay(s: String) = DATE_NUM.matches(s) || DATE_WORDS.matches(s) || DATE_LONG.matches(s)
-    fun isStatusWord(s: String) = STATUS.matches(s)
+    fun isTime(s: String) = TIME.matches(plain(s))
+    fun isDateOrDay(s: String): Boolean { val p = plain(s); return DATE_NUM.matches(p) || DATE_WORDS.matches(p) || DATE_LONG.matches(p) }
+    fun isStatusWord(s: String) = STATUS.matches(visible(s))
     fun isPresence(s: String) = PRESENCE.containsMatchIn(s) && s.length < 80
     fun isSystemNotice(s: String) = SYSTEM_NOTICE.containsMatchIn(s) || isAiDisclaimer(s)
     fun isAiDisclaimer(s: String) = s.length < 160 && AI_DISCLAIMER.containsMatchIn(s)
@@ -174,7 +180,7 @@ object Matchers {
 
     /** things that are never a chat message: clock times, date separators, ticks, presence, notices */
     fun isChatNoise(s: String): Boolean {
-        val t = s.trim()
+        val t = visible(s)
         if (t.isEmpty()) return true
         return isTime(t) || isDateOrDay(t) || isStatusWord(t) || isPresence(t) || isSystemNotice(t) || hasNoLetters(t) && t.length < 4
     }

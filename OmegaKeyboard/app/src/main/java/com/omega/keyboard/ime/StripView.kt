@@ -62,6 +62,9 @@ class StripView(ctx: Context) : View(ctx) {
         set(v) { field = v; invalidate() }
     var statusActionId: String = ""
     var statusActionLabel: String = ""
+    /** a second, quieter button to the left of the first one (resize mode: back to the original size) */
+    var statusAction2Id: String = ""
+    var statusAction2Label: String = ""
     var statusIcon: String = "robot"
     var statusWarn: Boolean = false
     /** the message is not a warning and its button is not a "stop": draw the button in the accent colour */
@@ -412,6 +415,18 @@ class StripView(ctx: Context) : View(ctx) {
                     tp.isFakeBoldText = false
                     right = p.left - dp(8f)
                 }
+                if (statusAction2Label.isNotEmpty()) {
+                    val pw = dp(78f)
+                    val p = addHit(right - pw, cy - dp(16f), right, cy + dp(16f), "status2")
+                    fill.color = if (pressedTag == "status2") t.keyPressed else t.keyFn
+                    c.drawRoundRect(p, dp(16f), dp(16f), fill)
+                    tp.color = t.onFn
+                    tp.textSize = dp(13.5f)
+                    tp.isFakeBoldText = true
+                    drawText(c, statusAction2Label, p.centerX(), cy, pw - dp(8f))
+                    tp.isFakeBoldText = false
+                    right = p.left - dp(8f)
+                }
                 tp.color = t.onBg
                 tp.textSize = dp(14f)
                 val left = dp(42f)
@@ -460,6 +475,7 @@ class StripView(ctx: Context) : View(ctx) {
             tag.startsWith("s") && tag.length == 2 && tag[1].isDigit() -> suggestions.getOrNull(tag[1] - '0')?.let { listener?.onSuggestion(it) }
             tag.startsWith("t:") -> listener?.onTool(tag.substring(2))
             tag == "status" -> listener?.onStatusAction(statusActionId)
+            tag == "status2" -> listener?.onStatusAction(statusAction2Id)
         }
     }
 }

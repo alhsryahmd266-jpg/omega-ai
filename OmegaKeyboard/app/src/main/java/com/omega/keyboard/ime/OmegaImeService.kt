@@ -566,14 +566,13 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         prefs.kbOffset = Math.round(alignFrac * 100f)
     }
 
-    override fun onResizeReset() {
+    /** "الأصلي": the keyboard goes back to its normal size and place */
+    private fun resetSize() {
         prefs.heightPct = 100
         prefs.widthPct = 100
         prefs.kbOffset = 50
         applyViewPrefs()
     }
-
-    override fun onResizeDone() { stopResize() }
 
     private fun appearanceOpen(): Boolean = appearance?.parent != null
 
@@ -1269,12 +1268,14 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         st.swatchRainbow = prefs.textRainbow
         st.colourSend = colourButtonShown()
 
-        fun status(icon: String, text: String, warn: Boolean, label: String, id: String, calm: Boolean = false) {
+        fun status(icon: String, text: String, warn: Boolean, label: String, id: String, calm: Boolean = false, label2: String = "", id2: String = "") {
             st.statusIcon = icon
             st.statusWarn = warn
             st.statusCalm = calm
             st.statusActionLabel = label
             st.statusActionId = id
+            st.statusAction2Label = label2
+            st.statusAction2Id = id2
             st.statusText = text
             st.mode = StripView.Mode.STATUS
         }
@@ -1291,7 +1292,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         if (st.visibility != sv) st.visibility = sv
         if (barUp) trPush()
         when {
-            resizing -> status("open_in_full", "اسحب الحواف لتغيير الحجم", false, "تم", "resize_done", calm = true)
+            resizing -> status("open_in_full", "اسحب الحواف لتغيير الحجم", false, "تم", "resize_done", calm = true, label2 = "الأصلي", id2 = "resize_reset")
             voiceActive -> status("mic", voiceText.ifBlank { "بسمعك..." }, false, "إيقاف", "voice_stop")
             busy != null -> status("auto_awesome", busy, false, "إلغاء", "cancel_busy")
             ft != null -> status(if (flashWarn) "warning" else "info", ft, flashWarn, flashActionLabel, flashActionId)
@@ -1414,6 +1415,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
                 if (!VoiceSession.active) { voiceActive = false; voiceText = ""; refreshStrip() }
             }
             "resize_done" -> stopResize()
+            "resize_reset" -> resetSize()
             "auto_stop" -> AutoPilot.stop("وقفته من الكيبورد")
             "cancel_busy" -> { Llm.cancel(); busyText = null; refreshStrip() }
             "undo_text" -> { undoReplacement(); flashText = null; refreshStrip() }

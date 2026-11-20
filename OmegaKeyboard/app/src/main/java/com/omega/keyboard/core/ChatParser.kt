@@ -53,7 +53,10 @@ object ChatParser {
             if (!n.visible || n.editable || n.password) continue
             if (n.id == input?.id) continue
             if (n.width <= 0 || n.height <= 0) continue
-            if (n.bottom > inputTop + screen.dp(4) || n.top < topLimit) continue
+            // A long message may stick out under the title bar or behind the message box (an answer that is still coming in, or
+            // one taller than the screen): what shows of it counts, the whole node need not fit between the two.
+            val inView = minOf(n.bottom, inputTop + screen.dp(4)) - maxOf(n.top, topLimit)
+            if (inView < minOf(n.height, screen.dp(24))) continue
             if (BAD_CONTAINER_IDS.any { n.shortId.contains(it) }) continue
             val txt = candidateText(n, screen) ?: continue
             if (Matchers.isChatNoise(txt)) continue

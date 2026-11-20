@@ -54,11 +54,23 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # "[only:resize|bottom]" in the commit message limits the run to the scenarios whose names match that pattern (a quick look at one
+      # thing); without it every scenario is run
+      - name: Which screenshots
+        id: only
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          ONLY="$(printf '%s' "$MSG" | grep -o '\[only:[^]]*\]' | head -1 | sed 's/^\[only://; s/\]$//')"
+          echo "only=$ONLY" >> "$GITHUB_OUTPUT"
+          echo "scenario filter: [$ONLY]"
+
       - name: Run the keyboard on an emulator and take screenshots
         uses: reactivecircus/android-emulator-runner@v2
         env:
           APK: OmegaKeyboard/app/build/outputs/apk/debug/app-debug.apk
           OUT: preview-out
+          ONLY: ${{ steps.only.outputs.only }}
         with:
           api-level: 34
           arch: x86_64

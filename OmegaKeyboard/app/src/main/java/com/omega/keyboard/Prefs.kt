@@ -42,7 +42,7 @@ class Prefs private constructor(ctx: Context) {
 
     // ---- keyboard look & feel
     var theme by S("theme", "auto")
-    var heightPct by I("height_pct", 100)                 // 60..170 (dragged by hand or set with the slider)
+    var heightPct by I("height_pct", 100)                 // 60..140 (dragged by hand or set with the slider)
 
     // colours, size and effects. 0 / -1 mean "as the theme says"
     var textColor by I("text_color", 0xFF2979FF.toInt())  // colour of the text you type; 0 = the field's own colour

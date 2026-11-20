@@ -74,9 +74,10 @@ object Layouts {
     )
 
     /**
-     * The bottom row is one design on every page and in both languages: symbols 1.5 | comma | emoji | globe | space | full stop | enter 1.5,
-     * and each round key is exactly one letter wide, so the keys sit under the columns of the letters above them. Only the space
-     * bar takes up what is left (4 letters wide in Arabic, 3 in English).
+     * The bottom row is one design on every page and in both languages, and it is symmetrical: three keys, the space bar in the
+     * middle, three keys. Left of the space bar: symbols 1.5 | globe | emoji. Right of it: comma | full stop | enter 1.5. Both
+     * sides are 3.5 letters wide, so the space bar sits exactly in the middle of the keyboard; it takes up what is left (4 letters
+     * wide in Arabic, 3 in English). Each round key is one letter wide, so the keys sit under the columns of the letters above them.
      */
     private fun bottomRow(lang: String, switchKey: Key, total: Float): Row {
         val ar = lang == "ar"
@@ -87,9 +88,9 @@ object Layouts {
         val globe = Key(KeyKind.LANG, "🌐", weight = 1f)
         val period = c(".", popups = listOf(".", "…", "?", "!", ":", ";", "-", "_", "@", "/"), fn = true)
         val enter = Key(KeyKind.ENTER, "↵", weight = 1.5f)
-        val fixed = sw.weight + comma.weight + emoji.weight + globe.weight + period.weight + enter.weight
-        val space = Key(KeyKind.SPACE, " ", " ", weight = total - fixed)
-        return Row(listOf(sw, comma, emoji, globe, space, period, enter))
+        val side = sw.weight + globe.weight + emoji.weight          // the same on both sides
+        val space = Key(KeyKind.SPACE, " ", " ", weight = total - 2f * side)
+        return Row(listOf(sw, globe, emoji, space, comma, period, enter))
     }
 
     fun english(numberRow: Boolean): Layout {

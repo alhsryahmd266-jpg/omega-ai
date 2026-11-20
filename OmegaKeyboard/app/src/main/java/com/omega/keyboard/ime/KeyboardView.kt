@@ -56,10 +56,6 @@ class KeyboardView(ctx: Context) : View(ctx) {
         fun onFeedback(kind: KeyKind)
         /** resize mode: a drag of an edge ended; these are the scales the view shows now (not percentages) */
         fun onResized(heightScale: Float, widthScale: Float, alignFrac: Float)
-        /** resize mode: "back to the original size" was pressed */
-        fun onResizeReset()
-        /** resize mode: "done" was pressed */
-        fun onResizeDone()
     }
 
     var listener: Listener? = null
@@ -86,7 +82,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     /** width of the keys area as a share of the view (one-handed typing) and where it sits: 0 centre, 1 left, 2 right */
     var widthScale: Float = 1f
-        set(v) { if (field != v) { field = v; computeKeys(); invalidate() } }
+        set(v) { if (field != v) { field = v; computeKeys(); requestLayout(); invalidate() } }
 
     /** where the keys area sits when it is narrower than the view: 0 = at the left edge, 0.5 = centred, 1 = at the right edge */
     var alignFrac: Float = 0.5f
@@ -137,8 +133,15 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
         /** limits of the size the user can give the keyboard (percent of the normal one) */
         const val MIN_HEIGHT_PCT = 60
-        const val MAX_HEIGHT_PCT = 170
+        const val MAX_HEIGHT_PCT = 140
         const val MIN_WIDTH_PCT = 60
+
+        /**
+         * The tallest a key may be compared with its width. Taller than this a key stops looking like a key (a slab), which is what
+         * a keyboard "stretched" by hand looked like: the height wins only while the keys keep their proportions. Gboard's tallest
+         * setting is about the same.
+         */
+        private const val MAX_KEY_ASPECT = 2.0f
 
         /** a finger that went down on a key moves to the next one only after leaving the first by this much and travelling this far (dp) */
         private const val KEY_SWITCH_MARGIN_DP = 5f
@@ -148,8 +151,6 @@ class KeyboardView(ctx: Context) : View(ctx) {
         private const val RZ_TOP = 1
         private const val RZ_LEFT = 2
         private const val RZ_RIGHT = 3
-        private const val RZ_DONE = 4
-        private const val RZ_RESET = 5
     }
 
     private val keys = ArrayList<KeyRect>()
@@ -228,7 +229,24 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private val baseRowDp = 52f
     private val padTop get() = dp(6f)
     private val padBottom get() = dp(8f)
-    private val rowHeight get() = dp(baseRowDp) * heightScale
+    /** the height the user asked for, held to the largest one at which the keys still have the proportions of a key */
+    private val rowScale: Float get() = rowScaleFor(if (width > 0) width.toFloat() else resources.displayMetrics.widthPixels.toFloat())
+    private fun rowScaleFor(viewW: Float) = heightScale.coerceIn(MIN_HEIGHT_PCT / 100f, maxHeightScale(viewW))
+    private val rowHeight get() = dp(baseRowDp) * rowScale
+
+    /**
+     * How tall the rows may get: a key is never more than [MAX_KEY_ASPECT] times as tall as it is wide (measured on the widest row,
+     * where the keys are narrowest), never beyond [MAX_HEIGHT_PCT], and never below the normal size.
+     */
+    private fun maxHeightScale(viewW: Float = if (width > 0) width.toFloat() else resources.displayMetrics.widthPixels.toFloat()): Float {
+        val usable = (viewW - 2 * dp(2f)) * widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)
+        val widest = (layout?.rows?.maxOfOrNull { it.total } ?: 10f).coerceAtLeast(1f)
+        val byLook = MAX_KEY_ASPECT * (usable / widest) / dp(baseRowDp)
+        return min(MAX_HEIGHT_PCT / 100f, max(byLook, 1f))
+    }
+
+    /** how much letters, hints and icons grow with the keyboard: half as fast as the rows do, because the keys stay as wide as they were */
+    private val grow: Float get() = 1f + (rowScale - 1f).coerceAtLeast(0f) * 0.55f
     private val insetX get() = dp(2.5f)
     private val insetY get() = dp(4f)
 
@@ -244,8 +262,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
         val rows = layout?.rows?.size ?: 4
-        val h = (rows * rowHeight + padTop + padBottom).toInt()
-        setMeasuredDimension(MeasureSpec.getSize(widthSpec), h)
+        val w = MeasureSpec.getSize(widthSpec)
+        val h = (rows * dp(baseRowDp) * rowScaleFor(w.toFloat()) + padTop + padBottom).toInt()
+        setMeasuredDimension(w, h)
     }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
@@ -757,11 +776,19 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 textPaint.typeface = face ?: letterFace
                 textPaint.isFakeBoldText = false
                 // Arabic letters are drawn bigger (as Gboard does): at the English size they are hard to read
-                var size = (if (arabic) min(rowHeight * 0.50f, dp(27f)) else min(rowHeight * 0.42f, dp(24f))) * fontScale * (if (face != null) capScale else 1f)
                 val lab = labelOf(k)
+                var size = letterSize(arabic, face)
                 if (lab.length > 2) size = min(size, dp(19f) * fontScale)
-                size = min(size, min(kr.cell.width() * 0.92f, rowHeight * 0.62f))
+                size = min(size, rowHeight * 0.62f)
+                // every letter of the page is drawn at the one size at which the widest of them still sits inside its key (a wide Arabic
+                // letter in a calligraphy face, or a big letter-size setting, used to run over the edge of the key); a long label has its own fit
+                size *= if (lab.length <= 2) glyphFit(arabic, face, r.width()) else 1f
                 textPaint.textSize = size
+                if (lab.length > 2) {
+                    val room = r.width() * 0.94f
+                    val wide = textPaint.measureText(lab)
+                    if (wide > room && wide > 0f) textPaint.textSize = size * room / wide
+                }
                 if (t.neon != 0) textPaint.setShadowLayer(dp(6f), 0f, 0f, ColorMath.withAlpha(t.neon, 0xE0))
                 else if (t.fancy && t.dark) textPaint.setShadowLayer(dp(0.9f), 0f, dp(0.9f), 0x80000000.toInt())
                 else if (t.letterShadow != 0) textPaint.setShadowLayer(dp(1.6f), 0f, dp(0.9f), t.letterShadow)
@@ -770,16 +797,17 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 textPaint.typeface = Typeface.DEFAULT
                 if (k.hint.isNotEmpty()) {
                     hintPaint.color = t.textSub
-                    hintPaint.textSize = dp(10f) * min(1.2f, fontScale)
+                    val hg = min(grow, 1.2f)
+                    hintPaint.textSize = dp(10f) * min(1.2f, fontScale) * hg
                     // Gboard puts the number hints of an Arabic key in its top-left corner
                     val hx = if (arabic) r.left + dp(7f) else r.right - dp(7f)
-                    c.drawText(k.hint, hx, r.top + dp(13f), hintPaint)
+                    c.drawText(k.hint, hx, r.top + dp(13f) * hg, hintPaint)
                 }
             }
             KeyKind.SPACE -> {
                 if (spaceLabel.isNotEmpty()) {
                     textPaint.color = t.textSub
-                    textPaint.textSize = dp(13f)
+                    textPaint.textSize = dp(13f) * min(grow, 1.25f)
                     if (t.fancy) {
                         // the language name with a short accent line under it
                         drawCentered(c, spaceLabel, cx, cy - dp(3f))
@@ -788,21 +816,21 @@ class KeyboardView(ctx: Context) : View(ctx) {
                     } else drawCentered(c, spaceLabel, cx, cy)
                 }
             }
-            KeyKind.ENTER -> drawIcon(c, enterIcon, cx, cy, dp(24f), t.onAccent)
-            KeyKind.BACKSPACE -> drawIcon(c, "backspace", cx, cy, dp(24f), t.onFn)
-            KeyKind.LANG -> drawIcon(c, "language", cx, cy, dp(22f), t.text)
-            KeyKind.EMOJI -> drawIcon(c, "emoji_emotions", cx, cy, dp(22f), t.onFn)
-            KeyKind.SHIFT -> drawShift(c, cx, cy, if (shiftState == 2) t.onAccent else t.onFn, shiftState)
+            KeyKind.ENTER -> drawIcon(c, enterIcon, cx, cy, iconSize(24f, r), t.onAccent)
+            KeyKind.BACKSPACE -> drawIcon(c, "backspace", cx, cy, iconSize(24f, r), t.onFn)
+            KeyKind.LANG -> drawIcon(c, "language", cx, cy, iconSize(22f, r), t.text)
+            KeyKind.EMOJI -> drawIcon(c, "emoji_emotions", cx, cy, iconSize(22f, r), t.onFn)
+            KeyKind.SHIFT -> drawShift(c, cx, cy, if (shiftState == 2) t.onAccent else t.onFn, shiftState, min(grow, 1.3f))
             KeyKind.SYMBOLS, KeyKind.SYMBOLS2, KeyKind.LETTERS -> {
                 textPaint.color = t.onFn
                 textPaint.typeface = letterFace          // a real medium face instead of fake bold
-                textPaint.textSize = dp(15f)
+                textPaint.textSize = dp(15f) * min(grow, 1.25f)
                 drawCentered(c, k.label, cx, cy)
                 textPaint.typeface = Typeface.DEFAULT
             }
             KeyKind.ALT -> {
                 textPaint.color = t.onFn
-                textPaint.textSize = dp(20f)
+                textPaint.textSize = dp(20f) * min(grow, 1.25f)
                 drawCentered(c, k.label, cx, cy)
             }
             KeyKind.SPACER -> {}
@@ -814,6 +842,50 @@ class KeyboardView(ctx: Context) : View(ctx) {
         c.drawText(s, cx, cy - (fm.ascent + fm.descent) / 2f, textPaint)
     }
 
+    /** the size a letter would be drawn at before it is fitted to its key: it grows a little as the keyboard is made taller */
+    private fun letterSize(arabic: Boolean, face: Typeface?): Float =
+        (if (arabic) min(rowHeight * 0.50f, dp(27f) * grow) else min(rowHeight * 0.42f, dp(24f) * grow)) * fontScale * (if (face != null) capScale else 1f)
+
+    private var fitSig = 0L
+    private var fitValue = 1f
+
+    /**
+     * How much smaller than [letterSize] the letters of this page must be drawn so that the widest of them fits inside its key (1 when all
+     * of them do). One number for the whole page, so the letters of a row stay the same size; cached until the page, the font, the
+     * size or the key width changes.
+     */
+    private fun glyphFit(arabic: Boolean, face: Typeface?, keyFace: Float): Float {
+        val lay = layout ?: return 1f
+        val base = letterSize(arabic, face)
+        var sig = lay.id.hashCode().toLong()
+        sig = sig * 31 + System.identityHashCode(face)
+        sig = sig * 31 + System.identityHashCode(capStyle)
+        sig = sig * 31 + java.lang.Float.floatToIntBits(base)
+        sig = sig * 31 + java.lang.Float.floatToIntBits(keyFace)
+        sig = sig * 31 + (if (upper()) 1 else 0)
+        if (sig == fitSig) return fitValue
+        val room = keyFace * 0.94f
+        val tf = textPaint.typeface
+        val sz = textPaint.textSize
+        textPaint.typeface = face ?: letterFace
+        textPaint.textSize = base
+        var worst = 0f
+        for (row in lay.rows) for (key in row.keys) {
+            if (key.kind != KeyKind.CHAR) continue
+            val lab = labelOf(key)
+            if (lab.isEmpty() || lab.length > 2) continue
+            worst = max(worst, textPaint.measureText(lab))
+        }
+        textPaint.typeface = tf
+        textPaint.textSize = sz
+        fitValue = if (worst > room && worst > 0f) (room / worst).coerceAtLeast(0.55f) else 1f
+        fitSig = sig
+        return fitValue
+    }
+
+    /** an icon: it grows with the keyboard like the letters do, and never past what its key can hold */
+    private fun iconSize(baseDp: Float, r: RectF): Float = min(dp(baseDp) * grow, min(r.width() * 0.92f, r.height() * 0.72f))
+
     private fun drawIcon(c: Canvas, name: String, cx: Float, cy: Float, size: Float, color: Int) {
         val d = icons.getOrPut(name) { Icons.get(context, name) } ?: return
         d.setTint(color)
@@ -823,9 +895,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
     }
 
     /** Gboard-style shift arrow: outline when off, filled when on, with a bar for caps lock. */
-    private fun drawShift(c: Canvas, cx: Float, cy: Float, color: Int, state: Int) {
-        val w = dp(18f)
-        val h = dp(18f)
+    private fun drawShift(c: Canvas, cx: Float, cy: Float, color: Int, state: Int, scale: Float = 1f) {
+        val w = dp(18f) * scale
+        val h = dp(18f) * scale
         val dy = if (state == 2) -dp(2f) else 0f
         path.reset()
         path.moveTo(cx, cy - h / 2 + dy)
@@ -1024,14 +1096,11 @@ class KeyboardView(ctx: Context) : View(ctx) {
             sb.append(id).append('=').append((loc[0] + kr.cell.centerX()).toInt()).append(',').append((loc[1] + kr.cell.centerY()).toInt()).append(';')
         }
         if (resizeMode) {
-            layoutResizeButtons()
             val l = areaLeft(); val r = areaRight()
             fun put(name: String, x: Float, y: Float) { sb.append(name).append('=').append((loc[0] + x).toInt()).append(',').append((loc[1] + y).toInt()).append(';') }
             put("RZ_TOP", (l + r) / 2f, dp(10f))
             put("RZ_LEFT", l + dp(10f), height / 2f)
             put("RZ_RIGHT", r - dp(10f), height / 2f)
-            put("RZ_DONE", rzBtnDone.centerX(), rzBtnDone.centerY())
-            put("RZ_RESET", rzBtnReset.centerX(), rzBtnReset.centerY())
         }
         Log.d("OmegaKeys", sb.toString())
     }
@@ -1070,8 +1139,6 @@ class KeyboardView(ctx: Context) : View(ctx) {
         }
 
     private val rzPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val rzBtnDone = RectF()
-    private val rzBtnReset = RectF()
     private var rzPart = RZ_NONE
     private var rzRawX = 0f
     private var rzRawY = 0f
@@ -1091,25 +1158,11 @@ class KeyboardView(ctx: Context) : View(ctx) {
         return areaLeft() + full * widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)
     }
 
-    private fun layoutResizeButtons() {
-        val l = areaLeft()
-        val r = areaRight()
-        val cx = (l + r) / 2f
-        val cy = height / 2f
-        val bw = min(dp(98f), (r - l - dp(104f)) / 2f).coerceAtLeast(dp(58f))
-        val bh = dp(38f)
-        val gap = dp(10f)
-        val top = cy - dp(2f)
-        rzBtnDone.set(cx + gap / 2f, top, cx + gap / 2f + bw, top + bh)
-        rzBtnReset.set(cx - gap / 2f - bw, top, cx - gap / 2f, top + bh)
-    }
-
     private fun drawResize(c: Canvas, t: KbTheme) {
         val l = areaLeft()
         val r = areaRight()
         val h = height.toFloat()
         val cx = (l + r) / 2f
-        layoutResizeButtons()
         // a light veil and a frame around the keys area: this is what the handles resize
         rzPaint.style = Paint.Style.FILL
         rzPaint.color = ColorMath.withAlpha(t.accent, 0x2A)
@@ -1140,36 +1193,16 @@ class KeyboardView(ctx: Context) : View(ctx) {
         pill(cx - dp(40f), dp(4f), cx + dp(40f), dp(16f), rzPart == RZ_TOP)
         pill(l + dp(4f), h / 2f - dp(40f), l + dp(16f), h / 2f + dp(40f), rzPart == RZ_LEFT)
         pill(r - dp(16f), h / 2f - dp(40f), r - dp(4f), h / 2f + dp(40f), rzPart == RZ_RIGHT)
-        // a plate with the hint and the two buttons, readable over any keys
-        val plateW = min(r - l - dp(76f), dp(264f))
-        val plateH = dp(100f)
-        val py = h / 2f - plateH / 2f - dp(2f)
-        rf.set(cx - plateW / 2f, py, cx + plateW / 2f, py + plateH)
-        rzPaint.style = Paint.Style.FILL
-        rzPaint.color = ColorMath.withAlpha(if (t.dark) 0xFF101114.toInt() else 0xFFFFFFFF.toInt(), 0xEE)
-        c.drawRoundRect(rf, dp(16f), dp(16f), rzPaint)
-        textPaint.color = t.onBg
-        textPaint.textSize = dp(13.5f)
+        // what the size is now, in the middle of the top handle's bar
+        textPaint.color = t.onAccent
+        textPaint.textSize = dp(9f)
         textPaint.isFakeBoldText = true
-        val hint = android.text.TextUtils.ellipsize("اسحب المقابض لتكبير الكيبورد أو تصغيره", android.text.TextPaint(textPaint), plateW - dp(16f), android.text.TextUtils.TruncateAt.END).toString()
-        drawCentered(c, hint, cx, py + dp(22f))
-        fun button(rect: RectF, label: String, main: Boolean, active: Boolean) {
-            rzPaint.style = Paint.Style.FILL
-            rzPaint.color = if (main) (if (active) t.keyPressed else t.accent) else (if (active) t.keyPressed else t.keyFn)
-            c.drawRoundRect(rect, dp(19f), dp(19f), rzPaint)
-            textPaint.color = if (main) t.onAccent else t.onFn
-            textPaint.textSize = dp(14f)
-            drawCentered(c, label, rect.centerX(), rect.centerY())
-        }
-        button(rzBtnReset, "الأصلي", false, rzPart == RZ_RESET)
-        button(rzBtnDone, "تم", true, rzPart == RZ_DONE)
+        val pct = Math.round(rowScale * 100f)
+        drawCentered(c, "$pct%", cx, dp(10f))
         textPaint.isFakeBoldText = false
     }
 
     private fun rzPartAt(x: Float, y: Float): Int {
-        layoutResizeButtons()
-        if (rzBtnDone.contains(x, y)) return RZ_DONE
-        if (rzBtnReset.contains(x, y)) return RZ_RESET
         val l = areaLeft()
         val r = areaRight()
         val zone = dp(44f)
@@ -1195,12 +1228,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
             MotionEvent.ACTION_UP -> {
                 val part = rzPart
                 rzPart = RZ_NONE
-                layoutResizeButtons()
-                when (part) {
-                    RZ_DONE -> if (rzBtnDone.contains(e.x, e.y)) listener?.onResizeDone()
-                    RZ_RESET -> if (rzBtnReset.contains(e.x, e.y)) listener?.onResizeReset()
-                    RZ_TOP, RZ_LEFT, RZ_RIGHT -> listener?.onResized(heightScale, widthScale, alignFrac)
-                }
+                if (part == RZ_TOP || part == RZ_LEFT || part == RZ_RIGHT) listener?.onResized(heightScale, widthScale, alignFrac)
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -1224,7 +1252,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 val maxPx = resources.displayMetrics.heightPixels * 0.5f
                 val screenCap = (maxPx - padTop - padBottom) / (rows * dp(baseRowDp))
                 val want = (rzH0 + (rzRawY - rawY) - padTop - padBottom) / (rows * dp(baseRowDp))
-                heightScale = want.coerceIn(MIN_HEIGHT_PCT / 100f, min(MAX_HEIGHT_PCT / 100f, max(screenCap, MIN_HEIGHT_PCT / 100f)))
+                // the keys grow until they would stop looking like keys (see MAX_KEY_ASPECT): there the edge stops, however far the finger goes
+                heightScale = want.coerceIn(MIN_HEIGHT_PCT / 100f, min(maxHeightScale(), max(screenCap, MIN_HEIGHT_PCT / 100f)))
             }
             RZ_LEFT -> setArea((rzL0 + (rawX - rzRawX)).coerceIn(side, rzR0 - minUsable), rzR0)
             RZ_RIGHT -> setArea(rzL0, (rzR0 + (rawX - rzRawX)).coerceIn(rzL0 + minUsable, width - side))

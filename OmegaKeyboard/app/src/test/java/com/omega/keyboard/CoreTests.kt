@@ -19,7 +19,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask(); photoLook()
+        prompts(); screenFilter(); scrolling(); noise(); chatEdges(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask(); photoLook()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -89,13 +89,29 @@ object CoreTests {
             check("layout ${l.id} has an enter and a backspace", l.rows.any { r -> r.keys.any { it.kind == KeyKind.ENTER } } &&
                 l.rows.any { r -> r.keys.any { it.kind == KeyKind.BACKSPACE } })
         }
-        // the bottom row is one design on every page and in both languages: round keys one letter wide, only the space bar differs
+        // the bottom row is one design on every page and in both languages: round keys one letter wide, only the space bar differs,
+        // and it is symmetrical: three keys | space bar | three keys, the bar exactly in the middle
         for (l in all.filter { it.kind != LayoutKind.NUMERIC }) {
             val b = l.rows.last().keys
             val spaceWanted = if (l.lang == "ar") 4f else 3f
+            val si = b.indexOfFirst { it.kind == KeyKind.SPACE }
+            val left = b.take(si).sumOf { it.weight.toDouble() }
+            val right = b.drop(si + 1).sumOf { it.weight.toDouble() }
             check("layout ${l.id} bottom row keeps the same design",
-                b.size == 7 && b[0].weight == 1.5f && b[1].weight == 1f && b[2].weight == 1f && b[3].weight == 1f && b[5].weight == 1f &&
-                    b[6].weight == 1.5f && b[4].kind == KeyKind.SPACE && kotlin.math.abs(b[4].weight - spaceWanted) < 0.01f) { "${b.map { it.weight }}" }
+                b.size == 7 && si == 3 && b[0].weight == 1.5f && b[1].weight == 1f && b[2].weight == 1f && b[4].weight == 1f && b[5].weight == 1f &&
+                    b[6].weight == 1.5f && kotlin.math.abs(b[si].weight - (l.rows.first().total - 7f)) < 0.01f) { "${b.map { it.weight }}" }
+            check("layout ${l.id} bottom row: three | space | three, the bar in the middle",
+                si == 3 && b.size - si - 1 == 3 && kotlin.math.abs(left - right) < 0.001) { "$left vs $right" }
+            check("layout ${l.id} space bar is ${spaceWanted.toInt()} letters wide", kotlin.math.abs(b[si].weight - spaceWanted) < 0.01f) { "${b[si].weight}" }
+        }
+        run {
+            // which keys are where: switchers on the left, punctuation and enter on the right
+            val b = Layouts.arabic(false, false).rows.last().keys
+            check("left of the space bar: symbols, globe, emoji", b.take(3).map { it.kind } == listOf(KeyKind.SYMBOLS, KeyKind.LANG, KeyKind.EMOJI))
+            check("right of the space bar: comma, full stop, enter",
+                b.drop(4).map { it.kind } == listOf(KeyKind.CHAR, KeyKind.CHAR, KeyKind.ENTER) && b[4].text == "،" && b[5].text == ".")
+            val e = Layouts.english(false).rows.last().keys
+            check("english: the comma is a comma", e[4].text == "," && e[5].text == ".")
         }
         val ar = Layouts.arabic(false, false)
         check("arabic row1 starts with ض", ar.rows[0].keys.first().text == "ض")
@@ -443,6 +459,58 @@ object CoreTests {
         check("centred text is nobody's", sideOf(300, 780) == Side.UNKNOWN) { "${sideOf(300, 780)}" }
         check("a wide left bubble is still theirs", sideOf(40, 880) == Side.THEM) { "${sideOf(40, 880)}" }
         check("a message about mistakes is kept", ChatParser.parse(B().also { it.add("ممكن يغلط", 60, 430, 400, 500); it.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/entry") }.screen()).messages.size == 1)
+    }
+
+    /**
+     * "Waiting for the other side" while the other side had spoken: an Arabic phone writes the time under a bubble with
+     * Arabic-Indic digits, and a long answer can stick out above or below the part of the chat that is in view.
+     */
+    private fun chatEdges() {
+        check("Arabic-Indic clock is noise", Matchers.isChatNoise("١٠:٣٠ م") && Matchers.isChatNoise("٩:٤١ ص") && Matchers.isChatNoise("١٢:٠٥"))
+        check("clock with direction marks / narrow no-break space is noise",
+            Matchers.isChatNoise("‏١٠:٣٠ م") && Matchers.isChatNoise("10:30 AM") && Matchers.isChatNoise("‎10:30 PM"))
+        check("Arabic-Indic date is noise", Matchers.isChatNoise("٢٠٢٦/١١/٢٠") && Matchers.isChatNoise("٢٠/١١/٢٠٢٦"))
+        check("Arabic delivery words are status, not messages", Matchers.isChatNoise("تمت المشاهدة") && Matchers.isChatNoise("تم الاطلاع"))
+        check("a friend's words that look like a status stay messages", !Matchers.isChatNoise("وصلت") && !Matchers.isChatNoise("مرسل") && !Matchers.isChatNoise("١٠ جنيه") && !Matchers.isChatNoise("الساعة ٥ ونص"))
+
+        // a long left bubble from them, its clock at the bubble's right end (which leans to the right half of the screen)
+        val b = B(pkg = "com.whatsapp")
+        b.add("متى تقدر تيجي النهارده؟", 60, 430, 520, 500)
+        b.add("١٠:٢٩ م", 430, 505, 515, 540)
+        b.add("تمام، هجيلك بعد الشغل", 560, 600, 1010, 670)            // mine
+        b.add("أنا مستنيك بس متتأخرش عشان في ضيوف جايين ومحتاجين نجهز الأكل قبل ما يوصلوا", 40, 760, 900, 880)
+        b.add("١٠:٣٠ م", 760, 885, 890, 925)                           // the clock of THEIR bubble, right end
+        b.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/entry")
+        val r = ChatParser.parse(b.screen())
+        check("clocks are not messages", r.messages.size == 3 && r.messages.none { it.text.contains(":") }) { "${r.messages.map { it.text }}" }
+        check("their long message is the last one and theirs", r.last?.side == Side.THEM) { "${r.last}" }
+        check("so it gets a reply", ReplyPolicy.decide(r, null, force = false, unknownAsThem = true).reply)
+
+        // a long answer that reaches behind the message box: it used to be dropped, so the chat seemed to end with MY question
+        val longAnswer = "الحرارة هي الطاقة المنتقلة بين جسمين مختلفين في درجة الحرارة، أما درجة الحرارة فهي مقياس لمتوسط طاقة حركة الجزيئات. " +
+            "ولذلك قد يكون لجسمين نفس درجة الحرارة وكمية حرارة مختلفة."
+        val c = B(pkg = "com.anthropic.claude")
+        c.add("اشرحلي الفرق بين الحرارة ودرجة الحرارة", 380, 330, 1020, 400)
+        c.add(longAnswer, 48, 460, 1032, 2260)
+        c.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/input", hint = true)
+        val rc = ChatParser.parse(c.screen())
+        check("a long answer that sticks out below is still read", rc.messages.size == 2) { "${rc.messages.map { it.text.take(12) }}" }
+        check("and it is the last word, so it gets a reply", ReplyPolicy.decide(rc, null, force = false, unknownAsThem = true).reply)
+
+        // ... and one that is the only thing in view, its top under the title bar and its end behind the box
+        val c2 = B(pkg = "com.anthropic.claude")
+        c2.add(longAnswer, 48, 120, 1032, 2260)
+        c2.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/input", hint = true)
+        val rc2 = ChatParser.parse(c2.screen())
+        check("an answer taller than the chat is read as well", rc2.messages.size == 1 && ReplyPolicy.decide(rc2, null, force = false, unknownAsThem = true).reply) { "${rc2.messages.size}" }
+
+        // the title bar and the box's own labels are not messages just because they touch the chat area
+        val t = B(pkg = "com.whatsapp")
+        t.add("أحمد", 150, 90, 600, 214)                                 // title, its end 16 px into the chat area
+        t.add("الرسالة الوحيدة", 60, 430, 520, 500)
+        t.add("نص ملصق بالصندوق", 130, 2170, 600, 2230)                  // a label that reaches into the box: not part of the chat
+        t.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/entry")
+        check("the title bar stays out", ChatParser.parse(t.screen()).messages.map { it.text } == listOf("الرسالة الوحيدة")) { "${ChatParser.parse(t.screen()).messages.map { it.text }}" }
     }
 
     private fun screenFilter() {
