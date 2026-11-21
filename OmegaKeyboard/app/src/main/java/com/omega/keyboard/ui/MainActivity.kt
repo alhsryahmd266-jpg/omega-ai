@@ -18,11 +18,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
+import android.widget.Toast
 import android.widget.TextView
 import com.omega.keyboard.ai.Llm
 import com.omega.keyboard.ai.ModelDownloader
 import com.omega.keyboard.ai.ModelStore
 import com.omega.keyboard.agent.ScreenAgentService
+import com.omega.keyboard.agent.ShortcutHider
 
 /** First screen: switches everything on step by step and shows, live, what is still missing. */
 class MainActivity : BaseActivity() {
@@ -106,6 +108,10 @@ class MainActivity : BaseActivity() {
             i.removeExtra("page")
             startActivity(Intent(this, ModelActivity::class.java))
         }
+        if (i?.getBooleanExtra("hide_icon", false) == true) {
+            i.removeExtra("hide_icon")
+            hideFloatingButton()
+        }
     }
 
     override fun onResume() {
@@ -140,15 +146,28 @@ class MainActivity : BaseActivity() {
     }
 
     /** the settings page of this keyboard's accessibility service (its shortcut, the floating button, is switched off there); the general page where a phone has no such page */
-    private fun openAccessibilityPage() {
-        val service = ComponentName(this, ScreenAgentService::class.java).flattenToString()
-        val tries = listOf(
-            Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").putExtra(Intent.EXTRA_COMPONENT_NAME, service),
-            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
-        )
-        for (i in tries) {
-            try { startActivity(i); return } catch (_: Throwable) {}
+    private fun openAccessibilityPage() { ShortcutHider.openPage(this) }
+
+    /** "اقفله لي": opens that page and presses the shortcut's switch there by itself (the service does the pressing) */
+    private fun hideFloatingButton() {
+        when (ShortcutHider.start(this)) {
+            ShortcutHider.Start.NEED_SERVICE -> Toast.makeText(this, "فعّل خدمة إمكانية الوصول الأول (الخطوة ٣ فوق)", Toast.LENGTH_LONG).show()
+            ShortcutHider.Start.BUSY -> Toast.makeText(this, "شغّال على قفله... استنى لحظة", Toast.LENGTH_SHORT).show()
+            ShortcutHider.Start.OK -> Toast.makeText(this, "هفتح الإعدادات وأقفل الاختصار بنفسي — متلمسش الشاشة لحظات", Toast.LENGTH_LONG).show()
         }
+    }
+
+    /** 1: the shortcut (the floating button) is on, 0: it is off, -1: this phone does not let an app read it */
+    private fun shortcutState(): Int = try {
+        val targets = Settings.Secure.getString(contentResolver, "accessibility_button_targets")
+        val mode = Settings.Secure.getString(contentResolver, "accessibility_button_mode")
+        when {
+            targets != null -> if (targets.split(':').any { it.startsWith("$packageName/") }) 1 else 0
+            mode != null -> 0
+            else -> -1
+        }
+    } catch (_: Throwable) {
+        -1
     }
 
     private val wanted = arrayOf(Manifest.permission.RECORD_AUDIO)
@@ -163,7 +182,8 @@ class MainActivity : BaseActivity() {
         val perms = permsGranted()
         val model = ModelStore.path(this) != null
         val dl = ModelDownloader.status(this)
-        val key = "$imeOn $imeSel $a11y $perms $model ${dl.kind} ${dl.percent} ${dl.message}"
+        val shortcut = shortcutState()
+        val key = "$imeOn $imeSel $a11y $perms $model ${dl.kind} ${dl.percent} ${dl.message} $shortcut ${ShortcutHider.result}"
         if (!force && key == lastKey) return
         lastKey = key
 
@@ -206,11 +226,20 @@ class MainActivity : BaseActivity() {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             } else null
         ))
-        if (a11y) steps.addView(step(
-            0, "زرار بنفسجي عايم على الشاشة؟",
-            "ده مش من الكيبورد: ده اختصار بيحطّه أندرويد نفسه لما بتفعّل إمكانية الوصول. لقفله: إمكانية الوصول ← Omega Keyboard ← الاختصار (Shortcut) ← اقفله واضغط حفظ. الصلاحية والميزات بتفضل شغّالة. (أندرويد ١٤: ممكن كمان تسحب الزرار نفسه على علامة ✕ اللي بتظهر تحت.)",
-            "افتح صفحة الاختصار" to { openAccessibilityPage() },
-        ))
+        if (a11y) {
+            val failed = ShortcutHider.result == "fail"
+            if (shortcut == 0 || ShortcutHider.result == "ok" || ShortcutHider.result == "already") steps.addView(step(
+                1, "الأيقونة العايمة مقفولة ✓",
+                "الاختصار مقفول، فالزرار العايم مش هيظهر. لو لسه شايفه اقفل الشاشة وافتحها. الصلاحية والميزات شغّالة زي ما هي.",
+                null,
+            )) else steps.addView(step(
+                0, "زرار بنفسجي عايم على الشاشة؟",
+                (if (failed) "مقدرتش أقفله لوحدي على تليفونك. اقفله بإيدك: إمكانية الوصول ← Omega Keyboard ← «الاختصار» (Shortcut) ← اقفله.\n\n" else "") +
+                    "ده مش من الكيبورد: أندرويد نفسه بيحطّه لما بتفعّل إمكانية الوصول، وأي تطبيق مبيقدرش يشيله من جوه. دوس «اقفله لي» وهفتح الإعدادات وأقفل «الاختصار» بنفسي (هتشوف الصفحة بتتحرك لوحدها). الصلاحية والميزات بتفضل شغّالة.",
+                "اقفله لي" to { hideFloatingButton() },
+                "افتح الصفحة بإيدي" to { openAccessibilityPage() },
+            ))
+        }
         steps.addView(step(
             if (perms) 1 else 0, "٤) إذن الميكروفون (للكتابة بالصوت)",
             if (perms) "تمام" else "الميكروفون بس، عشان تكتب بصوتك. اختياري.",

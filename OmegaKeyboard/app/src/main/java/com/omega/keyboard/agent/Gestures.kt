@@ -17,17 +17,31 @@ object Gestures {
                 moveTo(x.toFloat(), y1.toFloat())
                 lineTo(x.toFloat(), y2.toFloat())
             }
-            val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, durationMs)).build()
-            val latch = CountDownLatch(1)
-            var ok = false
-            val dispatched = svc.dispatchGesture(g, object : AccessibilityService.GestureResultCallback() {
-                override fun onCompleted(gestureDescription: GestureDescription?) { ok = true; latch.countDown() }
-                override fun onCancelled(gestureDescription: GestureDescription?) { latch.countDown() }
-            }, null)
-            if (!dispatched) false else { latch.await(durationMs + 1500, TimeUnit.MILLISECONDS); ok }
+            dispatch(svc, path, durationMs)
         } catch (t: Throwable) {
             AppLog.e("gesture", "swipe failed", t)
             false
         }
+    }
+
+    /** A short finger tap at (x, y). */
+    fun tap(svc: AccessibilityService, x: Int, y: Int): Boolean {
+        return try {
+            dispatch(svc, Path().apply { moveTo(x.toFloat(), y.toFloat()) }, 60)
+        } catch (t: Throwable) {
+            AppLog.e("gesture", "tap failed", t)
+            false
+        }
+    }
+
+    private fun dispatch(svc: AccessibilityService, path: Path, durationMs: Long): Boolean {
+        val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, durationMs)).build()
+        val latch = CountDownLatch(1)
+        var ok = false
+        val dispatched = svc.dispatchGesture(g, object : AccessibilityService.GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) { ok = true; latch.countDown() }
+            override fun onCancelled(gestureDescription: GestureDescription?) { latch.countDown() }
+        }, null)
+        return if (!dispatched) false else { latch.await(durationMs + 1500, TimeUnit.MILLISECONDS); ok }
     }
 }

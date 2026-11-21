@@ -27,6 +27,7 @@ import com.omega.keyboard.core.ColorMath
 import com.omega.keyboard.core.Decor
 import com.omega.keyboard.core.Key
 import com.omega.keyboard.core.KeyKind
+import com.omega.keyboard.core.KeySize
 import com.omega.keyboard.core.Layout
 import kotlin.math.abs
 import kotlin.math.cos
@@ -131,17 +132,13 @@ class KeyboardView(ctx: Context) : View(ctx) {
         /** the halo of the enter key in the luxe look: four rings, each a little wider and fainter than the one inside it */
         private val GLOW_FRAC = floatArrayOf(0.34f, 0.24f, 0.15f, 0.08f)
 
-        /** limits of the size the user can give the keyboard (percent of the normal one) */
-        const val MIN_HEIGHT_PCT = 60
-        const val MAX_HEIGHT_PCT = 140
-        const val MIN_WIDTH_PCT = 60
+        /** limits of the size the user can give the keyboard (percent of the normal one); how the two sizes go together is in [KeySize] */
+        const val MIN_HEIGHT_PCT = KeySize.MIN_HEIGHT_PCT
+        const val MAX_HEIGHT_PCT = KeySize.MAX_HEIGHT_PCT
+        const val MIN_WIDTH_PCT = KeySize.MIN_WIDTH_PCT
 
-        /**
-         * The tallest a key may be compared with its width. Taller than this a key stops looking like a key (a slab), which is what
-         * a keyboard "stretched" by hand looked like: the height wins only while the keys keep their proportions. Gboard's tallest
-         * setting is about the same.
-         */
-        private const val MAX_KEY_ASPECT = 2.0f
+        /** the tallest the height setting can go on this phone (percent): the keyboard fills the width in portrait, so this is what keys that keep their shape allow */
+        fun maxHeightPct(dm: android.util.DisplayMetrics): Int = KeySize.maxHeightPct(min(dm.widthPixels, dm.heightPixels).toFloat(), dm.density)
 
         /** a finger that went down on a key moves to the next one only after leaving the first by this much and travelling this far (dp) */
         private const val KEY_SWITCH_MARGIN_DP = 5f
@@ -226,24 +223,15 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private var glowY = 0f
     private var glowAmount = 0f
 
-    private val baseRowDp = 52f
+    private val baseRowDp = KeySize.BASE_ROW_DP
     private val padTop get() = dp(6f)
     private val padBottom get() = dp(8f)
-    /** the height the user asked for, held to the largest one at which the keys still have the proportions of a key */
-    private val rowScale: Float get() = rowScaleFor(if (width > 0) width.toFloat() else resources.displayMetrics.widthPixels.toFloat())
-    private fun rowScaleFor(viewW: Float) = heightScale.coerceIn(MIN_HEIGHT_PCT / 100f, maxHeightScale(viewW))
+    /** the height the user asked for, held to the tallest one at which the keys still have the shape of a key at this width (see [KeySize]) */
+    private val rowScale: Float get() = rowScaleFor(viewWidthPx())
+    private fun rowScaleFor(viewW: Float) = KeySize.rowScale(heightScale, viewW, density, widthScale)
     private val rowHeight get() = dp(baseRowDp) * rowScale
 
-    /**
-     * How tall the rows may get: a key is never more than [MAX_KEY_ASPECT] times as tall as it is wide (measured on the widest row,
-     * where the keys are narrowest), never beyond [MAX_HEIGHT_PCT], and never below the normal size.
-     */
-    private fun maxHeightScale(viewW: Float = if (width > 0) width.toFloat() else resources.displayMetrics.widthPixels.toFloat()): Float {
-        val usable = (viewW - 2 * dp(2f)) * widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)
-        val widest = (layout?.rows?.maxOfOrNull { it.total } ?: 10f).coerceAtLeast(1f)
-        val byLook = MAX_KEY_ASPECT * (usable / widest) / dp(baseRowDp)
-        return min(MAX_HEIGHT_PCT / 100f, max(byLook, 1f))
-    }
+    private fun viewWidthPx(): Float = if (width > 0) width.toFloat() else resources.displayMetrics.widthPixels.toFloat()
 
     /** how much letters, hints and icons grow with the keyboard: half as fast as the rows do, because the keys stay as wide as they were */
     private val grow: Float get() = 1f + (rowScale - 1f).coerceAtLeast(0f) * 0.55f
@@ -1146,6 +1134,10 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private var rzL0 = 0f
     private var rzR0 = 0f
 
+    /** the rows' scale and the keys area's width as they were when the drag began: a side handle keeps the keys' shape between them */
+    private var rzScale0 = 1f
+    private var rzW0 = 1f
+
     private fun areaLeft(): Float {
         val side = dp(2f)
         val full = width - 2 * side
@@ -1198,7 +1190,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
         textPaint.textSize = dp(9f)
         textPaint.isFakeBoldText = true
         val pct = Math.round(rowScale * 100f)
-        drawCentered(c, "$pct%", cx, dp(10f))
+        // at the biggest the screen allows (all of its width, the tallest rows) the readout says so: the edge stops there
+        val top = KeySize.atMost(rowScale, widthScale, viewWidthPx(), density)
+        drawCentered(c, if (top) "$pct% · أقصى" else "$pct%", cx, dp(10f))
         textPaint.isFakeBoldText = false
     }
 
@@ -1221,6 +1215,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 rzH0 = height.toFloat()
                 rzL0 = areaLeft()
                 rzR0 = areaRight()
+                rzScale0 = rowScale
+                rzW0 = widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)
                 parent?.requestDisallowInterceptTouchEvent(true)
                 invalidate()
             }
@@ -1241,22 +1237,36 @@ class KeyboardView(ctx: Context) : View(ctx) {
         return true
     }
 
-    /** The finger's place on the SCREEN decides (the window moves while it grows, so the view's own coordinates would feed back). */
+    /**
+     * The finger's place on the SCREEN decides (the window moves while it grows, so the view's own coordinates would feed back).
+     * The two sizes move together, see [KeySize]: the top handle makes the rows taller or shorter and, when the keyboard is being
+     * made bigger while it is narrower than the screen, widens it by the same factor, so the keys keep their shape instead of
+     * becoming slabs; a side handle moves the edge and the height follows it with the same key shape.
+     */
     private fun dragResize(rawX: Float, rawY: Float) {
         val side = dp(2f)
         val full = width - 2 * side
         val minUsable = full * MIN_WIDTH_PCT / 100f
+        val viewW = viewWidthPx()
         when (rzPart) {
             RZ_TOP -> {
                 val rows = (layout?.rows?.size ?: 4).coerceAtLeast(1)
                 val maxPx = resources.displayMetrics.heightPixels * 0.5f
                 val screenCap = (maxPx - padTop - padBottom) / (rows * dp(baseRowDp))
-                val want = (rzH0 + (rzRawY - rawY) - padTop - padBottom) / (rows * dp(baseRowDp))
-                // the keys grow until they would stop looking like keys (see MAX_KEY_ASPECT): there the edge stops, however far the finger goes
-                heightScale = want.coerceIn(MIN_HEIGHT_PCT / 100f, min(maxHeightScale(), max(screenCap, MIN_HEIGHT_PCT / 100f)))
+                val want = ((rzH0 + (rzRawY - rawY) - padTop - padBottom) / (rows * dp(baseRowDp))).coerceAtMost(max(screenCap, MIN_HEIGHT_PCT / 100f))
+                val s = KeySize.dragTop(want, rzScale0, rzW0, viewW, density)
+                // the area grows around the place it has (left, middle or right), so it grows to the side where there is room
+                if (s.w != widthScale) widthScale = s.w
+                heightScale = s.h
             }
-            RZ_LEFT -> setArea((rzL0 + (rawX - rzRawX)).coerceIn(side, rzR0 - minUsable), rzR0)
-            RZ_RIGHT -> setArea(rzL0, (rzR0 + (rawX - rzRawX)).coerceIn(rzL0 + minUsable, width - side))
+            RZ_LEFT -> {
+                setArea((rzL0 + (rawX - rzRawX)).coerceIn(side, rzR0 - minUsable), rzR0)
+                heightScale = KeySize.dragSide(widthScale, rzScale0, rzW0, viewW, density).h
+            }
+            RZ_RIGHT -> {
+                setArea(rzL0, (rzR0 + (rawX - rzRawX)).coerceIn(rzL0 + minUsable, width - side))
+                heightScale = KeySize.dragSide(widthScale, rzScale0, rzW0, viewW, density).h
+            }
         }
     }
 

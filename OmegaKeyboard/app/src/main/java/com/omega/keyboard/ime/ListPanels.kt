@@ -25,7 +25,9 @@ private fun pill(color: Int, radiusDp: Float, ctx: Context) = GradientDrawable()
 /** Common frame: title row with a back/close button and a scrolling list below. */
 abstract class ListPanel(ctx: Context) : LinearLayout(ctx) {
     protected val list = LinearLayout(ctx).apply { orientation = VERTICAL }
-    private val title = TextView(ctx)
+    protected val head = LinearLayout(ctx)
+    protected val scroller = ScrollView(ctx)
+    protected val title = TextView(ctx)
     protected val closeBtn = TextView(ctx)
     var onClose: (() -> Unit)? = null
     var theme: KbTheme = Themes.LIGHT
@@ -33,16 +35,18 @@ abstract class ListPanel(ctx: Context) : LinearLayout(ctx) {
 
     init {
         orientation = VERTICAL
-        val head = LinearLayout(ctx).apply {
+        head.apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(ctx.dpi(8f), ctx.dpi(2f), ctx.dpi(8f), ctx.dpi(2f))
         }
+        // the way back to the letters: a filled button that says what it does (a plain "abc" label was not found by people)
         closeBtn.apply {
-            text = "أبج"
+            text = "⌨  رجوع للحروف"
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
+            maxLines = 1
             setPadding(ctx.dpi(14f), ctx.dpi(8f), ctx.dpi(14f), ctx.dpi(8f))
             setOnClickListener { onClose?.invoke() }
         }
@@ -50,19 +54,21 @@ abstract class ListPanel(ctx: Context) : LinearLayout(ctx) {
         head.addView(closeBtn, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ctx.dpi(40f)))
         head.addView(title, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(head, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.dpi(46f)))
-        val sv = ScrollView(ctx).apply { isFillViewport = false; overScrollMode = OVER_SCROLL_NEVER }
-        sv.addView(list, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        addView(sv, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        scroller.apply { isFillViewport = false; overScrollMode = OVER_SCROLL_NEVER }
+        scroller.addView(list, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(scroller, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         restyle()
     }
 
     protected fun setTitle(s: String) { title.text = s }
 
+    protected fun setCloseLabel(s: String) { closeBtn.text = s }
+
     protected open fun restyle() {
         setBackgroundColor(panelColor())
         title.setTextColor(theme.onBg)
-        closeBtn.setTextColor(theme.onFn)
-        closeBtn.background = pill(theme.keyFn, 12f, context)
+        closeBtn.setTextColor(theme.onAccent)
+        closeBtn.background = pill(theme.accent, 14f, context)
     }
 
     /** the colour of the panel: a picture theme lets a little of its picture show through (frosted), the others are solid */
@@ -176,8 +182,9 @@ class AiPanel(ctx: Context) : ListPanel(ctx) {
 }
 
 /**
- * Text decoration: tap a look and the whole text of the box takes it (real text, so it arrives as written in any app). While
- * "أثناء الكتابة" is on, the letters are decorated as they are typed.
+ * Text decoration. Tab one: tap a look and the whole text of the box takes it (real text, so it arrives as written in any app); while
+ * "أثناء الكتابة" is on, the letters are decorated as they are typed. Tab two: the Arabic fonts, which change how the keyboard itself
+ * looks (a font is not text: it does not travel with a message, the app that receives it shows it in its own font).
  */
 class DecorPanel(ctx: Context) : ListPanel(ctx) {
     var onPick: ((String) -> Unit)? = null
@@ -189,11 +196,17 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
     private val liveBtn = TextView(ctx)
     private val undoBtn = TextView(ctx)
     private val noneBtn = TextView(ctx)
+    private val tabDecor = TextView(ctx)
+    private val tabFonts = TextView(ctx)
     private val rows = ArrayList<Pair<String, View>>()
     private var live = false
     private var canUndo = false
     private var noneSelected = false
     private var ready = false
+    private var tab = 0                       // 0: decorations (they travel with the text), 1: fonts of the keyboard
+    private var field = ""
+    private var selected = ""
+    private var font = ""
 
     init {
         controls.orientation = HORIZONTAL
@@ -216,6 +229,24 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
         button(undoBtn, "undo", 1f) { if (canUndo) onUndo?.invoke() }
         button(noneBtn, "none", 1f) { onPick?.invoke(Decor.NONE) }
         addView(controls, 1, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // the two tabs take the place of the title; the way back to the letters says "done"
+        title.visibility = View.GONE
+        setCloseLabel("✓  تم — رجوع للحروف")
+        fun tabButton(v: TextView, label: String, tag: String, which: Int) {
+            v.text = label
+            v.textSize = 14f
+            v.gravity = Gravity.CENTER
+            v.maxLines = 1
+            v.isClickable = true
+            v.setPadding(ctx.dpi(6f), 0, ctx.dpi(6f), 0)
+            v.setOnClickListener { switchTab(which) }
+            val lp = LayoutParams(0, ctx.dpi(36f), 1f)
+            lp.setMargins(ctx.dpi(4f), 0, ctx.dpi(0f), 0)
+            head.addView(v, lp)
+            rows.add(tag to v)
+        }
+        tabButton(tabDecor, "زخرفة", "tab:decor", 0)
+        tabButton(tabFonts, "خطوط عربية", "tab:fonts", 1)
         ready = true
         restyle()
     }
@@ -224,6 +255,7 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
         super.restyle()
         if (!ready) return
         styleControls()
+        styleTabs()
     }
 
     private fun styleControls() {
@@ -240,42 +272,58 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
         noneBtn.background = pill(if (noneSelected) t.accent else t.keyFn, 19f, context)
     }
 
-    /** [field]: what is written in the box (the previews use it), [selected]: the look the box has now, "" = none */
+    /** a segmented control: the open tab is a lighter tone of the panel, the other one is plain */
+    private fun styleTabs() {
+        val t = theme
+        val solid = ColorMath.opaque(if (t.bgStyle >= 1) t.bg2 else t.bg)
+        for ((v, on) in listOf(tabDecor to (tab == 0), tabFonts to (tab == 1))) {
+            v.setTextColor(if (on) t.onBg else t.onBgSub)
+            v.typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            v.background = if (on) pill(ColorMath.blend(solid, t.onBg, 0.20f), 14f, context) else null
+        }
+    }
+
+    private fun switchTab(which: Int) {
+        if (tab == which) return
+        tab = which
+        fill()
+        scroller.scrollTo(0, 0)
+    }
+
+    /** which tab the panel opens on: the fonts when a font is on, the decorations otherwise */
+    fun openOn(fonts: Boolean) { tab = if (fonts) 1 else 0 }
+
+    /** [field]: what is written in the box (the previews use it), [selected]: the look the box has now, "" = none, [font]: the font of the keys */
     fun show(field: String, selected: String, live: Boolean, canUndo: Boolean, font: String = "") {
-        setTitle("زخرفة النص")
+        this.field = field
+        this.selected = selected
         this.live = live
         this.canUndo = canUndo
+        this.font = font
         noneSelected = false
+        fill()
+    }
+
+    private fun section(s: String) = list.addView(TextView(context).apply {
+        text = s
+        textSize = 12f
+        setTextColor(theme.onBgSub)
+        setPadding(context.dpi(16f), context.dpi(8f), context.dpi(16f), context.dpi(2f))
+    })
+
+    private fun fill() {
         styleControls()
+        styleTabs()
+        controls.visibility = if (tab == 0) View.VISIBLE else View.GONE
         list.removeAllViews()
         rows.removeAll { it.first !in CONTROLS }
-        fun section(s: String) = list.addView(TextView(context).apply {
-            text = s
-            textSize = 12f
-            setTextColor(theme.onBgSub)
-            setPadding(context.dpi(16f), context.dpi(8f), context.dpi(16f), context.dpi(2f))
-        })
+        if (tab == 0) fillDecor() else fillFonts()
+    }
+
+    private fun fillDecor() {
         var last: Decor.Kind? = null
-        var fontsDone = false
-        // the real Arabic fonts come after the Arabic decorations, before the frames
-        fun fonts() {
-            fontsDone = true
-            section("خطوط عربية حقيقية: رقعة ونسخ وكوفي ونستعليق… (بتظهر على الكيبورد بس)")
-            val arabicSample = Decor.sampleFor(Decor.byId("royal"), field).let { if (it.any { c -> Decor.isLetter(c) }) it else "لا يسيء الظن بك" }
-            for (f in FontLib.fonts) {
-                val v = row(arabicSample, f.label + "  ·  " + f.about, selected = f.id == font) { onFont?.invoke(f.id) }
-                ((v as LinearLayout).getChildAt(0) as TextView).apply {
-                    textSize = 20f
-                    setLineSpacing(0f, 1.15f)
-                    FontLib.face(context, f.id)?.let { typeface = it }
-                }
-                list.addView(v)
-                rows.add("f:" + f.id to v)
-            }
-        }
         for (st in Decor.styles) {
             if (st.kind != last) {
-                if (st.kind != Decor.Kind.ARABIC && !fontsDone) fonts()
                 last = st.kind
                 section(when (st.kind) {
                     Decor.Kind.ARABIC -> "عربي: حركات وحروف مزخرفة (بتوصل نص حقيقي)"
@@ -291,11 +339,34 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
         }
         list.addView(TextView(context).apply {
             text = "الزخرفة نص حقيقي (مش صورة): بتوصل زي ما هي في أغلب التطبيقات، بس شكل بعض الرموز بيعتمد على خط تليفون اللي بيستقبل.\n" +
-                "الخطوط العربية الحقيقية بتظهر على الكيبورد وفي معاينة الكتابة بس: التطبيق اللي بيستلم الرسالة بيعرضها بخطه هو."
+                "الرقعة والكوفي وخط اليد مش نص ينفع يتبعت: التطبيق اللي بيستلم بيعرض الكلام بخطه هو. لو عايز الشكل ده على الكيبورد نفسه افتح «خطوط عربية»."
             textSize = 12f
             setTextColor(theme.onBgSub)
             setPadding(context.dpi(16f), context.dpi(10f), context.dpi(16f), context.dpi(12f))
         })
+    }
+
+    private fun fillFonts() {
+        list.addView(TextView(context).apply {
+            text = "الخطوط دي بتغيّر شكل حروف الكيبورد نفسه بس. أي تطبيق بيعرض الكلام بخطه هو، فالخط مش بيتبعت مع الرسالة. اللي بيتبعت فعلاً هو الزخرفة (التبويب التاني)."
+            textSize = 12f
+            setTextColor(theme.onBgSub)
+            setPadding(context.dpi(16f), context.dpi(4f), context.dpi(16f), context.dpi(6f))
+        })
+        val plain = row("عادي", "خط التليفون", selected = font.isEmpty()) { onPick?.invoke(Decor.NONE) }
+        list.addView(plain)
+        rows.add("f:normal" to plain)
+        val arabicSample = Decor.sampleFor(Decor.byId("royal"), field).let { if (it.any { c -> Decor.isLetter(c) }) it else "لا يسيء الظن بك" }
+        for (f in FontLib.fonts) {
+            val v = row(arabicSample, f.label + "  ·  " + f.about, selected = f.id == font) { onFont?.invoke(f.id) }
+            ((v as LinearLayout).getChildAt(0) as TextView).apply {
+                textSize = 20f
+                setLineSpacing(0f, 1.15f)
+                FontLib.face(context, f.id)?.let { typeface = it }
+            }
+            list.addView(v)
+            rows.add("f:" + f.id to v)
+        }
     }
 
     /** Preview builds only: where the buttons and rows are on the screen, so the emulator test can tap them by name */
@@ -321,6 +392,6 @@ class DecorPanel(ctx: Context) : ListPanel(ctx) {
     }
 
     private companion object {
-        val CONTROLS = setOf("live", "undo", "none")
+        val CONTROLS = setOf("live", "undo", "none", "tab:decor", "tab:fonts")
     }
 }

@@ -34,6 +34,9 @@ data class UiNode(
     val scrollUp: Boolean = false,
     /** the grey prompt of a text box ("Message"), whether or not it is showing right now (Android 8+) */
     val hint: String = "",
+    /** a switch / check box / radio button, and whether it is on right now */
+    val checkable: Boolean = false,
+    val checked: Boolean = false,
 ) {
     val width: Int get() = right - left
     val height: Int get() = bottom - top

@@ -257,16 +257,24 @@ say "fontbar english script: [$(KB text 2>/dev/null)]"
 KB chip d:underline 2>&1 | tee -a "$LOG"; sleep 1.5
 KB type " ok" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-fontbar-en-3
 say "fontbar english underline: [$(KB text 2>/dev/null)]"
-# the full list from the "Aa" chip is the decoration panel: the real fonts are in it too (scrolled to), a font is picked, back to the keys
+# the full list from the "Aa" chip is the decoration panel, with two tabs: the decorations (they travel with the text) and the Arabic fonts
+# (the keyboard's own look); the way out is the "✓ تم" button at the bottom, or the Back key
 scenario kb-decor-fonts s:theme=classic s:last_lang=ar
 focus
 KB type "اهلا بيك" 2>&1 | tee -a "$LOG"; sleep 1.2
 KB tool decor 2>&1 | tee -a "$LOG"; sleep 1.8
 shot kb-decor-fonts-1
+KB panel tab:fonts 2>&1 | tee -a "$LOG"; sleep 1.5
+shot kb-decor-fonts-tab
 KB panel f:ruqaa 2>&1 | tee -a "$LOG"; sleep 1.5
 shot kb-decor-fonts-2
 KB panel close 2>&1 | tee -a "$LOG"; sleep 1.5
 shot kb-decor-fonts-3
+# Back closes only the panel (the keyboard stays), a second look at the panel opens on the fonts tab because a font is on
+KB tool decor 2>&1 | tee -a "$LOG"; sleep 1.8
+shot kb-decor-fonts-4
+adb shell input keyevent KEYCODE_BACK; sleep 1.5
+shot kb-decor-fonts-back
 scenario kb-decor-beach s:theme=beach s:last_lang=ar
 focus
 KB type "اهلا بيك" 2>&1 | tee -a "$LOG"; sleep 1.2
@@ -459,18 +467,27 @@ KB type "صباح الخير يا صديقي" 2>&1 | tee -a "$LOG"; sleep 14
 shot kb-livetr-luxe
 say "livetr luxe field: [$(KB text 2>/dev/null)]"
 
-# --- resizing by hand: handles, drag the top edge up, then far past what the keys can stand (it must stop, not stretch), the right edge in,
-# the left edge in, done, then typing in the new size
+# --- resizing by hand: handles; the right edge in (the keys get narrower AND shorter, same shape); the left edge in; the top handle up
+# (bigger: wider and taller together, up to the whole screen's width); far past what the screen can give (it must stop, saying "أقصى"),
+# done, then typing in the new size
 scenario kb-resize s:theme=light s:last_lang=ar
 focus
 KB tool resize 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-1
-KB drag RZ_TOP 0 -240 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-2
+KB drag RZ_RIGHT -260 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-2
+KB drag RZ_LEFT 90 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-3
+KB drag RZ_TOP 0 -200 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-4
 KB drag RZ_TOP 0 -700 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-limit
-KB drag RZ_RIGHT -260 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-3
-KB drag RZ_LEFT 90 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-4
 KB strip status 2>&1 | tee -a "$LOG"; sleep 1.5
 KB type "اعمل كل اللي قلتلك عليه" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-resize-typed
 say "typed after the resize: [$(KB text 2>/dev/null)]"
+# a small keyboard grows from its top handle: width and height together, the keys keep their shape
+scenario kb-resize-grow s:theme=light s:last_lang=ar i:height_pct=70 i:width_pct=70 i:kb_offset=50
+focus
+KB tool resize 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-grow-1
+KB drag RZ_TOP 0 -90 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-grow-2
+KB drag RZ_TOP 0 -90 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-grow-3
+# a narrow keyboard: the rows are shorter with it (no tall slabs)
+look kb-size-narrow s:theme=light s:last_lang=ar i:width_pct=70 i:kb_offset=100
 # "الأصلي" brings the normal size back
 scenario kb-resize-reset s:theme=light s:last_lang=ar i:height_pct=140 i:width_pct=75 i:kb_offset=0
 focus
@@ -507,6 +524,51 @@ check type-tall   "اضغط على حرف يطلع حرف تاني" s:theme=ligh
 check type-short  "ضصثقفغعهخحج شسيبلاتنمكط ذءؤرىةوزظد" s:theme=light s:last_lang=ar i:height_pct=60
 check type-narrow-left  "Hello world how are you" s:theme=light s:last_lang=en i:width_pct=65 i:kb_offset=0
 check type-narrow-right "اللوحة فيها غلط" s:theme=light s:last_lang=ar i:width_pct=65 i:kb_offset=100
+
+# --- the round button Android draws for the accessibility service (its "shortcut"): the service is switched on and the button made to show,
+# then the app's "اقفله لي" presses the shortcut's switch off in the system Settings by itself. The setting says whether it worked.
+scenario hide-icon s:theme=light s:last_lang=ar
+if [ "$SKIP" != 1 ]; then
+  SERVICE="$PKG/$PKG.agent.ScreenAgentService"
+  # a force-stop switches an accessibility service off, so it is switched on only now (the scenario above did the force-stop)
+  adb shell settings put secure enabled_accessibility_services "$SERVICE"
+  adb shell settings put secure accessibility_enabled 1
+  sleep 3
+  adb shell settings put secure accessibility_button_mode 1
+  adb shell settings put secure accessibility_button_targets "$SERVICE"
+  sleep 3
+  adb shell am start -W -n $PKG/.ui.MainActivity > /dev/null
+  sleep 2.5
+  shot hide-icon-1
+  say "hide-icon before: targets=[$(adb shell settings get secure accessibility_button_targets | tr -d '\r')] mode=[$(adb shell settings get secure accessibility_button_mode | tr -d '\r')] enabled=[$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')]"
+  adb shell am start -W -n $PKG/.ui.MainActivity --ez hide_icon true > /dev/null
+  sleep 4
+  shot hide-icon-2
+  adb shell uiautomator dump /sdcard/hide.xml > /dev/null 2>&1
+  adb exec-out cat /sdcard/hide.xml > "$OUT/hide-icon-dump-1.xml" 2>/dev/null
+  GONE=0
+  for i in $(seq 1 14); do
+    sleep 3
+    T="$(adb shell settings get secure accessibility_button_targets | tr -d '\r')"
+    case "$T" in
+      *"$PKG/"*) ;;
+      *) say "hide-icon: the shortcut is off after about $((i * 3 + 4)) s (targets=[$T])"; GONE=1; break ;;
+    esac
+    if [ "$i" = 3 ]; then
+      shot hide-icon-3
+      adb shell uiautomator dump /sdcard/hide.xml > /dev/null 2>&1
+      adb exec-out cat /sdcard/hide.xml > "$OUT/hide-icon-dump-2.xml" 2>/dev/null
+    fi
+  done
+  if [ "$GONE" = 1 ]; then say "CHECK hide-icon: ok"; else say "CHECK hide-icon: FAIL targets still [$T]"; fi
+  sleep 3
+  shot hide-icon-4
+  # leave the phone as it was for the scenarios after this one
+  adb shell settings delete secure accessibility_button_targets
+  adb shell settings delete secure accessibility_button_mode
+  adb shell settings put secure enabled_accessibility_services ""
+  adb shell settings put secure accessibility_enabled 0
+fi
 
 # --- landscape (last: it turns the phone sideways)
 scenario kb-land s:theme=aurora s:last_lang=en

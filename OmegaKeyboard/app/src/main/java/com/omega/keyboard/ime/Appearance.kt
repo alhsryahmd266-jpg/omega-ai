@@ -830,7 +830,9 @@ class AppearanceSheet(ctx: Context, private val prefs: Prefs, private val host: 
     private fun buildSizePage(): View {
         val ctx = context
         val col = LinearLayout(ctx).apply { orientation = VERTICAL; setPadding(ctx.dpi(12f), ctx.dpi(4f), ctx.dpi(12f), ctx.dpi(8f)) }
-        col.addView(seekRow("الارتفاع", KeyboardView.MIN_HEIGHT_PCT, KeyboardView.MAX_HEIGHT_PCT, { prefs.heightPct }, { "$it%" }, liveApply = false) { prefs.heightPct = it; host.onSize() })
+        // the keyboard already fills the screen's width, so the rows can only be as tall as keys that keep their shape allow
+        val tallest = KeyboardView.maxHeightPct(ctx.resources.displayMetrics)
+        col.addView(seekRow("الارتفاع", KeyboardView.MIN_HEIGHT_PCT, tallest, { prefs.heightPct.coerceAtMost(tallest) }, { "$it%" }, liveApply = false) { prefs.heightPct = it; host.onSize() })
         col.addView(seekRow("حجم الحروف", 80, 140, { prefs.fontPct }, { "$it%" }, liveApply = true) { prefs.fontPct = it; host.onSize() })
         col.addView(seekRow("العرض", KeyboardView.MIN_WIDTH_PCT, 100, { prefs.widthPct }, { "$it%" }, liveApply = true) { prefs.widthPct = it; host.onSize() })
         val (sv, row) = hScroll()

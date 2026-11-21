@@ -19,7 +19,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); chatEdges(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask(); photoLook()
+        prompts(); screenFilter(); scrolling(); noise(); chatEdges(); shortcutRows(); keySize(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask(); photoLook()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -511,6 +511,233 @@ object CoreTests {
         t.add("نص ملصق بالصندوق", 130, 2170, 600, 2230)                  // a label that reaches into the box: not part of the chat
         t.add("", 120, 2190, 900, 2300, cls = "android.widget.EditText", editable = true, id = "x:id/entry")
         check("the title bar stays out", ChatParser.parse(t.screen()).messages.map { it.text } == listOf("الرسالة الوحيدة")) { "${ChatParser.parse(t.screen()).messages.map { it.text }}" }
+    }
+
+
+    // ------------------------------------------------------------------ the floating shortcut button (Settings page of the service)
+
+    /** A tiny builder for a Settings screen: rows with a title, an optional switch, parent links so "inside a pressable row" works. */
+    private class SB(val h: Int = 2400) {
+        val nodes = ArrayList<UiNode>()
+        fun add(
+            text: String = "", t: Int, b: Int, parent: Int = -1, l: Int = 0, r: Int = 1080, clickable: Boolean = false,
+            checkable: Boolean = false, checked: Boolean = false, scrollDown: Boolean = false, enabled: Boolean = true,
+        ): Int {
+            val i = nodes.size
+            nodes.add(
+                UiNode(i, parent, 0, text, "", "", if (checkable) "android.widget.Switch" else "android.widget.TextView", "com.android.settings",
+                    l, t, r, b, clickable = clickable, actionable = clickable, enabled = enabled, scrollDown = scrollDown,
+                    checkable = checkable, checked = checked)
+            )
+            return i
+        }
+        fun screen() = Screen("com.android.settings", 1080, h, 2.75f, nodes.toList())
+    }
+
+    private const val SVC = "Omega Keyboard"
+
+    /** The page of the service like the system draws it: title, the on/off bar, the shortcut row (title, summary, its own switch), about. */
+    private fun servicePage(shortcutOn: Boolean, arabic: Boolean = false, rowHasSwitch: Boolean = true): Screen {
+        val s = SB()
+        s.add(if (arabic) "Omega Keyboard - قراءة الشاشة" else "Omega Keyboard - screen reader", 150, 240)            // title, not pressable
+        val bar = s.add(t = 330, b = 470, clickable = true)                                                           // the on/off bar
+        s.add(if (arabic) "استخدام Omega Keyboard - قراءة الشاشة" else "Use Omega Keyboard - screen reader", 360, 440, parent = bar, l = 60, r = 800)
+        s.add(t = 360, b = 440, parent = bar, l = 880, r = 1040, checkable = true, checked = true, clickable = true)    // the service's own switch
+        val row = s.add(t = 560, b = 760, clickable = true)
+        s.add(if (arabic) "اختصار Omega Keyboard - قراءة الشاشة" else "Omega Keyboard - screen reader shortcut", 590, 650, parent = row, l = 60, r = 800)
+        s.add(if (arabic) "زر إمكانية الوصول" else "Accessibility button", 660, 720, parent = row, l = 60, r = 800)
+        if (rowHasSwitch) s.add(t = 600, b = 720, parent = row, l = 880, r = 1040, checkable = true, checked = shortcutOn, clickable = true)
+        val about = s.add(t = 840, b = 980, clickable = true)
+        s.add(if (arabic) "حول Omega Keyboard" else "About Omega Keyboard", 860, 940, parent = about)
+        return s.screen()
+    }
+
+    // ------------------------------------------------------------------ keyboard size
+
+    private fun near(a: Float, b: Float, eps: Float = 0.005f) = kotlin.math.abs(a - b) <= eps
+
+    /** the cell of one key at width scale [w] and row scale [h]: how many times taller than wide */
+    private fun aspectOf(h: Float, w: Float, viewW: Float, d: Float): Float =
+        (h * KeySize.BASE_ROW_DP * d) / (w * KeySize.cellAtFull(viewW, d))
+
+    private fun keySize() {
+        // the phone the user has: 1080 px wide, density 2.75 (about 393 dp)
+        val vw = 1080f
+        val d = 2.75f
+        val c = KeySize.tallestAtFull(vw, d)
+        check("size: full-width rows may be about 22% taller than normal", near(c, 1.2233f), { "$c" })
+        check("size: the slider's top is that, in percent", KeySize.maxHeightPct(vw, d) == 122, { "${KeySize.maxHeightPct(vw, d)}" })
+        check("size: normal size is untouched", near(KeySize.rowScale(1f, vw, d, 1f), 1f))
+        check("size: asked 140% at full width gives the tallest, not 140%", near(KeySize.rowScale(1.4f, vw, d, 1f), c))
+        check("size: shorter than the minimum is held to it", near(KeySize.rowScale(0.3f, vw, d, 1f), 0.6f))
+        check("size: narrower keys area, shorter tallest rows", near(KeySize.tallest(vw, d, 0.8f), c * 0.8f))
+        check("size: narrow area with normal height asked is cut to its tallest (no slabs)", near(KeySize.rowScale(1f, vw, d, 0.7f), c * 0.7f))
+
+        // other phones: the normal height is never touched, taller than normal only where the keys have room
+        for ((px, dens) in listOf(640f to 2f, 720f to 2f, 1080f to 2.75f, 1440f to 3.5f, 2400f to 2.75f)) {
+            check("size: normal height is normal at ${px.toInt()} px", near(KeySize.rowScale(1f, px, dens, 1f), 1f), { "${KeySize.rowScale(1f, px, dens, 1f)}" })
+            check("size: tallest never below normal at ${px.toInt()} px", KeySize.tallestAtFull(px, dens) >= 1f)
+        }
+        check("size: a 360 dp phone has little room to grow", KeySize.maxHeightPct(720f, 2f) in 105..115, { "${KeySize.maxHeightPct(720f, 2f)}" })
+        check("size: a 320 dp phone has none (its keys are tall already)", KeySize.maxHeightPct(640f, 2f) == 100, { "${KeySize.maxHeightPct(640f, 2f)}" })
+
+        // no combination the user can ask for makes a key taller than the limit (that is what made slabs)
+        var worst = 0f
+        var h = 0.5f
+        while (h <= 1.45f) {
+            var w = 0.5f
+            while (w <= 1.05f) {
+                val rs = KeySize.rowScale(h, vw, d, w)
+                val ww = w.coerceIn(0.6f, 1f)
+                val a = aspectOf(rs, ww, vw, d)
+                if (a > worst) worst = a
+                check("size: rows within [0.6, tallest] at h=$h w=$w", rs >= 0.6f - 1e-4f && rs <= KeySize.tallest(vw, d, w) + 1e-4f)
+                w += 0.05f
+            }
+            h += 0.05f
+        }
+        check("size: no key is taller than ${KeySize.MAX_KEY_ASPECT} times its width, over all sizes", worst <= KeySize.MAX_KEY_ASPECT + 0.01f, { "worst=$worst" })
+
+        // the top handle: the keyboard was h0 tall and w0 wide when the drag began
+        var s = KeySize.dragTop(1.5f, 1f, 1f, vw, d)
+        check("top: at full width the height stops at the tallest and the width stays", near(s.h, c) && near(s.w, 1f), { "${s.h}/${s.w}" })
+        s = KeySize.dragTop(1.1f, 1f, 1f, vw, d)
+        check("top: a modest growth at full width is just taller", near(s.h, 1.1f) && near(s.w, 1f))
+        s = KeySize.dragTop(0.7f, 1f, 1f, vw, d)
+        check("top: shrinking at full width keeps the width", near(s.h, 0.7f) && near(s.w, 1f))
+        s = KeySize.dragTop(0.2f, 1f, 1f, vw, d)
+        check("top: below the minimum is held at it", near(s.h, 0.6f))
+        s = KeySize.dragTop(0.6f, 0.8f, 0.8f, vw, d)
+        check("top: shrinking a narrow keyboard keeps its width", near(s.h, 0.6f) && near(s.w, 0.8f), { "${s.h}/${s.w}" })
+        s = KeySize.dragTop(0.9f, 0.8f, 0.8f, vw, d)
+        check("top: growing a narrow keyboard widens it by the same factor", near(s.h, 0.9f) && near(s.w, 0.9f), { "${s.h}/${s.w}" })
+        s = KeySize.dragTop(1.1f, 0.8f, 0.8f, vw, d)
+        check("top: ... up to the whole screen's width", near(s.h, 1.1f) && near(s.w, 1f), { "${s.h}/${s.w}" })
+        s = KeySize.dragTop(1.5f, 0.8f, 0.8f, vw, d)
+        check("top: a big ask ends at the full width and the tallest rows", near(s.h, c) && near(s.w, 1f), { "${s.h}/${s.w}" })
+        // dragging up from a small keyboard: neither size ever goes down, and while the width can grow the key shape does not change
+        val startAspect = aspectOf(0.6f, 0.6f, vw, d)
+        var prevH = 0f
+        var prevW = 0f
+        var ok = true
+        var shapeOk = true
+        var sameShape = true
+        var want = 0.6f
+        while (want <= 1.6f) {
+            val r = KeySize.dragTop(want, 0.6f, 0.6f, vw, d)
+            if (r.h < prevH - 1e-4f || r.w < prevW - 1e-4f) ok = false
+            val a = aspectOf(r.h, r.w, vw, d)
+            if (a > KeySize.MAX_KEY_ASPECT + 0.01f) shapeOk = false
+            if (r.w < 0.999f && kotlin.math.abs(a - startAspect) > 0.01f) sameShape = false
+            prevH = r.h; prevW = r.w
+            want += 0.02f
+        }
+        check("top: growing never shrinks either size", ok)
+        check("top: growing never makes a key taller than the limit", shapeOk)
+        check("top: growing keeps the keys' shape while the width has room", sameShape)
+
+        // the side handles keep the shape the keys had
+        s = KeySize.dragSide(0.8f, c, 1f, vw, d)
+        check("side: from the tallest, narrowing by 20% shortens the rows by 20%", near(s.h, c * 0.8f) && near(s.w, 0.8f), { "${s.h}/${s.w}" })
+        s = KeySize.dragSide(0.8f, 1f, 1f, vw, d)
+        check("side: from normal, narrowing to 80% gives 80% rows", near(s.h, 0.8f), { "${s.h}" })
+        s = KeySize.dragSide(0.6f, 1f, 1f, vw, d)
+        check("side: the narrowest area is 60% wide with 60% rows", near(s.w, 0.6f) && near(s.h, 0.6f))
+        s = KeySize.dragSide(0.3f, 1f, 1f, vw, d)
+        check("side: the width is held to its minimum", near(s.w, 0.6f))
+        s = KeySize.dragSide(1f, 0.8f, 0.8f, vw, d)
+        check("side: from 80%/80% back to full width is normal size again", near(s.h, 1f) && near(s.w, 1f), { "${s.h}/${s.w}" })
+        s = KeySize.dragSide(1f, 1.0f, 0.8f, vw, d)
+        check("side: an old tall-and-narrow state is cut to what the full width allows", s.h <= c + 1e-4f, { "${s.h}" })
+        var shape2 = true
+        var nw = 0.6f
+        while (nw <= 1f) {
+            val r = KeySize.dragSide(nw, c, 1f, vw, d)
+            if (aspectOf(r.h, r.w, vw, d) > KeySize.MAX_KEY_ASPECT + 0.01f) shape2 = false
+            nw += 0.02f
+        }
+        check("side: narrowing never makes a key taller than the limit", shape2)
+
+        // the readout's "biggest" mark
+        check("atMost: tallest rows and full width", KeySize.atMost(c, 1f, vw, d))
+        check("atMost: not while rows can still grow", !KeySize.atMost(1.1f, 1f, vw, d))
+        check("atMost: not while the area is narrower", !KeySize.atMost(c, 0.9f, vw, d))
+    }
+
+    private fun shortcutRows() {
+        // English page, shortcut on: press the shortcut's own switch, never the service's own bar switch
+        val on = servicePage(shortcutOn = true)
+        val p = ShortcutRows.plan(on, SVC)
+        check("shortcut on: press its switch", p is ShortcutRows.Plan.Press && p.kind == ShortcutRows.Kind.SWITCH) { "$p" }
+        check("... and it is the row's switch, not the service's own switch",
+            p is ShortcutRows.Plan.Press && p.node.top in 560..760 && p.node.checkable) { "${(p as? ShortcutRows.Plan.Press)?.node}" }
+        // shortcut off: done
+        check("shortcut off: done", ShortcutRows.plan(servicePage(shortcutOn = false), SVC) === ShortcutRows.Plan.Done)
+        // Arabic page (marks and hamza forms differ)
+        val ar = ShortcutRows.plan(servicePage(shortcutOn = true, arabic = true), SVC)
+        check("Arabic page: press its switch", ar is ShortcutRows.Plan.Press && ar.kind == ShortcutRows.Kind.SWITCH && ar.node.top in 560..760) { "$ar" }
+        check("Arabic page, off: done", ShortcutRows.plan(servicePage(shortcutOn = false, arabic = true), SVC) === ShortcutRows.Plan.Done)
+        // a row with no switch of its own opens the choices when pressed
+        val noSwitch = ShortcutRows.plan(servicePage(shortcutOn = true, rowHasSwitch = false), SVC)
+        check("row without a switch: press the row", noSwitch is ShortcutRows.Plan.Press && noSwitch.kind == ShortcutRows.Kind.ROW) { "$noSwitch" }
+
+        // the service's own on/off bar is never pressed, even when it is all the page shows
+        val only = SB()
+        only.add("Omega Keyboard - screen reader", 150, 240)
+        val bar = only.add(t = 330, b = 470, clickable = true)
+        only.add("Use Omega Keyboard - screen reader", 360, 440, parent = bar)
+        only.add(t = 360, b = 440, parent = bar, l = 880, r = 1040, checkable = true, checked = true, clickable = true)
+        val po = ShortcutRows.plan(only.screen(), SVC)
+        check("never the service's own switch", po !is ShortcutRows.Plan.Press) { "$po" }
+
+        // the list of services: open ours first
+        val list = SB()
+        list.add("Downloaded apps", 200, 260)
+        val rowA = list.add(t = 300, b = 440, clickable = true)
+        list.add("Some other service", 320, 380, parent = rowA)
+        val rowB = list.add(t = 460, b = 600, clickable = true)
+        list.add("Omega Keyboard - screen reader", 480, 540, parent = rowB)
+        val pl = ShortcutRows.plan(list.screen(), SVC)
+        check("service list: press our entry", pl is ShortcutRows.Plan.Press && pl.kind == ShortcutRows.Kind.LIST_ENTRY && pl.node.top in 460..600) { "$pl" }
+
+        // another page with a "shortcut" switch of something else: never pressed
+        val other = SB()
+        other.add("Volume keys shortcut", 150, 240)
+        val rowO = other.add(t = 300, b = 440, clickable = true)
+        other.add("Shortcut for TalkBack", 320, 380, parent = rowO)
+        other.add(t = 320, b = 400, parent = rowO, l = 880, r = 1040, checkable = true, checked = true, clickable = true)
+        val pOther = ShortcutRows.plan(other.screen(), SVC)
+        check("another app's page: nothing pressed", pOther !is ShortcutRows.Plan.Press) { "$pOther" }
+
+        // the shortcut row is below the fold: scroll
+        val long = SB()
+        long.add("Omega Keyboard - screen reader", 150, 240)
+        val b1 = long.add(t = 330, b = 470, clickable = true)
+        long.add("Use Omega Keyboard - screen reader", 360, 440, parent = b1)
+        long.add(t = 360, b = 440, parent = b1, l = 880, r = 1040, checkable = true, checked = true, clickable = true)
+        long.add("", 120, 2300, scrollDown = true)
+        check("shortcut row not in view: scroll", ShortcutRows.plan(long.screen(), SVC) === ShortcutRows.Plan.Scroll)
+
+        // the choices a shortcut row opens: untick the button, keep the volume keys, then save
+        fun dialog(buttonOn: Boolean, volumeOn: Boolean): Screen {
+            val d = SB()
+            d.add("Choose shortcut", 700, 780)
+            val r1 = d.add(t = 820, b = 960, clickable = true)
+            d.add("Accessibility button", 840, 900, parent = r1, l = 200, r = 800)
+            d.add(t = 850, b = 930, parent = r1, l = 60, r = 160, checkable = true, checked = buttonOn, clickable = true)
+            val r2 = d.add(t = 980, b = 1120, clickable = true)
+            d.add("Hold volume keys", 1000, 1060, parent = r2, l = 200, r = 800)
+            d.add(t = 1010, b = 1090, parent = r2, l = 60, r = 160, checkable = true, checked = volumeOn, clickable = true)
+            d.add("Cancel", 1200, 1280, l = 100, r = 400, clickable = true)
+            d.add("Save", 1200, 1280, l = 600, r = 900, clickable = true)
+            return d.screen()
+        }
+        val d1 = ShortcutRows.planDialog(dialog(buttonOn = true, volumeOn = true))
+        check("dialog: untick the accessibility button first", d1 is ShortcutRows.Plan.Press && d1.kind == ShortcutRows.Kind.OPTION && d1.node.top in 850..930) { "$d1" }
+        val d2 = ShortcutRows.planDialog(dialog(buttonOn = false, volumeOn = true))
+        check("dialog: the volume keys stay ticked, then save", d2 is ShortcutRows.Plan.Press && d2.kind == ShortcutRows.Kind.SAVE && d2.node.left >= 600) { "$d2" }
+        check("a page that is not that dialog is not handled as one", ShortcutRows.planDialog(on) == null || ShortcutRows.planDialog(on) !is ShortcutRows.Plan.Press ||
+            (ShortcutRows.planDialog(on) as ShortcutRows.Plan.Press).kind != ShortcutRows.Kind.SAVE)
     }
 
     private fun screenFilter() {

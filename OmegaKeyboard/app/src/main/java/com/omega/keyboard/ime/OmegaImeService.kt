@@ -263,6 +263,27 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     override fun onEvaluateFullscreenMode(): Boolean = false
 
+    // The system Back first closes what is open on top of the keys (a panel, the appearance sheet, the resize handles) and only
+    // then hides the keyboard: with a panel open, Back used to hide everything and the panel was still there the next time.
+    private var backTaken = false
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && event.repeatCount == 0 && closeTopLayer()) { backTaken = true; return true }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && backTaken) { backTaken = false; return true }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    /** true when something was open and is closed now */
+    private fun closeTopLayer(): Boolean {
+        if (panel != null || appearanceOpen()) { hidePanels(); refreshStrip(); return true }
+        if (resizing) { stopResize(); return true }
+        return false
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         applyTheme()
@@ -729,6 +750,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
             dp.onUndo = { undoReplacement(); refreshDecor() }
         }
         p.theme = theme
+        p.openOn(prefs.arFont.isNotEmpty())
         refreshDecor()
         showPanel(p)
         refreshStrip()

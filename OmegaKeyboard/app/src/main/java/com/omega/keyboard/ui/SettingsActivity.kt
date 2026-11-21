@@ -109,6 +109,8 @@ class SettingsActivity : BaseActivity() {
             prefs.textColor == 0 -> "none"
             else -> prefs.textColor.toString()
         }
+        // the keyboard already fills the screen's width, so the rows can only be as tall as keys that keep their shape allow
+        val tallest = com.omega.keyboard.ime.KeyboardView.maxHeightPct(resources.displayMetrics)
         h.addView(UiKit.group(
             this, p,
             UiKit.valueRow(this, p, "المظهر", Themes.nameOf(prefs.theme) ?: "تلقائي") {
@@ -123,7 +125,7 @@ class SettingsActivity : BaseActivity() {
                     }
                 }
             },
-            UiKit.seekRow(this, p, "ارتفاع الكيبورد", 60, com.omega.keyboard.ime.KeyboardView.MAX_HEIGHT_PCT, prefs.heightPct, { "$it%" }) { prefs.heightPct = it },
+            UiKit.seekRow(this, p, "ارتفاع الكيبورد", 60, tallest, prefs.heightPct.coerceAtMost(tallest), { "$it%" }) { prefs.heightPct = it },
             UiKit.seekRow(this, p, "حجم الحروف", 80, 140, prefs.fontPct, { "$it%" }) { prefs.fontPct = it },
             UiKit.seekRow(this, p, "عرض الكيبورد", 60, 100, prefs.widthPct, { "$it%" }) { prefs.widthPct = it },
             sw("صف الأرقام", "صف أرقام فوق الحروف", prefs.numberRow) { prefs.numberRow = it },

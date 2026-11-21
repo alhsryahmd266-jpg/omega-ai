@@ -93,6 +93,8 @@ object ScreenReader {
                         scrollDown = dir and SCROLL_DOWN != 0,
                         scrollUp = dir and SCROLL_UP != 0,
                         hint = hintOf(n),
+                        checkable = n.isCheckable,
+                        checked = n.isChecked,
                     )
                 )
                 live.add(n)
