@@ -1,0 +1,71 @@
+[12:16:40] device: sdk_gphone64_x86_64 api 34 Physical size: 1080x2400 Physical density: 420
+Performing Streamed Install
+Success
+[12:16:50] keyboard known to the system after 4 tries
+com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME
+com.google.android.tts/com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.VoiceInputMethodService
+com.omega.keyboard/.ime.OmegaImeService
+[12:16:57] kb-font-ruqaa text: []
+[12:16:57] kb-font-naskh text: []
+[12:16:57] kb-font-kufi text: []
+[12:16:57] kb-font-nastaliq text: []
+[12:16:57] kb-font-rakkas text: []
+[12:16:57] kb-look-script text: []
+[12:16:57] kb-look-gothic text: []
+[12:16:57] kb-look-bubble text: []
+[12:16:57] kb-look-royal text: []
+[12:16:57] fontbar after the royal look: []
+[12:16:57] fontbar back to normal: []
+[12:16:57] fontbar english script: []
+[12:16:57] fontbar english underline: []
+[12:16:57] decor royal: []
+[12:16:57] decor kashida: []
+[12:16:57] decor brackets: []
+[12:16:57] decor undo: []
+[12:16:57] decor none: []
+[12:16:57] decor live typed: []
+[12:16:57] decor live after one backspace: []
+[12:16:57] decor script: []
+[12:16:57] livetr field while typing: []
+[12:16:57] livetr field after the tick: []
+[12:16:57] livetr field with a second sentence: []
+[12:16:57] livetr field after the swap: []
+[12:16:57] livetr field at the end: []
+[12:16:57] livetr luxe field: []
+[12:16:57] == kb-resize
+[12:17:05] default keyboard: com.omega.keyboard/.ime.OmegaImeService
+KEYS {}
+STRIP {}
+SHEET {}
+[12:17:24] our keyboard is not on the screen yet (try 1)
+[12:17:27] the system changed the keyboard, selecting ours again
+text field not found
+[12:17:55] our keyboard is not on the screen yet (try 1)
+KEYS {'ض': (53, 1776), 'ص': (151, 1776), 'ث': (248, 1776), 'ق': (345, 1776), 'ف': (442, 1776), 'غ': (540, 1776), 'ع': (637, 1776), 'ه': (734, 1776), 'خ': (831, 1776), 'ح': (928, 1776), 'ج': (1026, 1776), 'ش': (53, 1912), 'س': (151, 1912), 'ي': (248, 1912), 'ب': (345, 1912), 'ل': (442, 1912), 'ا': (540, 1912), 'ت': (637, 1912), 'ن': (734, 1912), 'م': (831, 1912), 'ك': (928, 1912), 'ط': (1026, 1912), 'ALT': (46, 2049), 'ذ': (132, 2049), 'ء': (221, 2049), 'ؤ': (310, 2049), 'ر': (399, 2049), 'ى': (488, 2049), 'ة': (577, 2049), 'و': (666, 2049), 'ز': (755, 2049), 'ظ': (844, 2049), 'د': (933, 2049), 'BACKSPACE': (1026, 2049), 'SYMBOLS': (78, 2185), 'LANG': (199, 2185), 'EMOJI': (296, 2185), 'SPACE': (540, 2185), '،': (783, 2185), '.': (880, 2185), 'ENTER': (1001, 2185)}
+STRIP {'toggle': (60, 1632), 't:voice': (166, 1632), 't:screen': (273, 1632), 't:theme': (380, 1632), 't:resize': (486, 1632), 't:auto': (593, 1632), 't:decor': (699, 1632), 't:clip': (806, 1632), 't:typed': (913, 1632), 't:settings': (1019, 1632)}
+SHEET {}
+[12:18:11] shot kb-resize-1 (291306 bytes)
+[12:18:15] shot kb-resize-2 (298468 bytes)
+[12:18:19] shot kb-resize-3 (307406 bytes)
+[12:18:23] shot kb-resize-4 (294432 bytes)
+[12:18:27] shot kb-resize-limit (295153 bytes)
+[12:18:39] shot kb-resize-typed (292106 bytes)
+[12:18:41] typed after the resize: [اعمل كل اللي قلتلك عليه]
+[12:18:41] == kb-resize-grow
+[12:18:49] default keyboard: com.omega.keyboard/.ime.OmegaImeService
+KEYS {'ض': (199, 1919), 'ص': (267, 1919), 'ث': (335, 1919), 'ق': (403, 1919), 'ف': (471, 1919), 'غ': (540, 1919), 'ع': (608, 1919), 'ه': (676, 1919), 'خ': (744, 1919), 'ح': (812, 1919), 'ج': (880, 1919), 'ش': (199, 2015), 'س': (267, 2015), 'ي': (335, 2015), 'ب': (403, 2015), 'ل': (471, 2015), 'ا': (540, 2015), 'ت': (608, 2015), 'ن': (676, 2015), 'م': (744, 2015), 'ك': (812, 2015), 'ط': (880, 2015), 'ALT': (194, 2110), 'ذ': (254, 2110), 'ء': (316, 2110), 'ؤ': (379, 2110), 'ر': (441, 2110), 'ى': (503, 2110), 'ة': (566, 2110), 'و': (628, 2110), 'ز': (690, 2110), 'ظ': (752, 2110), 'د': (815, 2110), 'BACKSPACE': (880, 2110), 'SYMBOLS': (216, 2206), 'LANG': (301, 2206), 'EMOJI': (369, 2206), 'SPACE': (540, 2206), '،': (710, 2206), '.': (778, 2206), 'ENTER': (863, 2206)}
+STRIP {'toggle': (60, 1796), 't:voice': (166, 1796), 't:screen': (273, 1796), 't:theme': (380, 1796), 't:resize': (486, 1796), 't:auto': (593, 1796), 't:decor': (699, 1796), 't:clip': (806, 1796), 't:typed': (913, 1796), 't:settings': (1019, 1796)}
+SHEET {}
+[12:19:01] shot kb-resize-grow-1 (298048 bytes)
+[12:19:05] shot kb-resize-grow-2 (281782 bytes)
+[12:19:09] shot kb-resize-grow-3 (289274 bytes)
+[12:19:09] == hide-icon
+[12:19:16] default keyboard: com.omega.keyboard/.ime.OmegaImeService
+[12:19:25] shot hide-icon-1 (291885 bytes)
+[12:19:25] hide-icon before: targets=[com.omega.keyboard/com.omega.keyboard.agent.ScreenAgentService] mode=[1] enabled=[com.omega.keyboard/com.omega.keyboard.agent.ScreenAgentService]
+[12:19:29] shot hide-icon-2 (163560 bytes)
+[12:19:34] hide-icon: the shortcut is off after about 7 s (targets=[])
+[12:19:34] CHECK hide-icon: ok
+[12:19:42] shot hide-icon-4 (163611 bytes)
+[12:19:42] hide-icon log: 4 lines
+[12:19:42] done

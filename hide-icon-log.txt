@@ -1,0 +1,4 @@
+11-21 12:19:26.887  6886  6906 D Omega/hider: press LIST_ENTRY "Omega Keyboard - قراءة الشاشة" try 1
+11-21 12:19:28.478  6886  6906 D Omega/hider: press SWITCH "Shortcut settings" try 1
+11-21 12:19:29.170  6886  6906 D Omega/hider: finished: ok
+11-21 12:19:30.377  6886  6906 D Omega/hider: back 0: settings in front = false

@@ -1,0 +1,16 @@
+11-21 12:19:05.305  6627  6627 D OmegaKeys: ض=132,1852;ص=214,1852;ث=295,1852;ق=377,1852;ف=458,1852;غ=540,1852;ع=621,1852;ه=702,1852;خ=784,1852;ح=865,1852;ج=947,1852;ش=132,1967;س=214,1967;ي=295,1967;ب=377,1967;ل=458,1967;ا=540,1967;ت=621,1967;ن=702,1967;م=784,1967;ك=865,1967;ط=947,1967;ALT=126,2081;ذ=198,2081;ء=272,2081;ؤ=347,2081;ر=422,2081;ى=496,2081;ة=571,2081;و=645,2081;ز=720,2081;ظ=794,2081;د=869,2081;BACKSPACE=947,2081;SYMBOLS=152,2196;LANG=254,2196;EMOJI=336,2196;SPACE=540,2196;،=743,2196;.=825,2196;ENTER=927,2196;RZ_TOP=540,1806;RZ_LEFT=118,2027;RZ_RIGHT=961,2027;
+11-21 12:19:05.305  6627  6627 D OmegaStrip: status=946,1720;status2=709,1720;
+11-21 12:19:11.789   520   549 I ActivityManager: Start proc 6886:com.omega.keyboard/u0a192 for service {com.omega.keyboard/com.omega.keyboard.ime.OmegaImeService}
+11-21 12:19:16.386  6886  6886 D Omega/agent: accessibility service connected
+11-21 12:19:26.887  6886  6906 D Omega/hider: press LIST_ENTRY "Omega Keyboard - قراءة الشاشة" try 1
+11-21 12:19:28.478  6886  6906 D Omega/hider: press SWITCH "Shortcut settings" try 1
+11-21 12:19:29.170  6886  6906 D Omega/hider: finished: ok
+11-21 12:19:29.579  7032  7032 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+11-21 12:19:29.583  7032  7032 I AndroidRuntime: Using default boot image
+11-21 12:19:29.583  7032  7032 I AndroidRuntime: Leaving lock profiling enabled
+11-21 12:19:29.665  7032  7032 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+11-21 12:19:29.681  6886  6886 D Omega/agent: accessibility service unbound
+11-21 12:19:30.377  6886  6906 D Omega/hider: back 0: settings in front = false
+11-21 12:19:30.691  7032  7032 I AccessibilityNodeInfoDumper: Skipping invisible child: android.view.accessibility.AccessibilityNodeInfo@27ec8; boundsInParent: Rect(0, 0 - 0, 73); boundsInScreen: Rect(189, 165 - 189, 238); boundsInWindow: Rect(189, 165 - 189, 238); packageName: com.android.settings; className: android.widget.TextView; text: Omega Keyboard - قراءة الشاشة; error: null; maxTextLength: -1; stateDescription: null; contentDescription: null; tooltipText: null; containerTitle: null; viewIdResName: null; uniqueId: null; checkable: false; checked: false; focusable: false; focused: false; selected: false; clickable: false; longClickable: false; contextClickable: false; enabled: true; password: false; scrollable: false; importantForAccessibility: true; visible: false; actions: [AccessibilityAction: ACTION_SELECT - null, AccessibilityAction: ACTION_CLEAR_SELECTION - null, AccessibilityAction: ACTION_ACCESSIBILITY_FOCUS - null, AccessibilityAction: ACTION_NEXT_AT_MOVEMENT_GRANULARITY - null, AccessibilityAction: ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY - null, AccessibilityAction: ACTION_SET_SELECTION - null, AccessibilityAction: ACTION_SHOW_ON_SCREEN - null]; isTextSelectable: false
+11-21 12:19:30.701  7032  7032 D AndroidRuntime: Shutting down VM
+11-21 12:19:30.708  6886  6886 D Omega/agent: accessibility service connected
