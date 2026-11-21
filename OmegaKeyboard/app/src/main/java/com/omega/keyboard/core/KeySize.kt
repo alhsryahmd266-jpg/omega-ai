@@ -4,14 +4,17 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The size of the keyboard is two numbers the user can change: how tall the rows are (a scale of the normal row, 1 = normal) and
- * how wide the keys area is (a share of the screen's width, 1 = all of it).
+ * The size of the keyboard. There are two models, and the view says which one is in use.
  *
- * At 100% the keys area already fills the whole width of the screen, so it can never be wider, and rows made taller on their own
- * turn the keys into slabs. So the two are tied together: a key is never taller than [MAX_KEY_ASPECT] times its width. That gives
- * every width a tallest height (the wider the keys area, the taller the rows may be), and when the user drags to make the keyboard
- * BIGGER, whatever is narrower than the screen widens along with the height, so the keys keep their shape: bigger keys, not taller
- * ones. Making it smaller through the side edges shrinks the height with the width, again with the same key shape.
+ * SQUARE KEYS (portrait, the normal case). There is ONE size: how much of the screen's width the keys area takes (1 = all of it).
+ * The keys are squares whose side is that width divided by the 11 keys of the widest (Arabic) row, and the rows are exactly that tall,
+ * so the keys have the same shape at every size. The gaps, letters and icons are drawn at that size too: making the keyboard bigger or
+ * smaller is zooming one picture, nothing is stretched. At 100% the keys area already fills the whole width of the screen, so that is
+ * the biggest the keyboard can be; it can only be made smaller (one-handed typing) and made bigger again up to there.
+ *
+ * FREE HEIGHT (landscape). Squares would make the keyboard fill the screen there, so the rows keep a height of their own: a scale of
+ * the normal row ([heightScale], 1 = normal) and the width of the keys area, tied together by [MAX_KEY_ASPECT] so a key never becomes
+ * a slab.
  *
  * Pure (no Android classes), so it is tested without a phone.
  */
@@ -20,10 +23,13 @@ object KeySize {
     const val MAX_HEIGHT_PCT = 140
     const val MIN_WIDTH_PCT = 60
 
-    /** the tallest a key may be compared with its width (the normal one is about 1.5): taller than this it looks like a slab */
-    const val MAX_KEY_ASPECT = 1.8f
+    /**
+     * Free height only: the tallest a key may be compared with its width. Taller than this it looks like a slab.
+     * (This is the shape of the keys of the Gboard the user brought: 1.75.)
+     */
+    const val MAX_KEY_ASPECT = 1.75f
 
-    /** the height of a normal row, dp */
+    /** the height of a normal row of the free-height model, dp */
     const val BASE_ROW_DP = 52f
 
     /** the free margin at each side of the keys area, dp */
@@ -35,6 +41,12 @@ object KeySize {
      */
     const val REF_UNITS = 11f
 
+    /** square keys: on a wide screen (a tablet) a square would be too tall, so the rows are never taller than this, dp */
+    const val MAX_SQUARE_ROW_DP = 56f
+
+    /** square keys: the free space round each key (half of the gap between two keys) at the biggest size, dp; it zooms with the keys */
+    const val SQUARE_GAP_DP = 3f
+
     private const val MIN_H = MIN_HEIGHT_PCT / 100f
     private const val MAX_H = MAX_HEIGHT_PCT / 100f
     private const val MIN_W = MIN_WIDTH_PCT / 100f
@@ -44,6 +56,32 @@ object KeySize {
 
     /** the width of one key's cell, px, when the keys area is all of a view that is [viewW] wide */
     fun cellAtFull(viewW: Float, density: Float): Float = (viewW - 2f * SIDE_DP * density) / REF_UNITS
+
+    // ------------------------------------------------------------------ square keys
+
+    /** the keys area's size as it is really used: a share of the width between the smallest and all of it */
+    fun zoom(w: Float): Float = w.coerceIn(MIN_W, 1f)
+
+    /** the height of a row, px, when the keys area is the whole width: the side of the squares (never beyond [MAX_SQUARE_ROW_DP]) */
+    fun squareRowAtFull(viewW: Float, density: Float): Float = min(cellAtFull(viewW, density), MAX_SQUARE_ROW_DP * density)
+
+    /** the height of a row, px, when the keys area is [w] of the width: it is the width's share of the full one, so the keys keep their shape */
+    fun squareRowPx(viewW: Float, density: Float, w: Float): Float = squareRowAtFull(viewW, density) * zoom(w)
+
+    /**
+     * The top handle's finger asks for rows [wantRowPx] tall: the keys area gets the size at which the rows are that tall (the keys
+     * area widens or narrows with the rows, from where it is), held between the smallest size and all of the screen's width.
+     */
+    fun dragTopSquare(wantRowPx: Float, viewW: Float, density: Float): Float =
+        (wantRowPx / squareRowAtFull(viewW, density)).coerceIn(MIN_W, 1f)
+
+    /** did the finger ask for clearly more than the screen's width can give? (the size the finger asked for, as a share of the width) */
+    fun beyondWidth(askedSize: Float): Boolean = askedSize > 1.04f
+
+    /** is the keyboard as big as the screen's width lets it be? */
+    fun fullWidth(w: Float): Boolean = w >= 0.995f
+
+    // ------------------------------------------------------------------ free height (landscape)
 
     /**
      * The tallest the rows may be (a scale of the normal row) when the keys area is the whole width: never below normal, never
@@ -60,7 +98,7 @@ object KeySize {
     /** The height the rows really have when [h] is asked for. */
     fun rowScale(h: Float, viewW: Float, density: Float, w: Float): Float = h.coerceIn(MIN_H, max(tallest(viewW, density, w), MIN_H))
 
-    /** What the height slider can reach on a screen that is [viewW] px wide (portrait), in percent. */
+    /** What the height can reach on a screen that is [viewW] px wide (portrait), in percent. */
     fun maxHeightPct(viewW: Float, density: Float): Int = (tallestAtFull(viewW, density) * 100f + 0.0001f).toInt()
 
     /**

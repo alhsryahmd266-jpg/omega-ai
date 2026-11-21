@@ -76,8 +76,17 @@ class KeyboardView(ctx: Context) : View(ctx) {
     var spaceLabel: String = ""
         set(v) { if (field != v) { field = v; invalidate() } }
 
+    /** the height of the rows, as a scale of the normal row: used where the keys are not square (landscape), see [KeySize] */
     var heightScale: Float = 1f
         set(v) { if (field != v) { field = v; requestLayout(); invalidate() } }
+
+    /**
+     * Portrait: the keys are squares and the keyboard has ONE size ([widthScale]); the rows are as tall as the keys are wide, and the gaps,
+     * letters and icons zoom with them, so a bigger or smaller keyboard is the same picture, never a stretched one. Landscape: the rows
+     * have a height of their own ([heightScale]). See [KeySize].
+     */
+    var squareKeys: Boolean = true
+        set(v) { if (field != v) { field = v; computeKeys(); requestLayout(); invalidate() } }
 
     /** size of the letters on the keys, 1 = normal */
     var fontScale: Float = 1f
@@ -129,6 +138,10 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
         /** how long a letter is held before its alternatives open (a slow tap must not become "another letter") */
         private const val LONG_PRESS_MS = 400L
+
+        /** square keys: the size of a letter as a share of the key's side (Arabic letters are drawn bigger than English ones) */
+        private const val SQUARE_LETTER_AR = 0.62f
+        private const val SQUARE_LETTER_EN = 0.54f
         private val SHADOW_FRAC = floatArrayOf(0.55f, 0.32f, 0.16f)
 
         /** the halo of the enter key in the luxe look: four rings, each a little wider and fainter than the one inside it */
@@ -138,9 +151,6 @@ class KeyboardView(ctx: Context) : View(ctx) {
         const val MIN_HEIGHT_PCT = KeySize.MIN_HEIGHT_PCT
         const val MAX_HEIGHT_PCT = KeySize.MAX_HEIGHT_PCT
         const val MIN_WIDTH_PCT = KeySize.MIN_WIDTH_PCT
-
-        /** the tallest the height setting can go on this phone (percent): the keyboard fills the width in portrait, so this is what keys that keep their shape allow */
-        fun maxHeightPct(dm: android.util.DisplayMetrics): Int = KeySize.maxHeightPct(min(dm.widthPixels, dm.heightPixels).toFloat(), dm.density)
 
         /** a finger that went down on a key moves to the next one only after leaving the first by this much and travelling this far (dp) */
         private const val KEY_SWITCH_MARGIN_DP = 5f
@@ -228,17 +238,33 @@ class KeyboardView(ctx: Context) : View(ctx) {
     private val baseRowDp = KeySize.BASE_ROW_DP
     private val padTop get() = dp(6f)
     private val padBottom get() = dp(8f)
-    /** the height the user asked for, held to the tallest one at which the keys still have the shape of a key at this width (see [KeySize]) */
-    private val rowScale: Float get() = rowScaleFor(viewWidthPx())
-    private fun rowScaleFor(viewW: Float) = KeySize.rowScale(heightScale, viewW, density, widthScale)
-    private val rowHeight get() = dp(baseRowDp) * rowScale
+
+    /**
+     * The height of one row, px. Square keys: the side of the squares at the size the keyboard has. Landscape: the height the user asked
+     * for, held to the tallest one at which the keys still have the shape of a key at this width (see [KeySize]).
+     */
+    private val rowHeight: Float get() = rowHeightFor(viewWidthPx())
+    private fun rowHeightFor(viewW: Float): Float =
+        if (squareKeys) KeySize.squareRowPx(viewW, density, widthScale)
+        else dp(baseRowDp) * KeySize.rowScale(heightScale, viewW, density, widthScale)
+
+    /** the rows as a scale of the normal row (what the readout of the resize handle shows is the size, see [sizePct]) */
+    private val rowScale: Float get() = rowHeight / dp(baseRowDp)
 
     private fun viewWidthPx(): Float = if (width > 0) width.toFloat() else resources.displayMetrics.widthPixels.toFloat()
 
-    /** how much letters, hints and icons grow with the keyboard: half as fast as the rows do, because the keys stay as wide as they were */
-    private val grow: Float get() = 1f + (rowScale - 1f).coerceAtLeast(0f) * 0.55f
-    private val insetX get() = dp(2.5f)
-    private val insetY get() = dp(4f)
+    /** square keys: how much the keyboard is zoomed (1 = all the width of the screen) */
+    private val zoom: Float get() = KeySize.zoom(widthScale)
+
+    /**
+     * How much letters, hints and icons are scaled with the keyboard. Square keys: exactly as much as the keys are (they are one picture).
+     * Landscape: they grow half as fast as the rows do, because the keys stay as wide as they were.
+     */
+    private val grow: Float get() = if (squareKeys) zoom else 1f + (rowScale - 1f).coerceAtLeast(0f) * 0.55f
+
+    /** the free space round a key: equal on all sides for square keys (and zoomed with them), as it always was for the others */
+    private val insetX get() = if (squareKeys) dp(KeySize.SQUARE_GAP_DP) * zoom else dp(2.5f)
+    private val insetY get() = if (squareKeys) dp(KeySize.SQUARE_GAP_DP) * zoom else dp(4f)
 
     fun setLayout(l: Layout) {
         layout = l
@@ -253,7 +279,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
         val rows = layout?.rows?.size ?: 4
         val w = MeasureSpec.getSize(widthSpec)
-        val h = (rows * dp(baseRowDp) * rowScaleFor(w.toFloat()) + padTop + padBottom).toInt()
+        val h = (rows * rowHeightFor(w.toFloat()) + padTop + padBottom).toInt()
         setMeasuredDimension(w, h)
     }
 
@@ -769,7 +795,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 val lab = labelOf(k)
                 var size = letterSize(arabic, face)
                 if (lab.length > 2) size = min(size, dp(19f) * fontScale)
-                size = min(size, rowHeight * 0.62f)
+                size = min(size, rowHeight * (if (squareKeys) 0.86f else 0.62f))
                 // every letter of the page is drawn at the one size at which the widest of them still sits inside its key (a wide Arabic
                 // letter in a calligraphy face, or a big letter-size setting, used to run over the edge of the key); a long label has its own fit
                 size *= if (lab.length <= 2) glyphFit(arabic, face, r.width()) else 1f
@@ -833,8 +859,12 @@ class KeyboardView(ctx: Context) : View(ctx) {
     }
 
     /** the size a letter would be drawn at before it is fitted to its key: it grows a little as the keyboard is made taller */
-    private fun letterSize(arabic: Boolean, face: Typeface?): Float =
-        (if (arabic) min(rowHeight * 0.50f, dp(27f) * grow) else min(rowHeight * 0.42f, dp(24f) * grow)) * fontScale * (if (face != null) capScale else 1f)
+    private fun letterSize(arabic: Boolean, face: Typeface?): Float {
+        // square keys: a share of the key, so the letters zoom with the keyboard; the others: as before
+        val base = if (squareKeys) rowHeight * (if (arabic) SQUARE_LETTER_AR else SQUARE_LETTER_EN)
+        else if (arabic) min(rowHeight * 0.50f, dp(27f) * grow) else min(rowHeight * 0.42f, dp(24f) * grow)
+        return base * fontScale * (if (face != null) capScale else 1f)
+    }
 
     private var fitSig = 0L
     private var fitValue = 1f
@@ -1192,9 +1222,10 @@ class KeyboardView(ctx: Context) : View(ctx) {
         textPaint.color = t.onAccent
         textPaint.textSize = dp(9f)
         textPaint.isFakeBoldText = true
-        val pct = Math.round(rowScale * 100f)
+        // square keys: the size is the share of the screen's width the keyboard takes; landscape: the height of the rows
+        val pct = Math.round((if (squareKeys) zoom else rowScale) * 100f)
         // at the biggest the screen allows (all of its width, the tallest rows) the readout says so: the edge stops there
-        val top = KeySize.atMost(rowScale, widthScale, viewWidthPx(), density)
+        val top = if (squareKeys) KeySize.fullWidth(widthScale) else KeySize.atMost(rowScale, widthScale, viewWidthPx(), density)
         drawCentered(c, if (top) "$pct% · أقصى" else "$pct%", cx, dp(10f))
         textPaint.isFakeBoldText = false
     }
@@ -1243,9 +1274,9 @@ class KeyboardView(ctx: Context) : View(ctx) {
 
     /**
      * The finger's place on the SCREEN decides (the window moves while it grows, so the view's own coordinates would feed back).
-     * The two sizes move together, see [KeySize]: the top handle makes the rows taller or shorter and, when the keyboard is being
-     * made bigger while it is narrower than the screen, widens it by the same factor, so the keys keep their shape instead of
-     * becoming slabs; a side handle moves the edge and the height follows it with the same key shape.
+     * Square keys: there is one size, so the top handle makes the whole keyboard bigger or smaller (the rows are as tall as the finger
+     * leaves them, the width follows, the keys stay square) and a side handle moves an edge (the height follows it); nothing is ever
+     * stretched. Landscape: the two sizes move together, see [KeySize].
      */
     private fun dragResize(rawX: Float, rawY: Float) {
         val side = dp(2f)
@@ -1255,26 +1286,38 @@ class KeyboardView(ctx: Context) : View(ctx) {
         when (rzPart) {
             RZ_TOP -> {
                 val rows = (layout?.rows?.size ?: 4).coerceAtLeast(1)
-                val maxPx = resources.displayMetrics.heightPixels * 0.5f
-                val screenCap = (maxPx - padTop - padBottom) / (rows * dp(baseRowDp))
-                val want = ((rzH0 + (rzRawY - rawY) - padTop - padBottom) / (rows * dp(baseRowDp))).coerceAtMost(max(screenCap, MIN_HEIGHT_PCT / 100f))
-                val s = KeySize.dragTop(want, rzScale0, rzW0, viewW, density)
-                // the area grows around the place it has (left, middle or right), so it grows to the side where there is room
-                if (s.w != widthScale) widthScale = s.w
-                heightScale = s.h
-                // the finger went well past the biggest size the screen allows: say why it stopped (once per drag)
-                if (!rzLimitTold && want > s.h + 0.04f && KeySize.atMost(s.h, s.w, viewW, density)) {
-                    rzLimitTold = true
-                    listener?.onResizeLimit()
+                if (squareKeys) {
+                    // the rows the finger leaves (the keyboard's top edge follows it) decide the size; the area grows round the place it has
+                    val wantRow = (rzH0 + (rzRawY - rawY) - padTop - padBottom) / rows
+                    val w = KeySize.dragTopSquare(wantRow, viewW, density)
+                    if (w != widthScale) widthScale = w
+                    // the finger went well past the whole width of the screen: say why it stopped (once per drag)
+                    if (!rzLimitTold && KeySize.beyondWidth(wantRow / KeySize.squareRowAtFull(viewW, density))) {
+                        rzLimitTold = true
+                        listener?.onResizeLimit()
+                    }
+                } else {
+                    val maxPx = resources.displayMetrics.heightPixels * 0.5f
+                    val screenCap = (maxPx - padTop - padBottom) / (rows * dp(baseRowDp))
+                    val want = ((rzH0 + (rzRawY - rawY) - padTop - padBottom) / (rows * dp(baseRowDp))).coerceAtMost(max(screenCap, MIN_HEIGHT_PCT / 100f))
+                    val s = KeySize.dragTop(want, rzScale0, rzW0, viewW, density)
+                    // the area grows around the place it has (left, middle or right), so it grows to the side where there is room
+                    if (s.w != widthScale) widthScale = s.w
+                    heightScale = s.h
+                    // the finger went well past the biggest size the screen allows: say why it stopped (once per drag)
+                    if (!rzLimitTold && want > s.h + 0.04f && KeySize.atMost(s.h, s.w, viewW, density)) {
+                        rzLimitTold = true
+                        listener?.onResizeLimit()
+                    }
                 }
             }
             RZ_LEFT -> {
                 setArea((rzL0 + (rawX - rzRawX)).coerceIn(side, rzR0 - minUsable), rzR0)
-                heightScale = KeySize.dragSide(widthScale, rzScale0, rzW0, viewW, density).h
+                if (!squareKeys) heightScale = KeySize.dragSide(widthScale, rzScale0, rzW0, viewW, density).h
             }
             RZ_RIGHT -> {
                 setArea(rzL0, (rzR0 + (rawX - rzRawX)).coerceIn(rzL0 + minUsable, width - side))
-                heightScale = KeySize.dragSide(widthScale, rzScale0, rzW0, viewW, density).h
+                if (!squareKeys) heightScale = KeySize.dragSide(widthScale, rzScale0, rzW0, viewW, density).h
             }
         }
     }

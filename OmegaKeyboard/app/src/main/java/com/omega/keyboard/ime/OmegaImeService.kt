@@ -467,6 +467,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun applyViewPrefs() {
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val k = kbd ?: return
+        // portrait: square keys with one size (the width setting); landscape: rows with a height of their own
+        k.squareKeys = !landscape
         k.heightScale = prefs.heightPct.coerceIn(KeyboardView.MIN_HEIGHT_PCT, KeyboardView.MAX_HEIGHT_PCT) / 100f * (if (landscape) LANDSCAPE_HEIGHT else 1f)
         k.fontScale = prefs.fontPct.coerceIn(80, 140) / 100f
         k.widthScale = prefs.widthPct.coerceIn(KeyboardView.MIN_WIDTH_PCT, 100) / 100f
@@ -581,7 +583,7 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
     private fun isLandscape() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     override fun onResizeLimit() {
-        Notice.toast(this, "ده أقصى حجم: الكيبورد واخد عرض الشاشة كله، ولو كبّرناه أكتر الزراير هتطول بس وتبقى شكلها وحش", long = false)
+        Notice.toast(this, "ده أقصى حجم: الكيبورد واخد عرض الشاشة كله. أكتر من كده الزراير هتتمدّد وتبوظ شكلها", long = false)
     }
 
     override fun onResized(heightScale: Float, widthScale: Float, alignFrac: Float) {

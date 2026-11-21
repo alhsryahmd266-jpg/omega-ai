@@ -19,7 +19,7 @@ object CoreTests {
     fun runAll(): List<String> {
         failures.clear(); checks = 0
         layouts(); arabic(); dictionary(); languages(); chatParsing(); replyPolicy(); sendFinding(); sendVerifying()
-        prompts(); screenFilter(); scrolling(); noise(); chatEdges(); shortcutRows(); keySize(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask(); photoLook()
+        prompts(); screenFilter(); scrolling(); noise(); chatEdges(); shortcutRows(); keySize(); squareKeys(); translation(); autopilotRules(); colors(); voicePlan(); colourSend(); replyCraft(); gameChat(); gameLocate(); decor(); typedBox(); textMask(); photoLook()
         println("checks run: $checks, failures: ${failures.size}")
         return failures.toList()
     }
@@ -565,8 +565,8 @@ object CoreTests {
         val vw = 1080f
         val d = 2.75f
         val c = KeySize.tallestAtFull(vw, d)
-        check("size: full-width rows may be about 22% taller than normal", near(c, 1.2233f), { "$c" })
-        check("size: the slider's top is that, in percent", KeySize.maxHeightPct(vw, d) == 122, { "${KeySize.maxHeightPct(vw, d)}" })
+        check("size: full-width rows may be about 19% taller than normal", near(c, 1.1893f), { "$c" })
+        check("size: the slider's top is that, in percent", KeySize.maxHeightPct(vw, d) == 118, { "${KeySize.maxHeightPct(vw, d)}" })
         check("size: normal size is untouched", near(KeySize.rowScale(1f, vw, d, 1f), 1f))
         check("size: asked 140% at full width gives the tallest, not 140%", near(KeySize.rowScale(1.4f, vw, d, 1f), c))
         check("size: shorter than the minimum is held to it", near(KeySize.rowScale(0.3f, vw, d, 1f), 0.6f))
@@ -662,6 +662,60 @@ object CoreTests {
         check("atMost: tallest rows and full width", KeySize.atMost(c, 1f, vw, d))
         check("atMost: not while rows can still grow", !KeySize.atMost(1.1f, 1f, vw, d))
         check("atMost: not while the area is narrower", !KeySize.atMost(c, 0.9f, vw, d))
+    }
+
+    /** portrait: the keys are squares and there is one size; everything scales with it */
+    private fun squareKeys() {
+        val vw = 1080f
+        val d = 2.75f
+        val cell = KeySize.cellAtFull(vw, d)
+        check("square: the row is as tall as a key is wide at full width", near(KeySize.squareRowPx(vw, d, 1f), cell, 0.01f), { "${KeySize.squareRowPx(vw, d, 1f)} vs $cell" })
+        check("square: his phone's rows are about 97 px", near(KeySize.squareRowAtFull(vw, d), 97.18f, 0.05f), { "${KeySize.squareRowAtFull(vw, d)}" })
+
+        // one size: the rows are exactly as tall as the keys are wide at every size, so the keys never change shape
+        var shapeOk = true
+        var grows = true
+        var prev = 0f
+        var w = 0.6f
+        while (w <= 1.0001f) {
+            val row = KeySize.squareRowPx(vw, d, w)
+            val keyW = cell * w
+            if (!near(row / keyW, 1f, 0.002f)) shapeOk = false
+            if (row < prev) grows = false
+            prev = row
+            w += 0.02f
+        }
+        check("square: at every size the rows are as tall as the keys are wide", shapeOk)
+        check("square: a bigger size never has shorter rows", grows)
+        check("square: below the smallest size it is held at the smallest", near(KeySize.squareRowPx(vw, d, 0.2f), KeySize.squareRowPx(vw, d, 0.6f), 0.01f))
+        check("square: above the whole width it is held at the whole width", near(KeySize.squareRowPx(vw, d, 1.5f), KeySize.squareRowPx(vw, d, 1f), 0.01f))
+        check("square: the smallest keyboard is 60% of the biggest, in height too", near(KeySize.squareRowPx(vw, d, 0.6f) / KeySize.squareRowPx(vw, d, 1f), 0.6f, 0.002f))
+        check("square: zoom is the size held between the smallest and all of the width", near(KeySize.zoom(0.3f), 0.6f) && near(KeySize.zoom(0.8f), 0.8f) && near(KeySize.zoom(2f), 1f))
+
+        // a wide screen (a tablet in portrait): a square would be too tall, so the rows stop at the limit but still scale with the size
+        val tabW = 1600f
+        val tabD = 2f
+        check("square: wide screens keep the rows under the limit", KeySize.squareRowAtFull(tabW, tabD) <= KeySize.MAX_SQUARE_ROW_DP * tabD + 0.01f, { "${KeySize.squareRowAtFull(tabW, tabD)}" })
+        check("square: ... and the rows still go with the size there", near(KeySize.squareRowPx(tabW, tabD, 0.8f) / KeySize.squareRowPx(tabW, tabD, 1f), 0.8f, 0.002f))
+        check("square: a small phone (320 dp) has square rows too", near(KeySize.squareRowAtFull(640f, 2f), KeySize.cellAtFull(640f, 2f), 0.01f))
+
+        // the top handle: the rows the finger leaves decide the size
+        check("squareTop: rows as tall as the biggest ones give full width", near(KeySize.dragTopSquare(97.18f, vw, d), 1f))
+        check("squareTop: taller than that is held at full width", near(KeySize.dragTopSquare(300f, vw, d), 1f))
+        check("squareTop: 80% of the rows gives 80% of the width", near(KeySize.dragTopSquare(97.18f * 0.8f, vw, d), 0.8f))
+        check("squareTop: shorter than the smallest is held at the smallest", near(KeySize.dragTopSquare(10f, vw, d), 0.6f))
+        var up = true
+        var last = 0f
+        var want = 40f
+        while (want <= 160f) {
+            val s = KeySize.dragTopSquare(want, vw, d)
+            if (s < last - 1e-5f) up = false
+            last = s
+            want += 2f
+        }
+        check("squareTop: dragging up never makes the keyboard smaller", up)
+        check("squareTop: asking for clearly more than the width is noticed", KeySize.beyondWidth(1.2f) && !KeySize.beyondWidth(1.0f) && !KeySize.beyondWidth(1.03f))
+        check("square: full width is the biggest", KeySize.fullWidth(1f) && KeySize.fullWidth(0.996f) && !KeySize.fullWidth(0.9f))
     }
 
     private fun shortcutRows() {

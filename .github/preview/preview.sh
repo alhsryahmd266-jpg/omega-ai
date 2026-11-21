@@ -476,12 +476,13 @@ KB tool resize 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-1
 KB drag RZ_RIGHT -260 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-2
 KB drag RZ_LEFT 90 0 800 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-3
 KB drag RZ_TOP 0 -200 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-4
-KB drag RZ_TOP 0 -700 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-limit
+KB drag RZ_TOP 0 -700 800 2>&1 | tee -a "$LOG"; sleep 0.3; shot kb-resize-limit-toast
+sleep 1.5; shot kb-resize-limit
 KB strip status 2>&1 | tee -a "$LOG"; sleep 1.5
 KB type "اعمل كل اللي قلتلك عليه" 2>&1 | tee -a "$LOG"; sleep 1.2; shot kb-resize-typed
 say "typed after the resize: [$(KB text 2>/dev/null)]"
 # a small keyboard grows from its top handle: width and height together, the keys keep their shape
-scenario kb-resize-grow s:theme=light s:last_lang=ar i:height_pct=70 i:width_pct=70 i:kb_offset=50
+scenario kb-resize-grow s:theme=light s:last_lang=ar i:width_pct=70 i:kb_offset=50
 focus
 KB tool resize 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-grow-1
 KB drag RZ_TOP 0 -90 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-grow-2
@@ -489,22 +490,29 @@ KB drag RZ_TOP 0 -90 800 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-grow-3
 # a narrow keyboard: the rows are shorter with it (no tall slabs)
 look kb-size-narrow s:theme=light s:last_lang=ar i:width_pct=70 i:kb_offset=100
 # "الأصلي" brings the normal size back
-scenario kb-resize-reset s:theme=light s:last_lang=ar i:height_pct=140 i:width_pct=75 i:kb_offset=0
+scenario kb-resize-reset s:theme=light s:last_lang=ar i:width_pct=75 i:kb_offset=0
 focus
 KB tool resize 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-resize-reset-before
 KB strip status2 2>&1 | tee -a "$LOG"; sleep 1.8; shot kb-resize-reset-after
-# the keys at the tallest size, in the two languages, and with the letter-size setting at its largest: nothing may run over its key
-look kb-size-ar-max   s:theme=light s:last_lang=ar i:height_pct=140
-look kb-size-en-max   s:theme=light s:last_lang=en i:height_pct=140
-look kb-size-ar-big   s:theme=light s:last_lang=ar i:height_pct=140 i:font_pct=140
-look kb-size-ar-naskh s:theme=beach s:last_lang=ar s:ar_font=amiri i:height_pct=140 i:font_pct=120
-look kb-size-ar-kufi  s:theme=gboard s:last_lang=ar s:ar_font=reemkufi i:height_pct=140 i:font_pct=120
-look kb-size-ar-ruqaa s:theme=classic s:last_lang=ar s:ar_font=ruqaa i:height_pct=100 i:font_pct=130
-scenario kb-size-sym-ar s:theme=light s:last_lang=ar i:height_pct=140
+# the keys are square at every size: the normal (biggest) size in the two languages, with the letter-size setting at its largest and in the
+# calligraphy faces (nothing may run over its key), and the smaller sizes (the rows are as tall as the keys are wide, the gaps zoom too)
+look kb-size-ar-max   s:theme=light s:last_lang=ar
+look kb-size-en-max   s:theme=light s:last_lang=en
+look kb-size-ar-big   s:theme=light s:last_lang=ar i:font_pct=140
+look kb-size-ar-naskh s:theme=beach s:last_lang=ar s:ar_font=amiri i:font_pct=120
+look kb-size-ar-kufi  s:theme=gboard s:last_lang=ar s:ar_font=reemkufi i:font_pct=120
+look kb-size-ar-ruqaa s:theme=classic s:last_lang=ar s:ar_font=ruqaa i:font_pct=130
+look kb-size-ar-small s:theme=light s:last_lang=ar i:width_pct=60 i:kb_offset=50
+look kb-size-en-small s:theme=light s:last_lang=en i:width_pct=60 i:kb_offset=50
+look kb-size-ar-80    s:theme=light s:last_lang=ar i:width_pct=80 i:kb_offset=50
+scenario kb-size-sym-ar s:theme=light s:last_lang=ar
 focus
 KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-size-sym-ar
+scenario kb-size-sym-ar-80 s:theme=light s:last_lang=ar i:width_pct=80 i:kb_offset=50
+focus
+KB key SYMBOLS 2>&1 | tee -a "$LOG"; sleep 1.5; shot kb-size-sym-ar-80
 # the size was saved: a fresh start comes up in it
-scenario kb-resize-kept s:theme=light s:last_lang=ar i:height_pct=140 i:width_pct=80 i:kb_offset=100
+scenario kb-resize-kept s:theme=light s:last_lang=ar i:width_pct=80 i:kb_offset=100
 focus
 shot kb-resize-kept
 
@@ -520,8 +528,8 @@ check() {
   shot "$name"
 }
 check type-normal "اعمل كل اللي قلتلك عليه" s:theme=light s:last_lang=ar
-check type-tall   "اضغط على حرف يطلع حرف تاني" s:theme=light s:last_lang=ar i:height_pct=140
-check type-short  "ضصثقفغعهخحج شسيبلاتنمكط ذءؤرىةوزظد" s:theme=light s:last_lang=ar i:height_pct=60
+check type-tall   "اضغط على حرف يطلع حرف تاني" s:theme=light s:last_lang=ar i:width_pct=80 i:kb_offset=50
+check type-short  "ضصثقفغعهخحج شسيبلاتنمكط ذءؤرىةوزظد" s:theme=light s:last_lang=ar i:width_pct=60 i:kb_offset=50
 check type-narrow-left  "Hello world how are you" s:theme=light s:last_lang=en i:width_pct=65 i:kb_offset=0
 check type-narrow-right "اللوحة فيها غلط" s:theme=light s:last_lang=ar i:width_pct=65 i:kb_offset=100
 
@@ -544,8 +552,6 @@ if [ "$SKIP" != 1 ]; then
   adb shell am start -W -n $PKG/.ui.MainActivity --ez hide_icon true > /dev/null
   sleep 4
   shot hide-icon-2
-  adb shell uiautomator dump /sdcard/hide.xml > /dev/null 2>&1
-  adb exec-out cat /sdcard/hide.xml > "$OUT/hide-icon-dump-1.xml" 2>/dev/null
   GONE=0
   for i in $(seq 1 14); do
     sleep 3
@@ -554,14 +560,9 @@ if [ "$SKIP" != 1 ]; then
       *"$PKG/"*) ;;
       *) say "hide-icon: the shortcut is off after about $((i * 3 + 4)) s (targets=[$T])"; GONE=1; break ;;
     esac
-    if [ "$i" = 3 ]; then
-      shot hide-icon-3
-      adb shell uiautomator dump /sdcard/hide.xml > /dev/null 2>&1
-      adb exec-out cat /sdcard/hide.xml > "$OUT/hide-icon-dump-2.xml" 2>/dev/null
-    fi
   done
   if [ "$GONE" = 1 ]; then say "CHECK hide-icon: ok"; else say "CHECK hide-icon: FAIL targets still [$T]"; fi
-  sleep 7
+  sleep 8
   shot hide-icon-4
   adb logcat -d 2>/dev/null | grep "Omega/hider" > "$OUT/hide-icon-log.txt"
   say "hide-icon log: $(wc -l < "$OUT/hide-icon-log.txt") lines"
