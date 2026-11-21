@@ -677,6 +677,25 @@ object CoreTests {
         val ar = ShortcutRows.plan(servicePage(shortcutOn = true, arabic = true), SVC)
         check("Arabic page: press its switch", ar is ShortcutRows.Plan.Press && ar.kind == ShortcutRows.Kind.SWITCH && ar.node.top in 560..760) { "$ar" }
         check("Arabic page, off: done", ShortcutRows.plan(servicePage(shortcutOn = false, arabic = true), SVC) === ShortcutRows.Plan.Done)
+        // the page as Android 14 really draws it (read on an emulator): the row's text is not pressable and its switch is a node of its own
+        // that carries the label "Shortcut settings"; the service's own switch sits in its bar
+        fun real(on: Boolean): Screen {
+            val r = SB()
+            r.add("Omega Keyboard - قراءة الشاشة", 128, 275)
+            val bar = r.add(t = 709, b = 1065, clickable = true)
+            r.add("Use Omega Keyboard - قراءة الشاشة", 814, 960, parent = bar, l = 116, r = 776)
+            r.add(t = 824, b = 950, parent = bar, l = 839, r = 985, checkable = true, checked = true)
+            r.add("Options", 1128, 1179)
+            val row = r.add(t = 1200, b = 1472, r = 846, clickable = true)
+            r.add("Omega Keyboard - قراءة الشاشة shortcut", 1242, 1379, parent = row, l = 63, r = 846)
+            r.add(if (on) "On" else "Off", 1379, 1430, parent = row, l = 63, r = 114)
+            r.add("Shortcut settings", 1200, 1472, l = 849, r = 1038, checkable = true, checked = on, clickable = true)
+            r.add("Settings", 1514, 1585)
+            return r.screen()
+        }
+        val realOn = ShortcutRows.plan(real(true), SVC)
+        check("Android 14 page, shortcut on: press the row's switch", realOn is ShortcutRows.Plan.Press && realOn.kind == ShortcutRows.Kind.SWITCH && realOn.node.top in 1200..1472) { "$realOn" }
+        check("Android 14 page, shortcut off: done", ShortcutRows.plan(real(false), SVC) === ShortcutRows.Plan.Done)
         // a row with no switch of its own opens the choices when pressed
         val noSwitch = ShortcutRows.plan(servicePage(shortcutOn = true, rowHasSwitch = false), SVC)
         check("row without a switch: press the row", noSwitch is ShortcutRows.Plan.Press && noSwitch.kind == ShortcutRows.Kind.ROW) { "$noSwitch" }

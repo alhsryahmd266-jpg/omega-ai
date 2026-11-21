@@ -174,14 +174,20 @@ object ShortcutHider {
         if (how != "fail") backToApp(app, svc)
     }
 
-    /** from the Settings page back to the app, with the Back button, a few times at most */
+    /** is the Settings app the one in front? (what the screen reader sees; our own app and the system bars are not listed by it) */
+    private fun settingsInFront(svc: AccessibilityService): Boolean {
+        val snap = ScreenReader.read(svc) ?: return false
+        return try { isSettings(snap.screen.pkg) } finally { snap.release() }
+    }
+
+    /** from the Settings page back to the app, with the Back button, while Settings is still in front (a few times at most) */
     private fun backToApp(app: Context, svc: AccessibilityService) {
-        Thread.sleep(1000)
-        repeat(4) {
-            val top = try { svc.rootInActiveWindow?.packageName?.toString() } catch (_: Throwable) { null }
-            if (top == app.packageName) return
+        repeat(4) { n ->
+            Thread.sleep(if (n == 0) 1200L else 900L)
+            val still = settingsInFront(svc)
+            AppLog.d("hider", "back $n: settings in front = $still")
+            if (!still) return
             svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-            Thread.sleep(800)
         }
     }
 }

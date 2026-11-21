@@ -561,8 +561,10 @@ if [ "$SKIP" != 1 ]; then
     fi
   done
   if [ "$GONE" = 1 ]; then say "CHECK hide-icon: ok"; else say "CHECK hide-icon: FAIL targets still [$T]"; fi
-  sleep 3
+  sleep 7
   shot hide-icon-4
+  adb logcat -d 2>/dev/null | grep "Omega/hider" > "$OUT/hide-icon-log.txt"
+  say "hide-icon log: $(wc -l < "$OUT/hide-icon-log.txt") lines"
   # leave the phone as it was for the scenarios after this one
   adb shell settings delete secure accessibility_button_targets
   adb shell settings delete secure accessibility_button_mode

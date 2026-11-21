@@ -57,6 +57,8 @@ class KeyboardView(ctx: Context) : View(ctx) {
         fun onFeedback(kind: KeyKind)
         /** resize mode: a drag of an edge ended; these are the scales the view shows now (not percentages) */
         fun onResized(heightScale: Float, widthScale: Float, alignFrac: Float)
+        /** resize mode: the finger asked for more than the screen's width can give the keys (once per drag) */
+        fun onResizeLimit() {}
     }
 
     var listener: Listener? = null
@@ -1137,6 +1139,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
     /** the rows' scale and the keys area's width as they were when the drag began: a side handle keeps the keys' shape between them */
     private var rzScale0 = 1f
     private var rzW0 = 1f
+    private var rzLimitTold = false
 
     private fun areaLeft(): Float {
         val side = dp(2f)
@@ -1217,6 +1220,7 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 rzR0 = areaRight()
                 rzScale0 = rowScale
                 rzW0 = widthScale.coerceIn(MIN_WIDTH_PCT / 100f, 1f)
+                rzLimitTold = false
                 parent?.requestDisallowInterceptTouchEvent(true)
                 invalidate()
             }
@@ -1258,6 +1262,11 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 // the area grows around the place it has (left, middle or right), so it grows to the side where there is room
                 if (s.w != widthScale) widthScale = s.w
                 heightScale = s.h
+                // the finger went well past the biggest size the screen allows: say why it stopped (once per drag)
+                if (!rzLimitTold && want > s.h + 0.04f && KeySize.atMost(s.h, s.w, viewW, density)) {
+                    rzLimitTold = true
+                    listener?.onResizeLimit()
+                }
             }
             RZ_LEFT -> {
                 setArea((rzL0 + (rawX - rzRawX)).coerceIn(side, rzR0 - minUsable), rzR0)

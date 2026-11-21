@@ -580,6 +580,10 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
 
     private fun isLandscape() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    override fun onResizeLimit() {
+        Notice.toast(this, "ده أقصى حجم: الكيبورد واخد عرض الشاشة كله، ولو كبّرناه أكتر الزراير هتطول بس وتبقى شكلها وحش", long = false)
+    }
+
     override fun onResized(heightScale: Float, widthScale: Float, alignFrac: Float) {
         prefs.heightPct = Math.round(heightScale / (if (isLandscape()) LANDSCAPE_HEIGHT else 1f) * 100f)
             .coerceIn(KeyboardView.MIN_HEIGHT_PCT, KeyboardView.MAX_HEIGHT_PCT)
