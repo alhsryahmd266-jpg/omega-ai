@@ -219,13 +219,16 @@ class BotService : Service() {
         val tactics = Tactics(
             sneak = cfg.tacticSneak, ambush = cfg.tacticAmbush, dodge = cfg.tacticDodge, jump = cfg.tacticJump,
             crouch = cfg.tacticCrouch, style = cfg.style, mapAllies = cfg.allyMapEnabled, squad = cfg.squadFollow,
-            fovDeg = cfg.fovDeg.toFloat(), mapEnemies = cfg.enemyMapEnabled, memory = cfg.tacticMemory, lead = cfg.tacticLead
+            fovDeg = cfg.fovDeg.toFloat(), mapEnemies = cfg.enemyMapEnabled, memory = cfg.tacticMemory, lead = cfg.tacticLead,
+            brainBlend = if (cfg.brainFile.isNotEmpty()) cfg.brainBlend else 0f
         )
         if (cfg.allyMapEnabled || cfg.enemyMapEnabled) mapReader = AllyMapReader(cfg)
         if (detector != null && cfg.tacticDodge) hitDetector = HitDetector(cfg.hitSensitivity)
         if (cfg.healthEnabled) healthReader = HealthReader(cfg)
         val base: Policy = if (detector != null) {
-            TacticalPolicy(cfg.skill, cfg.aimScale, cfg.crossX, cfg.crossY, tactics)
+            val bm = if (cfg.brainFile.isNotEmpty()) TfliteBrain.load(File(cfg.brainFile)) else null
+            if (cfg.brainFile.isNotEmpty() && bm == null) { Logger.i("brain file could not be loaded -> rules only"); toast("ملف العقل مش مناسب — هيشتغل بالقواعد") }
+            TacticalPolicy(cfg.skill, cfg.aimScale, cfg.crossX, cfg.crossY, tactics, bm?.let { BrainRunner(it) })
         } else {
             MonkeyPolicy()
         }

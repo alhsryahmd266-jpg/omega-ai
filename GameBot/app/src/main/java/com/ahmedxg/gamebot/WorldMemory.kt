@@ -224,6 +224,9 @@ class WorldMemory(private val fovDeg: Float) {
 
     fun ghostCount(): Int = ghosts.size
 
+    /** Lets an outside influence (the learned brain) steer where the bot is exploring toward, instead of fighting the heading hold. */
+    fun nudgeHeading(deg: Float) { heading = norm(heading + deg) }
+
     /**
      * How far (screen fraction) to aim ahead of the enemy at screen offset [relScreen] from the crosshair: its
      * world bearing rate (our own turning already removed) times the loop latency. Small rates are ignored as noise.

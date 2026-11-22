@@ -546,7 +546,8 @@ class MainActivity : Activity() {
     private fun refresh() {
         wizardBtn.text = nextStep().text
         gameTv.text = if (cfg.gamePackage.isEmpty()) "اللعبة: لسه ما اتحددتش" else "اللعبة: ${cfg.gamePackage}"
-        modelTv.text = if (cfg.modelFile.isEmpty()) "مفيش نموذج (وضع Monkey بس)" else "النموذج: ${File(cfg.modelFile).name}"
+        modelTv.text = (if (cfg.modelFile.isEmpty()) "مفيش نموذج (وضع Monkey بس)" else "النموذج: ${File(cfg.modelFile).name}") +
+            (if (cfg.brainFile.isNotEmpty() && File(cfg.brainFile).exists()) "\nالعقل: ${File(cfg.brainFile).name}" else "")
         statusTv.text = statusText()
         logTv.text = Logger.tail(40)
     }
@@ -794,7 +795,18 @@ class MainActivity : Activity() {
                 if (resultCode == RESULT_OK && uri != null) {
                     try {
                         if (requestCode == REQ_MODEL) {
-                            cfg.modelFile = importUri(uri, "detector.tflite")
+                            // one import button for both models: the brain network has a 2-D input, the detector an image input
+                            val tmp = File(importUri(uri, "import_tmp.tflite"))
+                            val dir = tmp.parentFile!!
+                            if (TfliteBrain.isBrainFile(tmp)) {
+                                val dst = File(dir, "brain.tflite")
+                                tmp.copyTo(dst, true); tmp.delete()
+                                cfg.brainFile = dst.absolutePath
+                            } else {
+                                val dst = File(dir, "detector.tflite")
+                                tmp.copyTo(dst, true); tmp.delete()
+                                cfg.modelFile = dst.absolutePath
+                            }
                         } else {
                             cfg.labelsFile = importUri(uri, "labels.txt")
                         }

@@ -37,7 +37,8 @@ class Tactics(
     val fovDeg: Float = 80f,          // horizontal field of view, used to turn a screen position into a bearing
     val mapEnemies: Boolean = false,  // react to red enemy dots on the minimap (turn toward them)
     val memory: Boolean = false,      // WorldMemory: remember enemies/danger/explored ground, track out-of-view enemies
-    val lead: Boolean = false         // aim slightly ahead of a target that strafes (needs memory)
+    val lead: Boolean = false,        // aim slightly ahead of a target that strafes (needs memory)
+    val brainBlend: Float = 0f        // 0 = rules only; >0 mixes in the learned brain's movement (and camera sweeps while searching)
 )
 
 /** What the bot wants to do right now. Translated into touches by [Controller]. */

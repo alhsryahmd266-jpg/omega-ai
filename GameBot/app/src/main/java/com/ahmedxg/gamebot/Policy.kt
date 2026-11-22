@@ -85,12 +85,15 @@ class MonkeyPolicy : Policy {
  * close enemy. Never fires while an ally covers the aim point. The match plan ([Style]), the skill level and the
  * [Tactics] switches decide what is used and how aggressively.
  */
+private val BRAIN_STATES = setOf("DUEL", "STALK", "STRIKE", "EXPLORE", "SEARCH", "TRACK", "PEEK")
+
 class TacticalPolicy(
     private val skill: Skill,
     private val aimScale: Float,
     private val crossX: Float,
     private val crossY: Float,
-    private val tactics: Tactics = Tactics()
+    private val tactics: Tactics = Tactics(),
+    private val brain: BrainRunner? = null
 ) : Policy {
     private val style = tactics.style
     private val monkey = MonkeyPolicy()
@@ -139,8 +142,31 @@ class TacticalPolicy(
     override fun decide(p: Perception, now: Long): Action {
         mem?.integrate(now, prevAct, p.screenW)
         val act = decideCore(p, now)
+        if (brain != null && tactics.brainBlend > 0f) applyBrain(brain, p, now, act)
         prevAct = act
         return act
+    }
+
+    private var lastBrainT = 0L
+
+    /**
+     * Mixes the learned brain into the rules. It only touches states where the rules have no special reason to move a
+     * particular way (fighting at range, searching): never retreat / dodge / heal / avoid / ambush / hit-scan / evade.
+     */
+    private fun applyBrain(b: BrainRunner, p: Perception, now: Long, a: Action) {
+        val out = b.step(p.dets, now) ?: return
+        val dt = if (lastBrainT == 0L) 0.05f else ((now - lastBrainT).coerceIn(10L, 250L)) / 1000f
+        lastBrainT = now
+        if (a.state !in BRAIN_STATES) return
+        val w = tactics.brainBlend.coerceIn(0f, 1f)
+        a.moveX = a.moveX * (1f - w) + out.moveX * w
+        a.moveY = a.moveY * (1f - w) + out.moveY * w
+        if (a.state == "EXPLORE" || a.state == "SEARCH") {
+            // human-like camera sweeps while nothing is in sight
+            val degPerPx = mem?.degPerPx ?: (tactics.fovDeg / max(1, p.screenW))
+            val yawDeg = out.yawRate * BrainSpec.YAW_SCALE * tactics.fovDeg * dt * w * 0.5f
+            if (mem != null) mem.nudgeHeading(yawDeg) else a.lookDx += yawDeg / degPerPx
+        }
     }
 
     private fun decideCore(p: Perception, now: Long): Action {
