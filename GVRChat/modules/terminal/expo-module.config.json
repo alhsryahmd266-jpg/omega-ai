@@ -1,7 +1,0 @@
-{
-  "name": "terminal",
-  "platforms": ["android"],
-  "android": {
-    "modules": ["expo.modules.terminal.TerminalModule"]
-  }
-}
