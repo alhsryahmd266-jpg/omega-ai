@@ -1,0 +1,16 @@
+{
+  "rounds": [
+    {
+      "round": 0,
+      "accepted": true,
+      "train": 5683,
+      "val": 1005,
+      "videos": 3,
+      "val_mse": 0.023402724415063858,
+      "baseline_mse": 0.09972076863050461,
+      "aim_direction_agree": 0.9428571428571428,
+      "turn_toward_enemy_brain": 0.65,
+      "turn_toward_enemy_human": 0.7
+    }
+  ]
+}

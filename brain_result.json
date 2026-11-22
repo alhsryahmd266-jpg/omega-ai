@@ -1,0 +1,71 @@
+{
+  "errors": [],
+  "videos": {
+    "v1.mp4": {
+      "frames": 2962,
+      "valid_action_share": 0.9915597438812256,
+      "samples": 2937,
+      "enemy_frames": 362,
+      "seconds": 314
+    },
+    "v2.mp4": {
+      "frames": 3077,
+      "valid_action_share": 0.8462788462638855,
+      "samples": 2604,
+      "enemy_frames": 99,
+      "seconds": 320
+    },
+    "v3.mp4": {
+      "frames": 2102,
+      "valid_action_share": 0.5456708073616028,
+      "samples": 1147,
+      "enemy_frames": 71,
+      "seconds": 212
+    }
+  },
+  "cuda": false,
+  "smoke_export": {
+    "input": [
+      1,
+      24
+    ],
+    "output": [
+      1,
+      4
+    ],
+    "max_abs_diff_vs_torch": 5.960464477539063e-08
+  },
+  "data": {
+    "train": 5683,
+    "val": 1005,
+    "train_enemy_share": 0.07953545451164246
+  },
+  "epochs_run": 66,
+  "after": {
+    "mse": 0.023402724415063858,
+    "n": 1005,
+    "baseline_mse_mean": 0.09972076863050461,
+    "persistence_mse": 0.02528483420610428,
+    "aim_direction_agree": 0.9428571428571428,
+    "forward_back_agree": 0.9837177747625508,
+    "turn_toward_enemy_human": 0.7,
+    "turn_toward_enemy_brain": 0.65,
+    "n_enemy_turn_samples": 20
+  },
+  "gate": {
+    "beats_baseline_by_8pct": true,
+    "not_worse_than_previous": true
+  },
+  "accepted": true,
+  "tflite": {
+    "input": [
+      1,
+      24
+    ],
+    "output": [
+      1,
+      4
+    ],
+    "max_abs_diff_vs_torch": 1.1920928955078125e-07
+  }
+}
