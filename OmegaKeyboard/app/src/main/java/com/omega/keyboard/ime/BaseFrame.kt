@@ -14,6 +14,19 @@ import kotlin.math.max
  * the window then covers the app and the keys sit at the top of it.
  */
 class BaseFrame(ctx: Context) : FrameLayout(ctx) {
+    /**
+     * The least height, px, this frame has while something is laid over its first child (a panel). The square keyboard is short and
+     * the panels (emoji, clipboard, fonts, languages) need room for their lists, so the frame is taller while one is open and goes
+     * back to the keyboard's height when it closes. 0 = always the first child's height.
+     */
+    var minOverlayHeight: Int = 0
+        set(v) { if (field != v) { field = v; requestLayout() } }
+
+    private fun hasOverlay(): Boolean {
+        for (i in 1 until childCount) if (getChildAt(i).visibility != View.GONE) return true
+        return false
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val base = if (childCount > 0) getChildAt(0) else null
         var w = 0
@@ -24,6 +37,7 @@ class BaseFrame(ctx: Context) : FrameLayout(ctx) {
             w = base.measuredWidth + lp.leftMargin + lp.rightMargin
             h = base.measuredHeight + lp.topMargin + lp.bottomMargin
         }
+        if (minOverlayHeight > 0 && hasOverlay()) h = max(h, minOverlayHeight)
         w += paddingLeft + paddingRight
         h += paddingTop + paddingBottom
         val rw = resolveSize(max(w, suggestedMinimumWidth), widthMeasureSpec)

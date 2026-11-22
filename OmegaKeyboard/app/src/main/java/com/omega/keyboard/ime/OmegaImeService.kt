@@ -74,6 +74,9 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         /** in landscape the keys are lower, so the app above still has room */
         private const val LANDSCAPE_HEIGHT = 0.78f
 
+        /** portrait: the least height, dp, of the area a panel (emoji, clipboard, fonts, languages) has: the height the old keyboard had */
+        private const val PANEL_MIN_DP = 222f
+
         /** a moment after the last key of the translate bar, the text is translated */
         private const val TR_DELAY = 320L
         private const val TR_WAIT_AFTER = 2500L
@@ -478,6 +481,8 @@ class OmegaImeService : InputMethodService(), KeyboardView.Listener, StripView.L
         k.fxLuxe = prefs.fxLuxe
         if (!prefs.fxLuxe || !theme.fancy) tilt.stop() else if (isInputViewShown) tilt.start()
         k.showPreview = prefs.keyPreview
+        // the square keyboard is short: while a panel (emoji, clipboard, fonts, languages) is open it gets the room the old keyboard had
+        (content as? BaseFrame)?.minOverlayHeight = if (landscape) 0 else (PANEL_MIN_DP * resources.displayMetrics.density).toInt()
     }
 
     private fun layoutFor(p: LayoutKind): Layout = when (p) {

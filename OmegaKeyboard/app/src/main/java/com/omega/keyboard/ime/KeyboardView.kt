@@ -1198,11 +1198,12 @@ class KeyboardView(ctx: Context) : View(ctx) {
         rf.set(l + dp(1.5f), dp(1.5f), r - dp(1.5f), h - dp(1.5f))
         c.drawRoundRect(rf, dp(10f), dp(10f), rzPaint)
         // the three handles: top (height), left and right (width)
-        fun pill(left: Float, top: Float, right: Float, bottom: Float, active: Boolean) {
+        fun pill(left: Float, top: Float, right: Float, bottom: Float, active: Boolean, line: Boolean = true) {
             rzPaint.style = Paint.Style.FILL
             rzPaint.color = if (active) t.onAccent else t.accent
             rf.set(left, top, right, bottom)
-            c.drawRoundRect(rf, dp(6f), dp(6f), rzPaint)
+            c.drawRoundRect(rf, dp(7f), dp(7f), rzPaint)
+            if (!line) return
             rzPaint.color = if (active) t.accent else t.onAccent
             rzPaint.style = Paint.Style.STROKE
             rzPaint.strokeWidth = dp(1.6f)
@@ -1215,18 +1216,19 @@ class KeyboardView(ctx: Context) : View(ctx) {
                 c.drawLine(x, top + dp(16f), x, bottom - dp(16f), rzPaint)
             }
         }
-        pill(cx - dp(40f), dp(4f), cx + dp(40f), dp(16f), rzPart == RZ_TOP)
+        // the top handle carries the readout of the size (no line through it: the text would be struck out)
+        pill(cx - dp(42f), dp(3f), cx + dp(42f), dp(21f), rzPart == RZ_TOP, line = false)
         pill(l + dp(4f), h / 2f - dp(40f), l + dp(16f), h / 2f + dp(40f), rzPart == RZ_LEFT)
         pill(r - dp(16f), h / 2f - dp(40f), r - dp(4f), h / 2f + dp(40f), rzPart == RZ_RIGHT)
-        // what the size is now, in the middle of the top handle's bar
-        textPaint.color = t.onAccent
-        textPaint.textSize = dp(9f)
+        // what the size is now, in the middle of the top handle's bar (the text is drawn in the colour the bar's line would have)
+        textPaint.color = if (rzPart == RZ_TOP) t.accent else t.onAccent
+        textPaint.textSize = dp(10f)
         textPaint.isFakeBoldText = true
         // square keys: the size is the share of the screen's width the keyboard takes; landscape: the height of the rows
         val pct = Math.round((if (squareKeys) zoom else rowScale) * 100f)
         // at the biggest the screen allows (all of its width, the tallest rows) the readout says so: the edge stops there
         val top = if (squareKeys) KeySize.fullWidth(widthScale) else KeySize.atMost(rowScale, widthScale, viewWidthPx(), density)
-        drawCentered(c, if (top) "$pct% · أقصى" else "$pct%", cx, dp(10f))
+        drawCentered(c, if (top) "$pct% · أقصى" else "$pct%", cx, dp(12f))
         textPaint.isFakeBoldText = false
     }
 
