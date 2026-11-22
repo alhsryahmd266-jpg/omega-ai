@@ -1,0 +1,253 @@
+{
+  "model": "yolo26n",
+  "errors": [],
+  "synthetic": {
+    "crops": 420,
+    "backgrounds": 178,
+    "images": 2500,
+    "box_height_px_p10_p50_p90": [
+      9.077255383339743,
+      22.99136013009884,
+      58.32038809727091
+    ]
+  },
+  "ultralytics": "8.4.216",
+  "before": {
+    "far": {
+      "warzone_heldout": {
+        "tiny<0.05%": {
+          "recall": 0.0,
+          "n": 2
+        },
+        "small<0.2%": {
+          "recall": 0.462,
+          "n": 26
+        },
+        "medium<0.8%": {
+          "recall": 0.848,
+          "n": 105
+        },
+        "large": {
+          "recall": 0.909,
+          "n": 505
+        },
+        "fp_per_image": 0.074
+      },
+      "mobile_val": {
+        "tiny<0.05%": {
+          "recall": null,
+          "n": 0
+        },
+        "small<0.2%": {
+          "recall": 1.0,
+          "n": 4
+        },
+        "medium<0.8%": {
+          "recall": 0.964,
+          "n": 28
+        },
+        "large": {
+          "recall": 0.909,
+          "n": 11
+        },
+        "fp_per_image": 0.049
+      }
+    },
+    "video": {
+      "enemy_recall": {
+        "recall": 0.7,
+        "n": 10
+      },
+      "hardneg_frames_with_false_detection": {
+        "rate": 0.0,
+        "n": 9
+      },
+      "quiet_frames_with_false_detection": {
+        "rate": 0.036,
+        "n": 55
+      }
+    },
+    "mobile": {
+      "val": {
+        "map50": 0.9535958396615002,
+        "map50_95": 0.5048456007004989,
+        "precision": 0.9088389406792318,
+        "recall": 0.927460905611085
+      },
+      "test": {
+        "map50": 0.995,
+        "map50_95": 0.4732639248006896,
+        "precision": 0.9954660682176388,
+        "recall": 1.0
+      }
+    }
+  },
+  "chunks": [
+    {
+      "chunk": 0,
+      "minutes": 49,
+      "tiny_recall": 0.0,
+      "small_recall": 0.423,
+      "medium_recall": 0.857,
+      "large_recall": 0.941,
+      "hardneg_false_alarms": 0.111,
+      "enemy_recall_video": 0.8
+    },
+    {
+      "chunk": 1,
+      "minutes": 97,
+      "tiny_recall": 0.0,
+      "small_recall": 0.385,
+      "medium_recall": 0.695,
+      "large_recall": 0.844,
+      "hardneg_false_alarms": 0.222,
+      "enemy_recall_video": 0.7
+    },
+    {
+      "chunk": 2,
+      "minutes": 146,
+      "tiny_recall": 0.0,
+      "small_recall": 0.385,
+      "medium_recall": 0.81,
+      "large_recall": 0.774,
+      "hardneg_false_alarms": 0.444,
+      "enemy_recall_video": 0.8
+    },
+    {
+      "chunk": 3,
+      "minutes": 194,
+      "tiny_recall": 0.0,
+      "small_recall": 0.423,
+      "medium_recall": 0.848,
+      "large_recall": 0.937,
+      "hardneg_false_alarms": 0.111,
+      "enemy_recall_video": 0.6
+    },
+    {
+      "chunk": 4,
+      "minutes": 243,
+      "tiny_recall": 0.0,
+      "small_recall": 0.5,
+      "medium_recall": 0.867,
+      "large_recall": 0.933,
+      "hardneg_false_alarms": 0.222,
+      "enemy_recall_video": 0.6
+    }
+  ],
+  "target_small_reached": false,
+  "after": {
+    "far": {
+      "warzone_heldout": {
+        "tiny<0.05%": {
+          "recall": 0.0,
+          "n": 2
+        },
+        "small<0.2%": {
+          "recall": 0.5,
+          "n": 26
+        },
+        "medium<0.8%": {
+          "recall": 0.867,
+          "n": 105
+        },
+        "large": {
+          "recall": 0.933,
+          "n": 505
+        },
+        "fp_per_image": 0.121
+      },
+      "mobile_val": {
+        "tiny<0.05%": {
+          "recall": null,
+          "n": 0
+        },
+        "small<0.2%": {
+          "recall": 1.0,
+          "n": 4
+        },
+        "medium<0.8%": {
+          "recall": 0.964,
+          "n": 28
+        },
+        "large": {
+          "recall": 0.909,
+          "n": 11
+        },
+        "fp_per_image": 0.024
+      }
+    },
+    "video": {
+      "enemy_recall": {
+        "recall": 0.6,
+        "n": 10
+      },
+      "hardneg_frames_with_false_detection": {
+        "rate": 0.222,
+        "n": 9
+      },
+      "quiet_frames_with_false_detection": {
+        "rate": 0.164,
+        "n": 55
+      }
+    },
+    "mobile": {
+      "val": {
+        "map50": 0.9650793650793652,
+        "map50_95": 0.48804177608757604,
+        "precision": 0.9658191898522528,
+        "recall": 0.9534883720930233
+      },
+      "test": {
+        "map50": 0.9885999999999998,
+        "map50_95": 0.4844350832862789,
+        "precision": 0.9878540923895988,
+        "recall": 0.9523809523809523
+      }
+    }
+  },
+  "gate": {
+    "checks": {
+      "enemy_recall": [
+        0.6,
+        0.7
+      ],
+      "own_avatar_false_alarms": [
+        0.0,
+        0.222
+      ],
+      "far_medium_recall": [
+        0.867,
+        0.848
+      ],
+      "mobile_map50": [
+        0.9650793650793652,
+        0.9535958396615002
+      ],
+      "far_small_recall": [
+        0.5,
+        0.462
+      ]
+    },
+    "passed": {
+      "enemy_recall": false,
+      "own_avatar_false_alarms": false,
+      "far_medium_recall": true,
+      "mobile_map50": true,
+      "far_small_recall": true
+    }
+  },
+  "accepted": false,
+  "tflite_io": [
+    [
+      1,
+      1152,
+      1152,
+      3
+    ],
+    [
+      1,
+      5,
+      110160
+    ]
+  ]
+}

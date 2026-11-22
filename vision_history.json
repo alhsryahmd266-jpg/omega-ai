@@ -1,0 +1,44 @@
+{
+  "rounds": [
+    {
+      "round": 0,
+      "accepted": true,
+      "note": "start: yolo26n-p2 at 1152, trained on Warzone + mobile COD sets + 2 gameplay videos (about 10 minutes)"
+    },
+    {
+      "round": 1,
+      "accepted": false,
+      "train_images": 6273,
+      "video_train_frames": 820,
+      "before": {
+        "enemy_recall": {
+          "recall": 0.7,
+          "n": 10
+        },
+        "hardneg_frames_with_false_detection": {
+          "rate": 0.0,
+          "n": 9
+        },
+        "quiet_frames_with_false_detection": {
+          "rate": 0.036,
+          "n": 55
+        }
+      },
+      "after": {
+        "enemy_recall": {
+          "recall": 0.6,
+          "n": 10
+        },
+        "hardneg_frames_with_false_detection": {
+          "rate": 0.222,
+          "n": 9
+        },
+        "quiet_frames_with_false_detection": {
+          "rate": 0.164,
+          "n": 55
+        }
+      },
+      "mobile_map50_after": 0.9650793650793652
+    }
+  ]
+}
