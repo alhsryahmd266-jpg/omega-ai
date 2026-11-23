@@ -1,0 +1,29 @@
+name: Resolution experiment (CPU, no GPU quota)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  exp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -q opencv-python-headless numpy
+      - name: Run
+        run: |
+          cp GameBot/training/kaggle_yolo26/synth_lib.py . 
+          cp GameBot/training/kaggle_yolo26/res_eval.py .
+          python3 res_eval.py 2>&1 | tee res_eval.log
+      - name: Publish
+        if: always()
+        run: |
+          mkdir -p /tmp/o && cp res_eval.json res_eval.log /tmp/o/ 2>/dev/null || echo none > /tmp/o/none.txt
+          cd /tmp/o && git init -q -b res-eval && git add . && git -c user.name=gh-actions -c user.email=actions@github.com commit -q -m res
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" res-eval || true
