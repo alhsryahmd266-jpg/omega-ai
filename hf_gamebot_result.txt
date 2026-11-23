@@ -1,0 +1,62 @@
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 25.5MB / 25.5MB,   ???B/s  
+New Data Upload               : 100%|█████████▉| 25.5MB / 25.5MB,   ???B/s  [A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|█████████▉| 25.5MB / 25.5MB            [A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|██████████| 25.5MB / 25.5MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 25.5MB / 25.5MB, 2.37MB/s  
+New Data Upload               : 100%|██████████| 25.5MB / 25.5MB, 2.37MB/s  [A
+
+
+Validating                    :           |   0%            [A[A[A
+
+
+Validating                    :           |   0%            [A[A[A
+
+  ...ga-ai/GameBot-auto-13.apk: 100%|██████████| 25.5MB / 25.5MB            [A[A
+
+
+Validating                    : ██████████| 100%            [A[A[AProcessing Files (1 / 1)      : 100%|██████████| 25.5MB / 25.5MB, 2.37MB/s  
+New Data Upload               : 100%|██████████| 25.5MB / 25.5MB, 2.37MB/s  
+Validating                    : ██████████| 100%            
+  ...ga-ai/GameBot-auto-13.apk: 100%|██████████| 25.5MB / 25.5MB            
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...a-ai/GameBot-training.zip: 100%|██████████| 52.5kB / 52.5kB            [A[A
+
+  ...a-ai/GameBot-training.zip: 100%|██████████| 52.5kB / 52.5kB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 52.5kB / 52.5kB,   ???B/s  
+New Data Upload               : 100%|██████████| 52.5kB / 52.5kB,   ???B/s  [A
+
+  ...a-ai/GameBot-training.zip: 100%|██████████| 52.5kB / 52.5kB            [A[A
+
+  ...a-ai/GameBot-training.zip: 100%|██████████| 52.5kB / 52.5kB            [A[A
+
+
+Validating                    :           |   0%            [A[A[A
+
+
+Validating                    :           |   0%            [A[A[A
+
+  ...a-ai/GameBot-training.zip: 100%|██████████| 52.5kB / 52.5kB            [A[A
+
+
+Validating                    : ██████████| 100%            [A[A[AProcessing Files (1 / 1)      : 100%|██████████| 52.5kB / 52.5kB, 5.14kB/s  
+New Data Upload               : 100%|██████████| 52.5kB / 52.5kB, 5.14kB/s  
+Validating                    : ██████████| 100%            
+  ...a-ai/GameBot-training.zip: 100%|██████████| 52.5kB / 52.5kB            
+UPLOADED GameBot.apk + GameBot-training.zip to ahmedxg/gvr-chat-app
