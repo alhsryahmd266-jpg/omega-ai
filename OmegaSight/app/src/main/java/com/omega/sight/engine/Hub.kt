@@ -60,6 +60,15 @@ class Stats {
 
     @Volatile var error = ""
 
+    /** one line with every number, for the debug log of the emulator run */
+    fun logLine(): String = String.format(
+        java.util.Locale.US,
+        "%dx%d fps=%.1f frameMs=%.1f motionMs=%.1f farMs=%.1f glowMs=%.1f | motion=%d far=%d glow=%d model=%d tracks=%d picked=%s ego=%.2f hud=%d/%b | verdict=%s | " +
+            "calibrated=%b rel=(%.2f,%.2f) lag=%.1f conf=%.2f | strokes sent=%d done=%d cancelled=%d failed=%d | vision=%s %.1fms gpu=%b brain=%s | err=%s",
+        w, h, fps, frameMs, motionMs, farMs, glowMs, nMotion, nFar, nGlow, nModel, nTracks, picked, egoSpeed, hudPairs, hudReady, verdict.name,
+        calibrated, relX, relY, lag, confidence, strokesSent, strokesDone, strokesCancelled, strokesFailed, visionStatus, visionMs, visionGpu, brainStatus, error,
+    )
+
     fun clear() {
         running = false
         fps = 0f

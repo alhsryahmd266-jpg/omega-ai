@@ -1,11 +1,13 @@
 package com.omega.sight.engine
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Process
+import android.util.Log
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import com.omega.sight.Prefs
@@ -115,6 +117,10 @@ class Engine(private val app: Context) {
     private val brainIn = FloatArray(BrainSpec.IN)
     private var calibPkg = ""
     private var lastSaved = 0L
+
+    /** a debug build (the emulator run on CI) writes the numbers to the log every two seconds or so; the release APK never does */
+    private val debugLog = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    private var lastLogNs = 0L
 
     /** the capture service calls this for every new picture */
     fun onImage(reader: ImageReader) {
@@ -507,6 +513,11 @@ class Engine(private val app: Context) {
         st.confidence = aim.confidence
         val frameMs = (System.nanoTime() - t0) / 1e6f
         st.frameMs = if (st.frameMs == 0f) frameMs else 0.9f * st.frameMs + 0.1f * frameMs
+
+        if (debugLog && t0 - lastLogNs > 2_000_000_000L) {
+            lastLogNs = t0
+            Log.i("SightLive", st.logLine())
+        }
 
         val t = prev
         prev = cur

@@ -3,6 +3,7 @@ package com.omega.sight.ui
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -14,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -33,6 +35,7 @@ import com.omega.sight.engine.StillAnalyzer
 import com.omega.sight.input.SightService
 import com.omega.sight.ml.TfliteRunner
 import com.omega.sight.model.ModelStore
+import java.io.File
 import java.util.Locale
 
 /** The one screen of the app: set-up steps, the owner's files, tests, tuning and the honest limits. */
@@ -51,6 +54,8 @@ class MainActivity : Activity() {
     private lateinit var motionText: TextView
     private lateinit var motionBtn: GlowButton
     private lateinit var liveText: TextView
+    private lateinit var scroller: ScrollView
+    private val cards = LinkedHashMap<String, Card>()
     private var tuning = Tuning()
     private var ticking = false
     private var askedNotifications = false
@@ -72,6 +77,7 @@ class MainActivity : Activity() {
         val root = FrameLayout(this)
         root.setBackgroundColor(Pal.BG0)
         val sv = ScrollView(this)
+        scroller = sv
         sv.isVerticalScrollBarEnabled = false
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
@@ -87,6 +93,13 @@ class MainActivity : Activity() {
         tuningCard(col)
         limits(col)
         refresh()
+        previewCommands(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        previewCommands(intent)
     }
 
     override fun onResume() {
@@ -158,6 +171,7 @@ class MainActivity : Activity() {
         card.add(stepGame, 0)
         card.add(stepAccess, 14)
         card.add(stepCapture, 14)
+        cards["setup"] = card
         col.addView(card, lp(top = 22, ctx = this))
     }
 
@@ -258,6 +272,7 @@ class MainActivity : Activity() {
         fmt.setOnClickListener { showFormats() }
         card.add(fmt, 12)
         card.add(label(this, "الملفات بتتنسخ جوه التطبيق بس. مفيش إنترنت: التطبيق مابيحمّلش ولا بيبعت أي حاجة.", 11.5f, Pal.DIM), 8)
+        cards["files"] = card
         col.addView(card, lp(top = 16, ctx = this))
     }
 
@@ -383,6 +398,7 @@ class MainActivity : Activity() {
         liveText.typeface = Typeface.MONOSPACE
         liveText.gravity = Gravity.START
         card.add(liveText, 6)
+        cards["tests"] = card
         col.addView(card, lp(top = 16, ctx = this))
     }
 
@@ -488,6 +504,7 @@ class MainActivity : Activity() {
             recreate()
         }
         card.add(defaults, 4)
+        cards["tuning"] = card
         col.addView(card, lp(top = 16, ctx = this))
     }
 
@@ -503,6 +520,7 @@ class MainActivity : Activity() {
             "• الوهج الأحمر علامة مش دليل: أي ضوء أحمر شبهه ممكن يتلقط.",
         )
         for ((i, s) in lines.withIndex()) card.add(label(this, s, 12.5f, Pal.TEXT), if (i == 0) 0 else 8)
+        cards["limits"] = card
         col.addView(card, lp(top = 16, ctx = this))
     }
 
@@ -564,6 +582,45 @@ class MainActivity : Activity() {
             if (st.error.isNotEmpty()) lv.append("\n⚠ ${st.error}")
         }
         liveText.text = lv.toString()
+    }
+
+    // ------------------------------------------------------------------ preview commands (debug builds only)
+
+    /** true only in a debug build: the release APK ignores every command below */
+    private val debuggable: Boolean get() = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    /**
+     * Lets the emulator run on CI drive the screens without tapping blind: `am start -n com.omega.sight/.ui.MainActivity --es sight_cmd "open_all;scroll:tests"`.
+     * Commands: open_all, scroll:<card|pixels>, game:<package> (picks it as the owner's own game), start_capture, stop_capture, motion_test,
+     * test_vision, still:<file>
+     */
+    private fun previewCommands(i: Intent?) {
+        if (i == null || !debuggable) return
+        val cmd = i.getStringExtra("sight_cmd") ?: return
+        i.removeExtra("sight_cmd")
+        for (c in cmd.split(';').map { it.trim() }.filter { it.isNotEmpty() }) {
+            Log.i("SightCmd", c)
+            when {
+                c == "open_all" -> cards.values.forEach { it.setOpen(true) }
+                c.startsWith("scroll:") -> {
+                    val what = c.substring(7)
+                    scroller.post { scroller.scrollTo(0, cards[what]?.top ?: (what.toIntOrNull() ?: 0)) }
+                }
+                c.startsWith("game:") -> {
+                    prefs.gamePkg = c.substring(5)
+                    prefs.ownConfirmed = true
+                    refresh()
+                }
+                c == "start_capture" -> if (!Hub.stats.running) startActivity(Intent(this, ProjectionActivity::class.java))
+                c == "stop_capture" -> {
+                    Hub.testAim = false
+                    CaptureService.stop(this)
+                }
+                c == "motion_test" -> if (!Hub.testAim) toggleMotionTest()
+                c == "test_vision" -> testFile(ModelStore.Slot.VISION)
+                c.startsWith("still:") -> analyseImage(Uri.fromFile(File(c.substring(6))))
+            }
+        }
     }
 
     private fun toast(s: String) {

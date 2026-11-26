@@ -1,0 +1,148 @@
+name: Preview Omega Sight
+
+# Runs Omega Sight on a real Android emulator: its screens, the model self-test (with a tiny generated model, never the owner's files),
+# the image test, the accessibility service, and an end-to-end run where the app captures the screen of a stand-in game, finds its bots
+# and aims at them with real gestures. Only for pushes whose head commit message contains [preview]. Screenshots and logs are published on
+# the branch omega-sight-preview. The release APK is built by build_sight.yml, never by this workflow.
+
+on:
+  push:
+    branches: [omega-sight]
+    paths:
+      - 'OmegaSight/**'
+      - '.github/workflows/preview_sight.yml'
+      - '.github/sight/**'
+      - '.github/sight_preview/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: omega-sight-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    if: contains(github.event.head_commit.message, '[preview]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK packages
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+
+      - name: Pick the LiteRT version
+        id: lite
+        run: bash .github/sight/pick_litert.sh
+
+      - name: Check the LiteRT API
+        continue-on-error: true
+        run: bash .github/sight/check_litert_api.sh "${{ steps.lite.outputs.version }}"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Build the debug APK of the app (x86_64, for the emulator)
+        working-directory: OmegaSight
+        run: |
+          set +e
+          OK=0
+          for A in ${{ steps.lite.outputs.attempts }}; do
+            V=${A%%:*}; G=${A##*:}
+            gradle :app:assembleDebug -Pabis=x86_64 -PlitertVersion="$V" -PlitertGpu="$G" --stacktrace --no-daemon 2>&1 | tee "$RUNNER_TEMP/build.log"
+            if [ "${PIPESTATUS[0]}" -eq 0 ]; then OK=1; echo "built with litert $V (gpu delegate: $G)"; break; fi
+            grep -qE "Could not (resolve|find|download|GET)|AAR metadata|Duplicate class" "$RUNNER_TEMP/build.log" || break
+          done
+          [ "$OK" -eq 1 ]
+
+      - name: Build the stand-in game (a separate tiny project, never part of the release)
+        run: gradle -p .github/sight_preview/testgame :app:assembleDebug --stacktrace --no-daemon
+
+      # a tiny model (the same three boxes whatever the picture) so the run can open a real .tflite with the real library
+      - name: Generate a tiny test model
+        id: model
+        continue-on-error: true
+        run: |
+          python3 -m pip install --quiet tensorflow-cpu numpy
+          python3 .github/sight_preview/make_model.py "$RUNNER_TEMP/vision.tflite"
+          echo "path=$RUNNER_TEMP/vision.tflite" >> "$GITHUB_OUTPUT"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the app on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          APK: OmegaSight/app/build/outputs/apk/debug/app-debug.apk
+          GAME: .github/sight_preview/testgame/app/build/outputs/apk/debug/app-debug.apk
+          MODEL: ${{ steps.model.outputs.path }}
+          OUT: preview-out
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash .github/sight_preview/preview.sh
+
+      - name: What the run found
+        if: always()
+        run: |
+          for f in analysis-baseline.txt analysis-aim.txt errors.log; do
+            [ -f "preview-out/$f" ] || continue
+            echo "##### $f"
+            head -n 60 "preview-out/$f"
+          done
+          {
+            echo "### Emulator run"
+            for f in analysis-baseline.txt analysis-aim.txt; do
+              [ -f "preview-out/$f" ] || continue
+              echo "**$f**"; echo '```'; cat "preview-out/$f"; echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-out
+          path: preview-out
+
+      - name: Publish the screenshots
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p preview-out
+          D="$RUNNER_TEMP/preview-branch"
+          rm -rf "$D" && mkdir -p "$D"
+          cp -r preview-out/. "$D/" || true
+          rm -f "$D/20-game-baseline-keep.png"
+          printf 'Screenshots of source commit %s\n' "${{ github.sha }}" > "$D/README.txt"
+          cd "$D"
+          git init -q -b omega-sight-preview
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "preview of ${{ github.sha }}"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $AUTH" push -f "https://github.com/${{ github.repository }}.git" omega-sight-preview
+          echo "::notice title=preview::screenshots are on the branch omega-sight-preview"

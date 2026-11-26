@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Picks the LiteRT version Omega Sight is built with (LiteRT = Google's new name for TensorFlow Lite; it runs the owner's .tflite files).
-# The app reaches the library by reflection, so the one thing a version must have is the classic Interpreter classes in its jar:
-# this takes the newest stable release that has them, and lists the fallbacks to try if Gradle cannot use it.
+# The app reaches the library by reflection, so the one thing a version must have is the classic Interpreter classes in its jar
+# (the 1.x releases keep the Java package org.tensorflow.lite; the 2.x releases moved to a new API without them). This takes the newest
+# stable 1.x release that has them, and lists the fallbacks to try if Gradle cannot use it.
 #
 # Writes to $GITHUB_OUTPUT:  version=<x.y.z>   gpu=true|false   attempts="<version>:<gpu> <version>:<gpu> ..."
 set -u
@@ -13,9 +14,9 @@ ALL=$(grep -o '<version>[^<]*</version>' "$META" 2>/dev/null | sed 's/<[^>]*>//g
 echo "litert versions on maven: $ALL"
 
 KNOWN=1.4.0
-CANDS=$(printf '%s\n' $ALL | grep -E '^[0-9]+(\.[0-9]+)+$' | sort -V -r | head -6 | tr '\n' ' ')
+CANDS=$(printf '%s\n' $ALL | grep -E '^1\.[0-9]+\.[0-9]+$' | sort -V -r | head -6 | tr '\n' ' ')
 [ -n "$CANDS" ] || CANDS=$KNOWN
-echo "stable candidates, newest first: $CANDS"
+echo "stable 1.x candidates, newest first: $CANDS"
 
 CHOSEN=""
 for V in $CANDS; do
@@ -24,8 +25,12 @@ for V in $CANDS; do
   J="$T/litert-$V"; rm -rf "$J"; mkdir -p "$J"
   if ! unzip -qo "$AAR" classes.jar -d "$J" 2> /dev/null; then echo "  $V: no classes.jar in the aar"; continue; fi
   LIST=$(unzip -l "$J/classes.jar" | awk '{print $4}')
-  if echo "$LIST" | grep -qx 'com/google/ai/edge/litert/Interpreter.class' && echo "$LIST" | grep -qxF 'com/google/ai/edge/litert/Interpreter$Options.class'; then
-    echo "  $V: has Interpreter and Interpreter.Options"
+  FOUND=""
+  for PK in org/tensorflow/lite com/google/ai/edge/litert; do
+    if echo "$LIST" | grep -qxF "$PK/Interpreter.class" && echo "$LIST" | grep -qxF "$PK/Interpreter\$Options.class"; then FOUND=$PK; break; fi
+  done
+  if [ -n "$FOUND" ]; then
+    echo "  $V: has Interpreter and Interpreter.Options in $FOUND"
     CHOSEN=$V
     break
   fi

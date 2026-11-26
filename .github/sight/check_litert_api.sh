@@ -16,7 +16,15 @@ for A in litert litert-api litert-gpu litert-gpu-api; do
   fi
 done
 CP="${CP#:}"
-P=com.google.ai.edge.litert
+# the 1.x releases keep the Java package org.tensorflow.lite, newer ones use com.google.ai.edge.litert: look where the Interpreter is
+ALLCLASSES=$(for J in "$T"/*/classes.jar; do unzip -l "$J" 2> /dev/null | awk '{print $4}'; done)
+P=none
+if echo "$ALLCLASSES" | grep -qxF 'org/tensorflow/lite/Interpreter.class'; then P=org.tensorflow.lite
+elif echo "$ALLCLASSES" | grep -qxF 'com/google/ai/edge/litert/Interpreter.class'; then P=com.google.ai.edge.litert; fi
+echo "Interpreter package: $P"
+if [ "$P" = none ]; then
+  echo "classes in the jars (first 80):"; echo "$ALLCLASSES" | grep -E 'Interpreter|Tensor|Delegate' | head -80
+fi
 OUT="$T/api.txt"
 : > "$OUT"
 sig() { javap -p -classpath "$CP" "$1" 2>&1; }
@@ -62,10 +70,10 @@ if [ "$BAD" -gt 0 ]; then
   MSG=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' "$RES")
   echo "::warning title=LiteRT $V: $BAD calls the app makes were not found::$MSG"
 else
-  echo "::notice title=LiteRT $V::all the calls the app makes exist"
+  echo "::notice title=LiteRT $V::all the calls the app makes exist (package $P)"
 fi
 {
-  echo "### LiteRT $V — calls made by reflection"
+  echo "### LiteRT $V ($P) — calls made by reflection"
   echo '```'
   cat "$RES"
   echo '```'
