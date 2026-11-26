@@ -7,6 +7,7 @@ import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import com.omega.sight.Prefs
 import com.omega.sight.core.AimCmd
@@ -26,6 +27,7 @@ import com.omega.sight.core.MotionDetector
 import com.omega.sight.core.Pick
 import com.omega.sight.core.Resample
 import com.omega.sight.core.Safety
+import com.omega.sight.core.ScreenMath
 import com.omega.sight.core.TargetPicker
 import com.omega.sight.core.Tracker
 import com.omega.sight.core.Tuning
@@ -64,6 +66,13 @@ class Engine(private val app: Context) {
 
     /** the picture and the screen are turned the same way; while they are not (the phone just turned) nothing is aimed */
     private var sizeOk = true
+
+    /** the screen's density and the band along its edges that the aim keeps out of (the system's edge gestures live there) */
+    private var screenDpi = 420
+    private var margin = 100
+
+    /** nothing is aimed before this moment (uptime ms): a short pause after the screen or the picture changed its size */
+    private var settleUntil = 0L
     private var rgba = ByteArray(0)
     private val cw = 192
     private var ch = 0
@@ -174,6 +183,8 @@ class Engine(private val app: Context) {
         val changed = s[0] != screenW || s[1] != screenH
         screenW = s[0]
         screenH = s[1]
+        screenDpi = s[2]
+        margin = ScreenMath.safeMargin(screenDpi, screenW, screenH)
         sizeOk = w <= 0 || (screenW >= screenH) == (w >= h)
         val st = Hub.stats
         st.screenW = screenW
@@ -184,6 +195,7 @@ class Engine(private val app: Context) {
 
     /** everything that is worked out from the screen's size */
     private fun screenChanged() {
+        settleUntil = SystemClock.uptimeMillis() + SETTLE_MS
         if (cw > 0) aim.screenPerFrame = screenW / cw.toFloat()
         computeZone()
         rebuildMasks()
@@ -268,13 +280,17 @@ class Engine(private val app: Context) {
                 b = z[3] * ky
             }
         }
-        if (r - l < 0.12f * sw) {
-            l = 0.55f * sw
-            r = 0.95f * sw
-        }
-        if (b - t < 0.2f * sh) {
-            t = 0.15f * sh
-            b = 0.85f * sh
+        // inside the band that the system's edge gestures leave alone
+        val m = margin.toFloat()
+        l = max(l, m)
+        t = max(t, m)
+        r = min(r, sw - m)
+        b = min(b, sh - m)
+        if (r - l < 0.12f * sw || b - t < 0.2f * sh) {
+            l = max(m, 0.55f * sw)
+            r = min(sw - m, 0.92f * sw)
+            t = max(m, 0.15f * sh)
+            b = min(sh - m, 0.85f * sh)
         }
         zoneCx = (l + r) / 2f
         zoneCy = (t + b) / 2f
@@ -502,7 +518,11 @@ class Engine(private val app: Context) {
             epoch = svc.strokeEpoch
             aim.endStroke()
         }
-        val allowed = verdict == Safety.Verdict.OK && svc != null && Hub.testAim && !svc.userTouching() && sizeOk
+        // the aim only works inside the owner's own game: it has to be the app in front (our own screen does not count), the picture and the
+        // screen have to agree, and a moment has to have passed since the phone turned
+        val inGame = verdict == Safety.Verdict.OK && SightService.foreground == prefs.gamePkg
+        st.inGame = inGame
+        val allowed = inGame && svc != null && Hub.testAim && !svc.userTouching() && sizeOk && SystemClock.uptimeMillis() >= settleUntil
         if (allowed && pick != null && svc != null) {
             if (!wasAiming) aimSince = now
             val cmd: AimCmd = aim.step(pick, cross, tuning, dt)
@@ -549,5 +569,10 @@ class Engine(private val app: Context) {
         prev = cur
         cur = t
         havePrev = true
+    }
+
+    private companion object {
+        /** how long nothing is aimed after the screen or the picture changed its size (ms) */
+        const val SETTLE_MS = 1200L
     }
 }

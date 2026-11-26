@@ -564,7 +564,14 @@ class MainActivity : Activity() {
 
         motionBtn.text = if (Hub.testAim) "وقف الاختبار" else "ابدأ الاختبار"
         val sb = StringBuilder()
-        sb.append(if (Hub.testAim) "شغّال" else "واقف").append(" · ").append(Safety.explain(verdict)).append('\n')
+        sb.append(if (Hub.testAim) "شغّال" else "واقف").append(" · ").append(Safety.explain(verdict))
+        if (Hub.testAim && verdict == Safety.Verdict.OK && !st.inGame) {
+            sb.append(" · مستني اللعبة تبقى قدّامك")
+            if (SightService.foreground.isNotEmpty()) sb.append(" (قدّامك دلوقتي ${ltr(SightService.foreground)})")
+        } else if (verdict == Safety.Verdict.WRONG_APP && SightService.foreground.isNotEmpty()) {
+            sb.append(" (قدّامك دلوقتي ${ltr(SightService.foreground)})")
+        }
+        sb.append('\n')
         sb.append("لمسات: اتبعتت ${st.strokesSent} · خلصت ${st.strokesDone} · اتلغت ${st.strokesCancelled} · رفضها النظام ${st.strokesFailed}\n")
         if (st.calibrated) sb.append("✓ الصورة بتتحرك مع اللمسة — تعلّم الكاميرا: x ${fmt1(st.relX)} · y ${fmt1(st.relY)} · تأخير ${fmt1(st.lag)} إطار")
         else sb.append("المعايرة لسه (الثقة ${Math.round(st.confidence * 100)}٪)")

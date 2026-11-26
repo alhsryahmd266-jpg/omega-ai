@@ -106,7 +106,7 @@ app "start_capture"
 started=0
 for i in $(seq 1 20); do
   sleep 2
-  if adb logcat -d -s SightLive:I | grep -q SightLive; then started=1; break; fi
+  if adb logcat -d -s SightLive:I | grep -q "capture: started"; then started=1; break; fi
   if [ "$i" -eq 3 ] || [ "$i" -eq 7 ] || [ "$i" -eq 11 ]; then
     echo "no capture yet ($i): looking for the system dialog"
     shot "30-dialog-$i"
@@ -121,8 +121,8 @@ tags SightLive:I
 step "motion test: the app aims at the bots of the stand-in game"
 adb logcat -c
 app "motion_test"
-sleep 8;  shot 40-aim-8s
-sleep 12; shot 41-aim-20s
+sleep 8;  shot 40-aim-8s;  adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" | head -2
+sleep 12; shot 41-aim-20s; adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" | head -2
 sleep 20; shot 42-aim-40s
 sleep 20; shot 43-aim-60s
 LINES_MAX=3 tags SightTestGame:I

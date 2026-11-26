@@ -30,6 +30,16 @@ object ScreenTests {
             }
         }
 
+        // the band along the edges that the aim keeps out of
+        T.check("margin of a 420 dpi phone", ScreenMath.safeMargin(420, 1080, 2400) == 147)
+        T.check("margin of a 280 dpi screen", ScreenMath.safeMargin(280, 1600, 720) == 98)
+        T.check("margin never more than a sixth of the short side", ScreenMath.safeMargin(640, 720, 1600) == 120)
+        T.check("margin has a floor", ScreenMath.safeMargin(120, 100, 100) == 24)
+        for ((w, h, dpi) in listOf(Triple(1080, 2400, 420), Triple(2400, 1080, 420), Triple(720, 1600, 280), Triple(1600, 720, 280), Triple(1440, 3200, 560))) {
+            val m = ScreenMath.safeMargin(dpi, w, h)
+            T.check("margin $w x $h @$dpi leaves a middle", 2 * m < minOf(w, h) / 2, { "$m" })
+        }
+
         // the capture picture
         T.check("capture of a portrait phone", same(ScreenMath.captureSize(1080, 2400, 1280), 576, 1280))
         T.check("capture of the same phone turned", same(ScreenMath.captureSize(2400, 1080, 1280), 1280, 576))

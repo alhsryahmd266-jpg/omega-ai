@@ -3,8 +3,10 @@ package com.omega.sight.input
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
 import com.omega.sight.engine.Hub
@@ -48,11 +50,24 @@ class SightService : AccessibilityService() {
         val p = event.packageName?.toString() ?: return
         if (p == packageName) {
             // our own screen counts when it is the app's main screen, not our little capsule
-            if (event.className?.toString() == "com.omega.sight.ui.MainActivity") foreground = p
+            if (event.className?.toString() == "com.omega.sight.ui.MainActivity") {
+                foreground = p
+                note("foreground = $p (our screen)")
+            }
             return
         }
-        if (p == "android" || p == "com.android.systemui" || isIme(p)) return
+        if (p == "android" || p == "com.android.systemui" || isIme(p)) {
+            note("ignored $p ${event.className}")
+            return
+        }
         foreground = p
+        note("foreground = $p ${event.className}")
+    }
+
+    private val debugLog by lazy { (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
+
+    private fun note(what: String) {
+        if (debugLog) Log.i("SightLive", "window: $what")
     }
 
     override fun onInterrupt() {

@@ -124,7 +124,7 @@ class Pill(private val svc: AccessibilityService, private val main: Handler) {
         val label: String
         if (Hub.testAim) {
             val touching = com.omega.sight.input.SightService.instance?.userTouching() == true
-            if (st.verdict != Safety.Verdict.OK) {
+            if (st.verdict != Safety.Verdict.OK || !st.inGame) {
                 dot = 0xFFFFB020.toInt()
                 label = "متوقف"
             } else if (touching) {

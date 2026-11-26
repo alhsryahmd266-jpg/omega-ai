@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Handler
 import android.os.SystemClock
+import com.omega.sight.core.ScreenMath
 import com.omega.sight.engine.Hub
 import com.omega.sight.engine.ScreenInfo
 
@@ -41,6 +42,12 @@ class Stroker(private val svc: AccessibilityService, private val main: Handler) 
     private var lastCmdAt = 0L
     private var sw = 1080f
     private var sh = 2400f
+
+    /** the band along the edges that the touches stay out of: the system's edge gestures (back, home, shade) live there */
+    private var mg = 100f
+
+    private val debugLog = (svc.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    private var logged = 0
 
     private val idleLift = Runnable {
         val now = SystemClock.uptimeMillis()
@@ -85,6 +92,7 @@ class Stroker(private val svc: AccessibilityService, private val main: Handler) 
         val s = ScreenInfo.read(svc)
         sw = s[0].toFloat()
         sh = s[1].toFloat()
+        mg = ScreenMath.safeMargin(s[2], s[0], s[1]).toFloat()
     }
 
     private fun schedIdle() {
@@ -107,11 +115,13 @@ class Stroker(private val svc: AccessibilityService, private val main: Handler) 
         restartPending = false
         if (px == 0f && py == 0f) return
         screen()
-        // the start of a new finger is inside the screen whatever the aim loop thought the screen looked like a moment ago
-        val startX = (if (cur != null) fx else zx).coerceIn(2f, sw - 3f)
-        val startY = (if (cur != null) fy else zy).coerceIn(2f, sh - 3f)
-        val ex = (startX + px).coerceIn(2f, sw - 3f)
-        val ey = (startY + py).coerceIn(2f, sh - 3f)
+        // Every point stays inside the screen with a band left free along the edges. A touch that runs there is taken by the system's
+        // gestures (back, home, recent apps, the shade) and sends the game to the background; the aim loop may have worked with an older
+        // idea of the screen's size, so this is checked again here.
+        val startX = (if (cur != null) fx else zx).coerceIn(mg, sw - mg)
+        val startY = (if (cur != null) fy else zy).coerceIn(mg, sh - mg)
+        val ex = (startX + px).coerceIn(mg, sw - mg)
+        val ey = (startY + py).coerceIn(mg, sh - mg)
         val p = Path()
         p.moveTo(startX, startY)
         p.lineTo(ex, ey)
@@ -123,6 +133,10 @@ class Stroker(private val svc: AccessibilityService, private val main: Handler) 
         fx = ex
         fy = ey
         lastDispatch = now
+        if (debugLog && logged < 14) {
+            logged++
+            android.util.Log.i("SightLive", "stroke: (${startX.toInt()},${startY.toInt()}) -> (${ex.toInt()},${ey.toInt()}) ${dur}ms on ${sw.toInt()}x${sh.toInt()} margin ${mg.toInt()}${if (cur == null) " new finger" else ""}")
+        }
         send(s, false)
     }
 
@@ -139,6 +153,7 @@ class Stroker(private val svc: AccessibilityService, private val main: Handler) 
                 }
 
                 override fun onCancelled(gestureDescription: GestureDescription?) {
+                    if (debugLog) android.util.Log.i("SightLive", "stroke cancelled by the system")
                     finished(false)
                 }
             }, main)

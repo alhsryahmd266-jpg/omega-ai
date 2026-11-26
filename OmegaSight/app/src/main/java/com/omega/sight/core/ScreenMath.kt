@@ -25,5 +25,16 @@ object ScreenMath {
         return intArrayOf(even(sw * k), even(sh * k))
     }
 
+    /**
+     * How far from every edge of the screen a touch of the aim stays, in pixels. The system's own edge gestures live there (back from the
+     * sides, home and recent apps from the bottom, the notification shade from the top): a touch that starts or runs in that band is taken
+     * by the system and sends the game to the background. 56 dp, but never more than a sixth of the short side.
+     */
+    fun safeMargin(dpi: Int, w: Int, h: Int): Int {
+        val px = Math.round(56f * dpi.coerceAtLeast(120) / 160f)
+        val cap = min(w, h) / 6
+        return px.coerceIn(24, max(24, cap))
+    }
+
     private fun even(v: Float): Int = max(64, (Math.round(v) / 2) * 2)
 }
