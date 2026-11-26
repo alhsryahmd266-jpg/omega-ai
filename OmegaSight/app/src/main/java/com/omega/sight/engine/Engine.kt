@@ -8,8 +8,6 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Process
 import android.util.Log
-import android.util.DisplayMetrics
-import android.view.WindowManager
 import com.omega.sight.Prefs
 import com.omega.sight.core.AimCmd
 import com.omega.sight.core.AimController
@@ -63,6 +61,9 @@ class Engine(private val app: Context) {
     private var stride = 0
     private var screenW = 0
     private var screenH = 0
+
+    /** the picture and the screen are turned the same way; while they are not (the phone just turned) nothing is aimed */
+    private var sizeOk = true
     private var rgba = ByteArray(0)
     private val cw = 192
     private var ch = 0
@@ -138,7 +139,17 @@ class Engine(private val app: Context) {
         }
     }
 
-    fun stop() {
+    /** a reader the capture service does not need any more: closed on the engine thread, so no picture is being read from it at that moment */
+    fun dispose(reader: ImageReader) {
+        handler.post {
+            try {
+                reader.close()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    fun stop(vararg readers: ImageReader?) {
         handler.removeCallbacksAndMessages(null)
         handler.post {
             saveCalibration(true)
@@ -147,22 +158,35 @@ class Engine(private val app: Context) {
             brain = null
             worker.stop()
             Hub.stats.clear()
+            for (r in readers) {
+                try {
+                    r?.close()
+                } catch (_: Throwable) {
+                }
+            }
             thread.quitSafely()
         }
     }
 
-    private fun updateScreen() {
-        val dm = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        (app.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(dm)
-        screenW = dm.widthPixels
-        screenH = dm.heightPixels
-        // the picture and the screen must turn the same way
-        if ((screenW >= screenH) != (w >= h)) {
-            val t = screenW
-            screenW = screenH
-            screenH = t
-        }
+    /** reads the screen as it is now; true when its size changed */
+    private fun updateScreen(): Boolean {
+        val s = ScreenInfo.read(app)
+        val changed = s[0] != screenW || s[1] != screenH
+        screenW = s[0]
+        screenH = s[1]
+        sizeOk = w <= 0 || (screenW >= screenH) == (w >= h)
+        val st = Hub.stats
+        st.screenW = screenW
+        st.screenH = screenH
+        st.sizeOk = sizeOk
+        return changed
+    }
+
+    /** everything that is worked out from the screen's size */
+    private fun screenChanged() {
+        if (cw > 0) aim.screenPerFrame = screenW / cw.toFloat()
+        computeZone()
+        rebuildMasks()
     }
 
     private fun configure(newW: Int, newH: Int, rowStride: Int) {
@@ -319,6 +343,8 @@ class Engine(private val app: Context) {
         val st = Hub.stats
         st.running = true
         frameNo++
+        // the screen is looked at again every few pictures: the phone may have turned
+        if (frameNo % 6L == 0L && updateScreen()) screenChanged()
         if (frameNo % 20L == 1L) {
             tuning = prefs.tuning
             crossX = prefs.crossX
@@ -476,7 +502,7 @@ class Engine(private val app: Context) {
             epoch = svc.strokeEpoch
             aim.endStroke()
         }
-        val allowed = verdict == Safety.Verdict.OK && svc != null && Hub.testAim && !svc.userTouching()
+        val allowed = verdict == Safety.Verdict.OK && svc != null && Hub.testAim && !svc.userTouching() && sizeOk
         if (allowed && pick != null && svc != null) {
             if (!wasAiming) aimSince = now
             val cmd: AimCmd = aim.step(pick, cross, tuning, dt)

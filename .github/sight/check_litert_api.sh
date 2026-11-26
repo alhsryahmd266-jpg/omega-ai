@@ -42,7 +42,7 @@ expect() {
   local cls="$1" pat="$2" what="$3"
   if sig "$cls" | grep -Eq "$pat"; then echo "OK    $what" >> "$RES"; else echo "MISSING  $what   [$cls]" >> "$RES"; fi
 }
-expect "$P.Interpreter" 'public com.google.ai.edge.litert.Interpreter\(java.io.File, com.google.ai.edge.litert.Interpreter\$Options\)' 'Interpreter(File, Options)'
+expect "$P.Interpreter" "public ${P//./\\.}\\.Interpreter\\(java\\.io\\.File, ${P//./\\.}\\.Interpreter\\\$Options\\)" 'Interpreter(File, Options)'
 expect "$P.Interpreter" ' getInputTensorCount\(\)' 'getInputTensorCount()'
 expect "$P.Interpreter" ' getOutputTensorCount\(\)' 'getOutputTensorCount()'
 expect "$P.Interpreter" ' getInputTensor\(int\)' 'getInputTensor(int)'
@@ -50,15 +50,15 @@ expect "$P.Interpreter" ' getOutputTensor\(int\)' 'getOutputTensor(int)'
 expect "$P.Interpreter" ' runForMultipleInputsOutputs\(java.lang.Object\[\], java.util.Map' 'runForMultipleInputsOutputs(Object[], Map)'
 expect "$P.Interpreter" ' close\(\)' 'close()'
 expect "$P.Interpreter\$Options" ' setNumThreads\(int\)' 'Options.setNumThreads(int)'
-expect "$P.Interpreter\$Options" ' addDelegate\(com.google.ai.edge.litert.Delegate\)' 'Options.addDelegate(Delegate)'
+expect "$P.Interpreter\$Options" " addDelegate\\(${P//./\\.}\\.Delegate\\)" 'Options.addDelegate(Delegate)'
 expect "$P.Tensor" ' shape\(\)' 'Tensor.shape()'
 expect "$P.Tensor" ' dataType\(\)' 'Tensor.dataType()'
 expect "$P.Tensor" ' numBytes\(\)' 'Tensor.numBytes()'
 expect "$P.Tensor" ' quantizationParams\(\)' 'Tensor.quantizationParams()'
 expect "$P.Tensor\$QuantizationParams" ' getScale\(\)' 'QuantizationParams.getScale()'
 expect "$P.Tensor\$QuantizationParams" ' getZeroPoint\(\)' 'QuantizationParams.getZeroPoint()'
-expect "$P.gpu.GpuDelegate" 'public com.google.ai.edge.litert.gpu.GpuDelegate\(\)' 'GpuDelegate()'
-expect "$P.gpu.CompatibilityList" 'public com.google.ai.edge.litert.gpu.CompatibilityList\(\)' 'CompatibilityList()'
+expect "$P.gpu.GpuDelegate" "public ${P//./\\.}\\.gpu\\.GpuDelegate\\(\\)" 'GpuDelegate()'
+expect "$P.gpu.CompatibilityList" "public ${P//./\\.}\\.gpu\\.CompatibilityList\\(\\)" 'CompatibilityList()'
 expect "$P.gpu.CompatibilityList" ' isDelegateSupportedOnThisDevice\(\)' 'CompatibilityList.isDelegateSupportedOnThisDevice()'
 # the tensor object's concrete class must not be what the code calls through: the public type must be an interface or a public class
 if sig "$P.Tensor" | grep -Eq '^public (abstract )?interface|^public (abstract )?class'; then echo "OK    Tensor is a public type" >> "$RES"; else echo "MISSING  Tensor is not a public type" >> "$RES"; fi

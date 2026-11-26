@@ -1,5 +1,6 @@
 package com.omega.sight.engine
 
+import com.omega.sight.Bidi
 import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
@@ -118,7 +119,7 @@ class ModelWorker(private val ctx: Context, private val prefs: Prefs) {
         model = m
         loaded = true
         usingGpu = m.usingGpu
-        status = "شغّال ${m.spec.inW}×${m.spec.inH}" + if (m.usingGpu) " (كرت الشاشة)" else " (المعالج)"
+        status = "شغّال ${Bidi.dim(m.spec.inW, m.spec.inH)}" + if (m.usingGpu) " (كرت الشاشة)" else " (المعالج)"
     }
 
     fun stop() {

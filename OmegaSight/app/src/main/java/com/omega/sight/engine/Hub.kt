@@ -23,6 +23,15 @@ class Stats {
     @Volatile var running = false
     @Volatile var w = 0
     @Volatile var h = 0
+
+    /** the screen as the system says it is now (pixels, turned the way the phone is turned) and the size the capture was asked for */
+    @Volatile var screenW = 0
+    @Volatile var screenH = 0
+    @Volatile var capW = 0
+    @Volatile var capH = 0
+
+    /** the picture and the screen have the same direction (portrait/landscape); without that nothing is aimed */
+    @Volatile var sizeOk = true
     @Volatile var fps = 0f
     @Volatile var frameMs = 0f
     @Volatile var motionMs = 0f
@@ -63,9 +72,9 @@ class Stats {
     /** one line with every number, for the debug log of the emulator run */
     fun logLine(): String = String.format(
         java.util.Locale.US,
-        "%dx%d fps=%.1f frameMs=%.1f motionMs=%.1f farMs=%.1f glowMs=%.1f | motion=%d far=%d glow=%d model=%d tracks=%d picked=%s ego=%.2f hud=%d/%b | verdict=%s | " +
+        "%dx%d screen=%dx%d cap=%dx%d sizeOk=%b fps=%.1f frameMs=%.1f motionMs=%.1f farMs=%.1f glowMs=%.1f | motion=%d far=%d glow=%d model=%d tracks=%d picked=%s ego=%.2f hud=%d/%b | verdict=%s | " +
             "calibrated=%b rel=(%.2f,%.2f) lag=%.1f conf=%.2f | strokes sent=%d done=%d cancelled=%d failed=%d | vision=%s %.1fms gpu=%b brain=%s | err=%s",
-        w, h, fps, frameMs, motionMs, farMs, glowMs, nMotion, nFar, nGlow, nModel, nTracks, picked, egoSpeed, hudPairs, hudReady, verdict.name,
+        w, h, screenW, screenH, capW, capH, sizeOk, fps, frameMs, motionMs, farMs, glowMs, nMotion, nFar, nGlow, nModel, nTracks, picked, egoSpeed, hudPairs, hudReady, verdict.name,
         calibrated, relX, relY, lag, confidence, strokesSent, strokesDone, strokesCancelled, strokesFailed, visionStatus, visionMs, visionGpu, brainStatus, error,
     )
 

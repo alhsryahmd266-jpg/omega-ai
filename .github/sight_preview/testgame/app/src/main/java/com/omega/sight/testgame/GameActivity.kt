@@ -1,6 +1,7 @@
 package com.omega.sight.testgame
 
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
@@ -12,6 +13,12 @@ class GameActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // draw under the camera cut-out too: otherwise a black strip would sit there, outside the game
+        if (Build.VERSION.SDK_INT >= 28) {
+            val a = window.attributes
+            a.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            window.attributes = a
+        }
         game = GameView(this)
         game.autoFire = intent?.getBooleanExtra("autofire", true) ?: true
         setContentView(game)

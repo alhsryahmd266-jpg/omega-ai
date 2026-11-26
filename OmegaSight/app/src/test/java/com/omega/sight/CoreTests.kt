@@ -27,6 +27,7 @@ object CoreTests {
         T.failures.clear()
         T.checks = 0
         geometry(); safety(); ego(); motion(); yolo(); preprocess(); tracker(); picker(); brain()
+        ScreenTests.run()
         ControlTests.run()
         VisionTests.run()
         GlowTests.run()

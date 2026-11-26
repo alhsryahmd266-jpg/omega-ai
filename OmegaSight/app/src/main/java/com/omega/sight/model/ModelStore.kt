@@ -1,5 +1,6 @@
 package com.omega.sight.model
 
+import com.omega.sight.Bidi
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -71,7 +72,7 @@ object ModelStore {
             }
             if (slot != Slot.NAMES && !looksLikeTflite(tmp)) {
                 tmp.delete()
-                return "ده مش ملف TensorFlow Lite (.tflite)"
+                return "ده مش ملف TensorFlow Lite (${Bidi.ltr(".tflite")})"
             }
             if (slot == Slot.NAMES && total > 262144) {
                 tmp.delete()
@@ -133,7 +134,7 @@ object ModelStore {
         val f = file(ctx, Slot.VISION)
         if (!f.isFile) return Report(false, listOf("مفيش ملف رؤية متحمّل"))
         val lib = TfliteRunner.libraryName() ?: return Report(false, listOf("مكتبة LiteRT مش موجودة في النسخة دي"))
-        lines.add("المكتبة: ${lib.substringAfterLast('.')}")
+        lines.add("المكتبة: ${Bidi.ltr(lib.substringAfterLast('.'))}")
         val names = names(ctx)
         val cpu = VisionModel.open(f, names, 4, false)
         val m = cpu.model ?: return Report(false, lines + cpu.error)
@@ -141,8 +142,12 @@ object ModelStore {
         var ok = true
         try {
             val s = m.spec
-            lines.add("الدخل: ${s.inW}×${s.inH} ${if (s.nchw) "NCHW" else "NHWC"} (${m.runner.inputs[0].type})")
-            lines.add("الخرج: ${s.outShape.joinToString("×")} (${m.runner.outputs[0].type}) ← ${YoloDecoder.layoutOf(s.outShape)}")
+            lines.add("الدخل: ${Bidi.ltr("${s.inW}×${s.inH} ${if (s.nchw) "NCHW" else "NHWC"} (${m.runner.inputs[0].type})")}")
+            val kind = when (YoloDecoder.layoutOf(s.outShape)) {
+                YoloDecoder.Layout.E2E_NC, YoloDecoder.Layout.E2E_CN -> "صناديق جاهزة (${Bidi.ltr("x1, y1, x2, y2, score, class")})"
+                YoloDecoder.Layout.RAW_NC, YoloDecoder.Layout.RAW_CN -> "${Bidi.ltr("YOLO")} خام"
+            }
+            lines.add("الخرج: ${Bidi.ltr("${s.outShape.joinToString("×")} (${m.runner.outputs[0].type})")} — $kind")
             val n0 = m.detect(rgba, 1280, 576, 1280 * 4, 0, 0, 1280, 576, 0.35f).size
             if (!m.runner.lastError.isEmpty()) {
                 ok = false
@@ -153,7 +158,7 @@ object ModelStore {
                     m.detect(rgba, 1280, 576, 1280 * 4, 0, 0, 1280, 576, 0.35f)
                     t += m.lastMs
                 }
-                lines.add("تشغيل على المعالج: ${fmt(t / 3f)} ms للصورة (على صورة رمادية فاضية لقى $n0 — طبيعي)")
+                lines.add("تشغيل على المعالج: ${Bidi.ltr("${fmt(t / 3f)} ms")} للصورة (على صورة رمادية فاضية لقى $n0 — طبيعي)")
             }
         } finally {
             m.close()
@@ -177,7 +182,7 @@ object ModelStore {
                                 gm.detect(rgba, 1280, 576, 1280 * 4, 0, 0, 1280, 576, 0.35f)
                                 t += gm.lastMs
                             }
-                            lines.add("تشغيل على كرت الشاشة: ${fmt(t / 3f)} ms للصورة")
+                            lines.add("تشغيل على كرت الشاشة: ${Bidi.ltr("${fmt(t / 3f)} ms")} للصورة")
                         }
                     }
                 } finally {
@@ -197,7 +202,7 @@ object ModelStore {
         val o = BrainModel.open(f, 2, tryGpu)
         val b = o.model ?: return Report(false, listOf(o.error))
         try {
-            lines.add("الدخل: ${b.runner.inputs[0].describe()}  الخرج: ${b.runner.outputs[0].describe()}")
+            lines.add("الدخل: ${Bidi.ltr(b.runner.inputs[0].describe())}  الخرج: ${Bidi.ltr(b.runner.outputs[0].describe())}")
             val x = FloatArray(BrainSpec.IN)
             x[0] = 1f
             x[1] = 0.1f
@@ -210,8 +215,8 @@ object ModelStore {
                 lines.add("فشل التشغيل: ${b.runner.lastError}")
                 return Report(false, lines)
             }
-            lines.add("جرّبته على حالة فيها هدف واحد: الخرج = ${y.joinToString("، ") { fmt(it) }}")
-            lines.add("السرعة: ${fmt(b.lastMs)} ms")
+            lines.add("جرّبته على حالة فيها هدف واحد: الخرج = ${Bidi.ltr(y.joinToString(", ") { fmt(it) })}")
+            lines.add("السرعة: ${Bidi.ltr("${fmt(b.lastMs)} ms")}")
             if (y.any { it.isNaN() || it.isInfinite() }) {
                 lines.add("الخرج فيه قيم مش رقمية!")
                 return Report(false, lines)

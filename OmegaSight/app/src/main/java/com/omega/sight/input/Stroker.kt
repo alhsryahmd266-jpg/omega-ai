@@ -2,13 +2,11 @@ package com.omega.sight.input
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
-import android.content.Context
 import android.graphics.Path
 import android.os.Handler
 import android.os.SystemClock
-import android.util.DisplayMetrics
-import android.view.WindowManager
 import com.omega.sight.engine.Hub
+import com.omega.sight.engine.ScreenInfo
 
 /**
  * One finger that drags inside the aim zone, built from short gesture pieces that continue each other (the finger stays down between
@@ -84,11 +82,9 @@ class Stroker(private val svc: AccessibilityService, private val main: Handler) 
     }
 
     private fun screen() {
-        val dm = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        (svc.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(dm)
-        sw = dm.widthPixels.toFloat()
-        sh = dm.heightPixels.toFloat()
+        val s = ScreenInfo.read(svc)
+        sw = s[0].toFloat()
+        sh = s[1].toFloat()
     }
 
     private fun schedIdle() {
@@ -111,8 +107,9 @@ class Stroker(private val svc: AccessibilityService, private val main: Handler) 
         restartPending = false
         if (px == 0f && py == 0f) return
         screen()
-        val startX = if (cur != null) fx else zx
-        val startY = if (cur != null) fy else zy
+        // the start of a new finger is inside the screen whatever the aim loop thought the screen looked like a moment ago
+        val startX = (if (cur != null) fx else zx).coerceIn(2f, sw - 3f)
+        val startY = (if (cur != null) fy else zy).coerceIn(2f, sh - 3f)
         val ex = (startX + px).coerceIn(2f, sw - 3f)
         val ey = (startY + py).coerceIn(2f, sh - 3f)
         val p = Path()

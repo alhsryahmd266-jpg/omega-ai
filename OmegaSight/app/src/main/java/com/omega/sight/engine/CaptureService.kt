@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
@@ -18,13 +19,12 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.util.DisplayMetrics
-import android.view.WindowManager
+import android.os.SystemClock
+import android.util.Log
 import com.omega.sight.Prefs
 import com.omega.sight.R
+import com.omega.sight.core.ScreenMath
 import com.omega.sight.ui.MainActivity
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Holds the screen-capture permission the owner gave and feeds every new picture to the [Engine]. It runs as a foreground service (the
@@ -40,8 +40,27 @@ class CaptureService : Service() {
     private var listener: DisplayManager.DisplayListener? = null
     private var capW = 0
     private var capH = 0
-    private var lastRot = -1
+
+    /** the size of the captured picture that the system itself reported (Android 14 and later), 0 = not told */
+    private var hintW = 0
+    private var hintH = 0
+    private var lastTry = 0L
+    private var wrongSince = 0L
+    private var retries = 0
     private val main = Handler(Looper.getMainLooper())
+    private val debug by lazy { (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
+
+    /** looks every half second that the picture still has the shape of the screen: the phone may have turned without telling us */
+    private val watch = object : Runnable {
+        override fun run() {
+            if (engine == null) return
+            try {
+                check()
+            } catch (_: Throwable) {
+            }
+            main.postDelayed(this, WATCH_MS)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -86,6 +105,18 @@ class CaptureService : Service() {
                         stopSelf()
                     }
                 }
+
+                /** Android 14 and later: the system says how big the captured screen is, now and every time it changes (the phone turned) */
+                override fun onCapturedContentResize(width: Int, height: Int) {
+                    main.post {
+                        if (width > 0 && height > 0) {
+                            hintW = width
+                            hintH = height
+                        }
+                        note("content resize ${width}x$height")
+                        turned("content")
+                    }
+                }
             }, main)
             val eng = Engine(applicationContext)
             engine = eng
@@ -97,11 +128,12 @@ class CaptureService : Service() {
                 override fun onDisplayAdded(displayId: Int) {}
                 override fun onDisplayRemoved(displayId: Int) {}
                 override fun onDisplayChanged(displayId: Int) {
-                    if (displayId == 0) turned()
+                    if (displayId == 0) turned("display")
                 }
             }
             listener = l
             d.registerDisplayListener(l, main)
+            main.postDelayed(watch, WATCH_MS)
             true
         } catch (t: Throwable) {
             Hub.stats.error = "التقاط الشاشة: ${t.message ?: t.javaClass.simpleName}"
@@ -109,82 +141,140 @@ class CaptureService : Service() {
         }
     }
 
-    private fun screen(): IntArray {
-        val m = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(m)
-        lastRot = @Suppress("DEPRECATION") (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation
-        return intArrayOf(m.widthPixels, m.heightPixels, m.densityDpi)
+    /** the size the picture should have for the screen as it is now: [width, height, dpi] */
+    private fun target(): IntArray {
+        val s = ScreenInfo.read(this)
+        var sw = s[0]
+        var sh = s[1]
+        // Android 14 and later tell the capture itself how big the screen is: that is the most direct word there is
+        if (hintW > 0 && hintH > 0) {
+            sw = hintW
+            sh = hintH
+        }
+        val c = ScreenMath.captureSize(sw, sh, Prefs(this).captureLong)
+        return intArrayOf(c[0], c[1], s[2])
     }
 
-    private fun even(v: Float): Int = max(64, (Math.round(v) / 2) * 2)
+    private fun note(what: String) {
+        if (debug) Log.i("SightLive", "capture: $what")
+    }
 
     private fun makeDisplay(eng: Engine) {
-        val s = screen()
-        val long = Prefs(this).captureLong
-        val k = min(1f, long / max(s[0], s[1]).toFloat())
-        capW = even(s[0] * k)
-        capH = even(s[1] * k)
+        val t = target()
+        capW = t[0]
+        capH = t[1]
         val r = ImageReader.newInstance(capW, capH, PixelFormat.RGBA_8888, 3)
         r.setOnImageAvailableListener({ rd -> eng.onImage(rd) }, eng.handler)
         reader = r
         display = projection!!.createVirtualDisplay(
-            "omega-sight", capW, capH, s[2],
+            "omega-sight", capW, capH, t[2],
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, r.surface, null, null,
         )
+        Hub.stats.capW = capW
+        Hub.stats.capH = capH
+        note("started ${capW}x$capH")
     }
 
-    /** the phone turned: the picture has to turn with it */
-    private fun turned() {
+    /** the phone turned (or the screen changed its size): the picture has to follow, or it would show the screen as a small strip */
+    private fun turned(why: String) {
         val eng = engine ?: return
-        val s = screen()
-        val long = Prefs(this).captureLong
-        val k = min(1f, long / max(s[0], s[1]).toFloat())
-        val nw = even(s[0] * k)
-        val nh = even(s[1] * k)
-        if (nw == capW && nh == capH) return
-        capW = nw
-        capH = nh
-        val r = ImageReader.newInstance(capW, capH, PixelFormat.RGBA_8888, 3)
-        r.setOnImageAvailableListener({ rd -> eng.onImage(rd) }, eng.handler)
-        val oldReader = reader
-        reader = r
-        try {
-            display?.resize(capW, capH, s[2])
-            display?.surface = r.surface
-        } catch (_: Throwable) {
+        val t = target()
+        if (t[0] == capW && t[1] == capH) return
+        note("$why: ${capW}x$capH -> ${t[0]}x${t[1]}")
+        applySize(eng, t)
+    }
+
+    private fun applySize(eng: Engine, t: IntArray): Boolean {
+        val vd = display ?: return false
+        var r: ImageReader? = null
+        return try {
+            r = ImageReader.newInstance(t[0], t[1], PixelFormat.RGBA_8888, 3)
+            r.setOnImageAvailableListener({ rd -> eng.onImage(rd) }, eng.handler)
+            vd.resize(t[0], t[1], t[2])
+            vd.surface = r.surface
+            val old = reader
+            reader = r
+            capW = t[0]
+            capH = t[1]
+            Hub.stats.capW = capW
+            Hub.stats.capH = capH
+            // the engine thread may be reading a picture of the old reader right now: it is closed on that same thread
+            if (old != null) eng.dispose(old)
+            note("resized to ${capW}x$capH")
+            true
+        } catch (e: Throwable) {
+            note("resize failed: ${e.javaClass.simpleName} ${e.message}")
+            try {
+                r?.close()
+            } catch (_: Throwable) {
+            }
+            Hub.stats.error = "تعديل حجم الالتقاط: ${e.message ?: e.javaClass.simpleName}"
+            false
         }
-        try {
-            oldReader?.close()
-        } catch (_: Throwable) {
+    }
+
+    private fun check() {
+        val eng = engine ?: return
+        val now = SystemClock.uptimeMillis()
+        val t = target()
+        if (t[0] != capW || t[1] != capH) {
+            // a size is wanted that is not there yet (an event may have been missed, or the last try failed)
+            if (now - lastTry >= 700L) {
+                lastTry = now
+                note("watch: ${capW}x$capH -> ${t[0]}x${t[1]}")
+                applySize(eng, t)
+            }
+            return
+        }
+        // the size was set; the pictures that arrive should have it too. Nothing arrives while the screen stays still, so this only asks again, twice at most
+        val st = Hub.stats
+        if (st.running && st.w > 0 && (st.w != capW || st.h != capH)) {
+            if (wrongSince == 0L) wrongSince = now
+            else if (now - wrongSince > 2500L && retries < 2) {
+                retries++
+                wrongSince = now
+                note("pictures still ${st.w}x${st.h}: asking again (${retries})")
+                applySize(eng, intArrayOf(capW, capH, t[2]))
+            }
+        } else {
+            wrongSince = 0L
+            retries = 0
         }
     }
 
     private fun shutdown() {
+        main.removeCallbacks(watch)
         try {
             listener?.let { dm?.unregisterDisplayListener(it) }
         } catch (_: Throwable) {
         }
         listener = null
         Hub.testAim = false
-        engine?.stop()
-        if (Hub.engine === engine) Hub.engine = null
+        val eng = engine
+        val rd = reader
+        if (Hub.engine === eng) Hub.engine = null
         engine = null
         try {
             display?.release()
         } catch (_: Throwable) {
         }
         display = null
-        try {
-            reader?.close()
+        reader = null
+        // the engine thread may still be reading a picture: it closes the reader itself, after its last picture
+        if (eng != null) eng.stop(rd)
+        else try {
+            rd?.close()
         } catch (_: Throwable) {
         }
-        reader = null
         try {
             projection?.stop()
         } catch (_: Throwable) {
         }
         projection = null
+        hintW = 0
+        hintH = 0
+        retries = 0
+        wrongSince = 0L
         Hub.stats.running = false
         try {
             stopForeground(true)
@@ -221,6 +311,7 @@ class CaptureService : Service() {
         const val EXTRA_DATA = "data"
         private const val CHANNEL = "sight_capture"
         private const val NOTE_ID = 7
+        private const val WATCH_MS = 500L
 
         fun start(ctx: Context, resultCode: Int, data: Intent) {
             val i = Intent(ctx, CaptureService::class.java).setAction(ACTION_START).putExtra(EXTRA_CODE, resultCode).putExtra(EXTRA_DATA, data)

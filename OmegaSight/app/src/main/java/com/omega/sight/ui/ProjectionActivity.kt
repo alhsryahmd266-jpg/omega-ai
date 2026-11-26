@@ -2,7 +2,9 @@ package com.omega.sight.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Bundle
 import com.omega.sight.engine.CaptureService
 
@@ -13,7 +15,9 @@ class ProjectionActivity : Activity() {
         val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         try {
             @Suppress("DEPRECATION")
-            startActivityForResult(mpm.createScreenCaptureIntent(), REQ)
+            // Android 14 and later let the owner pick "one app" in the dialog: this asks for the whole screen, which is what the app needs
+            val ask = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
+            startActivityForResult(ask, REQ)
         } catch (_: Throwable) {
             finish()
         }

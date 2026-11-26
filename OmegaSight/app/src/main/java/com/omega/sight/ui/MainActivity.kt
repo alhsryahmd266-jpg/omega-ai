@@ -25,6 +25,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.omega.sight.Bidi
+import com.omega.sight.Bidi.ltr
 import com.omega.sight.Prefs
 import com.omega.sight.core.BrainSpec
 import com.omega.sight.core.Safety
@@ -265,9 +267,9 @@ class MainActivity : Activity() {
         visionStatus = label(this, "", 12f, Pal.DIM)
         namesStatus = label(this, "", 12f, Pal.DIM)
         brainStatus = label(this, "", 12f, Pal.DIM)
-        card.add(fileBlock("ملف الرؤية (.tflite)", visionStatus, REQ_VISION, ModelStore.Slot.VISION), 0)
-        card.add(fileBlock("أسماء الفئات (.txt)", namesStatus, REQ_NAMES, ModelStore.Slot.NAMES), 16)
-        card.add(fileBlock("ملف العقل (.tflite)", brainStatus, REQ_BRAIN, ModelStore.Slot.BRAIN), 16)
+        card.add(fileBlock("ملف الرؤية (TFLite)", visionStatus, REQ_VISION, ModelStore.Slot.VISION), 0)
+        card.add(fileBlock("أسماء الفئات (نص)", namesStatus, REQ_NAMES, ModelStore.Slot.NAMES), 16)
+        card.add(fileBlock("ملف العقل (TFLite)", brainStatus, REQ_BRAIN, ModelStore.Slot.BRAIN), 16)
         val fmt = GlowButton(this, "صيغة الملفات اللي التطبيق بيفهمها", Pal.VIOLET, Pal.MAGENTA, true)
         fmt.setOnClickListener { showFormats() }
         card.add(fmt, 12)
@@ -550,10 +552,10 @@ class MainActivity : Activity() {
         val acc = SightService.instance != null
         stepAccess.setDone(
             acc,
-            if (acc) "شغّالة" else "لازم عشان التطبيق يعرف اللعبة اللي قدامك ويبعت لمسة التصويب. إعدادات ← إمكانية الوصول ← Omega Sight",
+            if (acc) "شغّالة" else "لازم عشان التطبيق يعرف اللعبة اللي قدامك ويبعت لمسة التصويب. افتح الإعدادات ثم إمكانية الوصول ثم ${ltr("Omega Sight")} وشغّلها",
             if (acc) null else "افتح",
         ) { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-        stepCapture.setDone(running, if (running) "شغّال ${st.w}×${st.h}" else "بيطلب إذن من النظام", if (running) "وقف" else "ابدأ") { toggleCapture() }
+        stepCapture.setDone(running, if (running) "شغّال ${Bidi.dim(st.w, st.h)}" else "بيطلب إذن من النظام", if (running) "وقف" else "ابدأ") { toggleCapture() }
 
         val vs = if (ModelStore.has(this, ModelStore.Slot.VISION)) "${ModelStore.sizeText(this, ModelStore.Slot.VISION)}" + (if (running && st.visionStatus.isNotEmpty()) " — ${st.visionStatus}" else "") else "مفيش ملف"
         visionStatus.text = vs
@@ -572,9 +574,9 @@ class MainActivity : Activity() {
         val lv = StringBuilder()
         if (!running) lv.append("واقف — اضغط ابدأ")
         else {
-            lv.append("التقاط ${st.w}×${st.h} · ${fmt1(st.fps)} fps · ${fmt1(st.frameMs)} ms للإطار\n")
-            lv.append("حركة ${st.nMotion} (${fmt1(st.motionMs)}ms) · بعيد ${st.nFar} (${fmt1(st.farMs)}ms)\n")
-            lv.append("وهج ${st.nGlow} (${fmt1(st.glowMs)}ms) · رؤية ${st.nModel} (${fmt1(st.visionMs)}ms${if (st.visionGpu) " GPU" else ""})\n")
+            lv.append("التقاط ${ltr("${st.w}×${st.h} · ${fmt1(st.fps)} fps · ${fmt1(st.frameMs)} ms")} للإطار\n")
+            lv.append("حركة ${st.nMotion} (${ltr("${fmt1(st.motionMs)} ms")}) · بعيد ${st.nFar} (${ltr("${fmt1(st.farMs)} ms")})\n")
+            lv.append("وهج ${st.nGlow} (${ltr("${fmt1(st.glowMs)} ms")}) · رؤية ${st.nModel} (${ltr("${fmt1(st.visionMs)} ms${if (st.visionGpu) " GPU" else ""}")})\n")
             lv.append("متتبَّع ${st.nTracks} · مختار ${if (st.picked.isEmpty()) "—" else st.picked}\n")
             lv.append("سرعة الكاميرا ${fmt1(st.egoSpeed)} · تعلّم الأزرار ${st.hudPairs}${if (st.hudReady) " ✓" else ""}\n")
             lv.append("رؤية: ${if (st.visionStatus.isEmpty()) "—" else st.visionStatus}\n")
@@ -634,14 +636,15 @@ class MainActivity : Activity() {
         private const val REQ_IMAGE = 14
         private const val REQ_NOTIFICATIONS = 15
 
-        val VISION_FORMAT = """
-ملف الرؤية: TensorFlow Lite (.tflite) بمخرج واحد.
-الدخل: [1, ارتفاع, عرض, 3] ألوان RGB بين 0 و 1 (NHWC). بيفهم كمان NCHW و uint8 و int8.
+        val VISION_FORMAT: String
+            get() = """
+ملف الرؤية: ملف TensorFlow Lite (${ltr(".tflite")}) بمخرج واحد.
+الدخل: ${ltr("[1, H, W, 3]")} ألوان RGB بين 0 و 1 (${ltr("NHWC")}). H هو الارتفاع و W هو العرض. بيفهم كمان ${ltr("NCHW")} و ${ltr("uint8")} و ${ltr("int8")}.
 الخرج واحد من تلاتة:
- • [1, N, 6] أو [1, 6, N] (N لحد 1000): x1, y1, x2, y2, الثقة, الفئة
- • YOLO خام [1, 4+C, A] أو [1, A, 4+C]: مركز x, مركز y, عرض, ارتفاع ثم ثقة كل فئة
+ • ${ltr("[1, N, 6]")} أو ${ltr("[1, 6, N]")} (N لحد 1000): ${ltr("x1, y1, x2, y2")} ثم الثقة ثم الفئة
+ • YOLO خام ${ltr("[1, 4+C, A]")} أو ${ltr("[1, A, 4+C]")}: مركز x ومركز y والعرض والارتفاع، ثم ثقة كل فئة
 الصندوق بالبكسل أو من 0 لـ 1. الاتنين بيتميّزوا لوحدهم.
-ملف الأسماء (.txt): اسم في كل سطر بترتيب الفئات. الفئة اللي اسمها فيه friend أو ally أو team أو civil أو hostage أو ignore عمره ما يتصوّب عليها. الأسماء head أو face أو رأس أو وجه = رأس. من غير ملف أسماء: الفئة 0 جسم والفئة 1 رأس.
+ملف الأسماء (${ltr(".txt")}): اسم في كل سطر بترتيب الفئات. الفئة اللي اسمها فيه ${ltr("friend")} أو ${ltr("ally")} أو ${ltr("team")} أو ${ltr("civil")} أو ${ltr("hostage")} أو ${ltr("ignore")} عمره ما يتصوّب عليها. الأسماء ${ltr("head")} أو ${ltr("face")} أو رأس أو وجه = رأس. من غير ملف أسماء: الفئة 0 جسم والفئة 1 رأس.
 """.trim()
     }
 }

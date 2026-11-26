@@ -1,5 +1,6 @@
 package com.omega.sight.engine
 
+import com.omega.sight.Bidi
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -32,7 +33,7 @@ object StillAnalyzer {
         val bmp = decode(ctx, uri) ?: return Result(Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888), listOf("الصورة ماتفتحتش"), emptyList())
         val w = bmp.width
         val h = bmp.height
-        lines.add("الصورة: $w×$h")
+        lines.add("الصورة: ${Bidi.dim(w, h)}")
         val px = IntArray(w * h)
         bmp.getPixels(px, 0, w, 0, 0, w, h)
         val rgba = ByteArray(w * h * 4)
@@ -51,7 +52,7 @@ object StillAnalyzer {
             val t0 = System.nanoTime()
             val g = GlowDetector(w, h).detect(rgba, w * 4, null, t.glowSens, 2)
             dets.addAll(g)
-            lines.add("الوهج الأحمر: ${g.size} (${fmt((System.nanoTime() - t0) / 1e6f)} ms)")
+            lines.add("الوهج الأحمر: ${g.size} (${Bidi.ltr("${fmt((System.nanoTime() - t0) / 1e6f)} ms")})")
         } else {
             lines.add("الوهج الأحمر: مقفول من الإعدادات")
         }

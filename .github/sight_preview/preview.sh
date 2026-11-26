@@ -71,6 +71,12 @@ sleep 5
 adb shell dumpsys accessibility | grep -i -B1 -A6 "omega" | head -30
 app "scroll:setup"; sleep 2; shot 12-setup-accessibility
 
+# a smaller screen for the game part: the emulator draws with its CPU, and a real phone has a GPU for that. It also makes the screen
+# size differ from the panel's own size, as it does on phones whose owner changed the display size.
+adb shell wm size 720x1600
+adb shell wm density 280
+sleep 3
+
 step "the stand-in game alone (baseline: nothing aims)"
 adb shell am force-stop "$GPKG"
 adb logcat -c
@@ -125,16 +131,21 @@ LINES_MAX=2 tags SightLive:I
 step "results"
 adb logcat -d -s SightTestGame:I > "$OUT/game.log"
 adb logcat -d -s SightLive:I SightCmd:I > "$OUT/sight.log"
+echo "capture events:"; grep "capture:" "$OUT/sight.log" | tee "$OUT/capture-events.txt"
 echo "baseline:"; python3 "$HERE/analyze.py" "$OUT/game-baseline.log" | tee "$OUT/analysis-baseline.txt"
 echo "with the app aiming:"; python3 "$HERE/analyze.py" "$OUT/game.log" | tee "$OUT/analysis-aim.txt"
 adb logcat -d | grep -E "AndroidRuntime|FATAL|SIGSEGV|Fatal signal|tflite|litert|TfLite|omega\.sight" | tail -n 120 > "$OUT/errors.log"
 echo "error log lines: $(wc -l < "$OUT/errors.log")"
-app "scroll:tests"; sleep 3; shot 50-main-after
+app "scroll:tests"; sleep 5; shot 50-main-after
+LINES_MAX=3 tags SightLive:I
+adb logcat -d -s SightLive:I | grep "capture:" | tee "$OUT/capture-events.txt"
 app "stop_capture"; sleep 3
 shot 51-main-stopped
 # one tall picture of the whole page (a very tall virtual display); last, because it is the riskiest thing here
 adb shell wm size 1080x7000 > /dev/null 2>&1 && { sleep 4; app "open_all"; sleep 3; shot 52-whole-page; }
-adb shell wm size reset > /dev/null 2>&1; sleep 2
+adb shell wm size reset > /dev/null 2>&1
+adb shell wm density reset > /dev/null 2>&1
+sleep 2
 adb logcat -d -v time > "$OUT/logcat-full.txt" 2> /dev/null
 gzip -f "$OUT/logcat-full.txt" 2> /dev/null
 step "done"

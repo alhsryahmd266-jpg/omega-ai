@@ -1,5 +1,6 @@
 package com.omega.sight.ml
 
+import com.omega.sight.Bidi
 import com.omega.sight.core.BrainSpec
 import com.omega.sight.core.Det
 import com.omega.sight.core.ModelSpec
@@ -121,7 +122,7 @@ class BrainModel private constructor(val runner: TfliteRunner) {
             if (!r.inputs[0].isFloat || r.inputs[0].count != BrainSpec.IN) {
                 val d = r.inputs[0].describe()
                 r.close()
-                return Loaded(null, "دخل العقل $d — المطلوب float32 بعدد ${BrainSpec.IN} رقم")
+                return Loaded(null, "دخل العقل ${Bidi.ltr(d)} — المطلوب ${Bidi.ltr("float32")} بعدد ${BrainSpec.IN} رقم")
             }
             val oc = r.outputs[0].count
             if (oc != 2 && oc != 3) {
