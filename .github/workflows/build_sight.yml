@@ -1,0 +1,185 @@
+name: Build Omega Sight
+
+on:
+  push:
+    branches: [omega-sight]
+    paths:
+      - 'OmegaSight/**'
+      - '.github/workflows/build_sight.yml'
+      - '.github/sight/**'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub Release with the APK (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: omega-sight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: OmegaSight
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK packages
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+
+      # LiteRT runs the owner's .tflite files. The newest stable release that still has the classic Interpreter API is used.
+      - name: Pick the LiteRT version
+        id: lite
+        working-directory: .
+        run: bash .github/sight/pick_litert.sh
+
+      # The real signatures of the classes the app calls by reflection, printed once per build. Never fails the build.
+      - name: Check the LiteRT API
+        continue-on-error: true
+        working-directory: .
+        run: bash .github/sight/check_litert_api.sh "${{ steps.lite.outputs.version }}"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      # Runs the core tests (motion, far detection, glow, tracking, aim, model decoding ...). If Gradle cannot use the chosen LiteRT
+      # (it cannot be resolved, or needs a newer toolchain) the next attempt takes an older one; a failing test stops at once.
+      - name: Core logic tests
+        run: |
+          set +e
+          OK=0
+          for A in ${{ steps.lite.outputs.attempts }}; do
+            V=${A%%:*}; G=${A##*:}
+            echo "::group::LiteRT $V (gpu delegate: $G)"
+            gradle :app:testDebugUnitTest -PlitertVersion="$V" -PlitertGpu="$G" --stacktrace --no-daemon 2>&1 | tee "$RUNNER_TEMP/test.log"
+            RC=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              OK=1
+              echo "LITERT_V=$V" >> "$GITHUB_ENV"
+              echo "LITERT_GPU=$G" >> "$GITHUB_ENV"
+              echo "::notice title=litert::built with $V (gpu delegate: $G)"
+              break
+            fi
+            if ! grep -qE "Could not (resolve|find|download|GET)|AAR metadata|checkDebugAarMetadata|Duplicate class|minCompileSdk|requires .*(compileSdk|Android Gradle)" "$RUNNER_TEMP/test.log"; then
+              echo "the failure is not about LiteRT: not trying another version"
+              break
+            fi
+            echo "::warning title=litert::$V could not be used, trying the next one"
+          done
+          grep -E "checks run|aim sim|far single|glow|FAIL" "$RUNNER_TEMP/test.log" | head -40 || true
+          [ "$OK" -eq 1 ]
+
+      - name: Build release APK
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease \
+            -PappVersionCode=${{ github.run_number }} \
+            -PappVersionName=1.0.${{ github.run_number }} \
+            -PlitertVersion="$LITERT_V" -PlitertGpu="$LITERT_GPU" \
+            --stacktrace --no-daemon 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - name: Inspect APK
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          {
+            ls -la "$APK"
+            "$BT/aapt2" dump badging "$APK" | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|launchable|uses-permission" | head -20
+            "$BT/apksigner" verify --print-certs "$APK" | head -3
+            echo "native libraries:"
+            unzip -l "$APK" | grep -E "\.so$" | awk '{print $4}' | head -40
+            echo "internet permission in the manifest: $("$BT/aapt2" dump permissions "$APK" | grep -c INTERNET)"
+          } > "$RUNNER_TEMP/apk-info.txt" 2>&1
+          cat "$RUNNER_TEMP/apk-info.txt"
+          cp "$APK" OmegaSight.apk
+          sha256sum OmegaSight.apk | tee OmegaSight.apk.sha256
+          MSG=$(cat "$RUNNER_TEMP/apk-info.txt" OmegaSight.apk.sha256 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+          echo "::notice title=apk::$MSG"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OmegaSight-apk
+          path: |
+            OmegaSight/OmegaSight.apk
+            OmegaSight/OmegaSight.apk.sha256
+
+      - name: Show why it failed
+        if: failure()
+        run: |
+          for f in "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/build.log"; do
+            [ -f "$f" ] || continue
+            ERR=$(grep -nE "^e: |error:|FAILED|FAIL |What went wrong|Execution failed|Could not|Unresolved|AAPT|Manifest merger|Caused by|Test.*failed|AssertionError" "$f" | head -50)
+            TAIL=$(tail -n 40 "$f")
+            MSG=$(printf '%s\n--- tail ---\n%s' "$ERR" "$TAIL" | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' | cut -c1-60000)
+            echo "::error title=$(basename "$f")::$MSG"
+          done
+
+      - name: Keep reports when something failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            OmegaSight/app/build/reports
+            OmegaSight/app/build/test-results
+
+      - name: Publish release
+        # a manual run with publish=true, or a push whose head commit message contains [release]
+        if: github.event.inputs.publish == 'true' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="omega-sight-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" OmegaSight.apk OmegaSight.apk.sha256 \
+            --title "Omega Sight 1.0.${{ github.run_number }}" \
+            --notes "Omega Sight: vision, motion and red-glow detection for your own offline game, with an aim test that needs no finger on the screen. Install OmegaSight.apk, open the app and follow the setup steps. No internet permission." \
+            --target "${{ github.sha }}"
+          echo "::notice title=release::https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          echo "::notice title=asset::https://github.com/${{ github.repository }}/releases/download/$TAG/OmegaSight.apk"
+
+      # A copy of the newest APK on its own branch: raw.githubusercontent.com serves it as a plain download in any
+      # browser (a github.com link is grabbed by the GitHub app on phones and opens its release page instead).
+      - name: Publish direct-download copy
+        if: github.event.inputs.publish == 'true' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          SRC="$GITHUB_WORKSPACE/OmegaSight"
+          D="$RUNNER_TEMP/apk-branch"
+          rm -rf "$D" && mkdir -p "$D"
+          cp "$SRC/OmegaSight.apk" "$SRC/OmegaSight.apk.sha256" "$D/"
+          printf 'Newest Omega Sight build: 1.0.%s (source commit %s)\n' "${{ github.run_number }}" "${{ github.sha }}" > "$D/README.txt"
+          cd "$D"
+          git init -q -b omega-sight-apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Omega Sight 1.0.${{ github.run_number }} (direct download copy)"
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          if git -c http.extraheader="AUTHORIZATION: basic $AUTH" push -f "https://github.com/${{ github.repository }}.git" omega-sight-apk; then
+            echo "::notice title=direct-link::https://raw.githubusercontent.com/${{ github.repository }}/omega-sight-apk/OmegaSight.apk"
+          else
+            echo "::warning title=direct-link::could not publish the direct-download branch"
+          fi

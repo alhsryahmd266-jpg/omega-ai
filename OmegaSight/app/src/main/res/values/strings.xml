@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Omega Sight</string>
+    <string name="a11y_label">Omega Sight — مساعد التصويب</string>
+    <string name="a11y_desc">يعرف أي تطبيق مفتوح قدامك، ويرسل لمسات تصويب صغيرة داخل لعبتك الأوفلاين التي اخترتها أنت فقط، وفقط وأنت مشغّل «اختبار الحركة» بنفسك. لا يقرأ محتوى أي تطبيق، ولا يرسل أي بيانات خارج الجهاز، وما عنده صلاحية إنترنت أصلاً.</string>
+</resources>
