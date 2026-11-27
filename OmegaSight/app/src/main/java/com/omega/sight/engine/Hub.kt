@@ -15,6 +15,10 @@ object Hub {
     @Volatile
     var ignoreRect: IntArray? = null
 
+    /** screen rectangle [l, t, r, b] in pixels where the aiming finger works; the window guard checks that nothing else is over it */
+    @Volatile
+    var zone: IntArray? = null
+
     val stats = Stats()
 }
 
@@ -35,6 +39,9 @@ class Stats {
 
     /** the owner's game itself is the app in front right now (our own screen does not count): the only place anything is aimed */
     @Volatile var inGame = false
+
+    /** the package of the window that lies over the aim zone ("?" = a window that did not say who it is), "" = nothing covers it */
+    @Volatile var coveredBy = ""
     @Volatile var fps = 0f
     @Volatile var frameMs = 0f
     @Volatile var motionMs = 0f
@@ -75,14 +82,16 @@ class Stats {
     /** one line with every number, for the debug log of the emulator run */
     fun logLine(): String = String.format(
         java.util.Locale.US,
-        "%dx%d screen=%dx%d cap=%dx%d sizeOk=%b inGame=%b fps=%.1f frameMs=%.1f motionMs=%.1f farMs=%.1f glowMs=%.1f | motion=%d far=%d glow=%d model=%d tracks=%d picked=%s ego=%.2f hud=%d/%b | verdict=%s | " +
+        "%dx%d screen=%dx%d cap=%dx%d sizeOk=%b inGame=%b covered=%s fps=%.1f frameMs=%.1f motionMs=%.1f farMs=%.1f glowMs=%.1f | motion=%d far=%d glow=%d model=%d tracks=%d picked=%s ego=%.2f hud=%d/%b | verdict=%s | " +
             "calibrated=%b rel=(%.2f,%.2f) lag=%.1f conf=%.2f | strokes sent=%d done=%d cancelled=%d failed=%d | vision=%s %.1fms gpu=%b brain=%s | err=%s",
-        w, h, screenW, screenH, capW, capH, sizeOk, inGame, fps, frameMs, motionMs, farMs, glowMs, nMotion, nFar, nGlow, nModel, nTracks, picked, egoSpeed, hudPairs, hudReady, verdict.name,
+        w, h, screenW, screenH, capW, capH, sizeOk, inGame, coveredBy.ifEmpty { "-" }, fps, frameMs, motionMs, farMs, glowMs, nMotion, nFar, nGlow, nModel, nTracks, picked, egoSpeed, hudPairs, hudReady, verdict.name,
         calibrated, relX, relY, lag, confidence, strokesSent, strokesDone, strokesCancelled, strokesFailed, visionStatus, visionMs, visionGpu, brainStatus, error,
     )
 
     fun clear() {
         running = false
+        inGame = false
+        coveredBy = ""
         fps = 0f
         frameMs = 0f
         nTracks = 0

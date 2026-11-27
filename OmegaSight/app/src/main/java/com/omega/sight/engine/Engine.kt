@@ -15,6 +15,7 @@ import com.omega.sight.core.AimController
 import com.omega.sight.core.Box
 import com.omega.sight.core.Brain
 import com.omega.sight.core.BrainSpec
+import com.omega.sight.core.Cover
 import com.omega.sight.core.Det
 import com.omega.sight.core.Ego
 import com.omega.sight.core.FarMotion
@@ -166,6 +167,7 @@ class Engine(private val app: Context) {
             brain?.close()
             brain = null
             worker.stop()
+            Hub.zone = null
             Hub.stats.clear()
             for (r in readers) {
                 try {
@@ -253,6 +255,17 @@ class Engine(private val app: Context) {
         prefs.saveCalib(pkg, Prefs.Calib(aim.relX, aim.relY, aim.lag, aim.confidence))
     }
 
+    /**
+     * "" when nothing lies over the aim zone, else the package of the window that does ("?" = it did not say, or the window guard has not
+     * answered for a while: something does not respond, so the finger stays away). Without the guard (the service is not there) nothing
+     * can be aimed anyway.
+     */
+    private fun whoCovers(svc: SightService?): String {
+        val g = svc?.guard ?: return ""
+        if (SystemClock.uptimeMillis() - g.at > GUARD_FRESH_MS) return "?"
+        return if (g.state == Cover.State.COVERED) g.by.ifEmpty { "?" } else ""
+    }
+
     /** where the aiming finger works, in screen pixels */
     private fun computeZone() {
         val sw = screenW.toFloat()
@@ -296,6 +309,7 @@ class Engine(private val app: Context) {
         zoneCy = (t + b) / 2f
         aim.zoneHalfW = 0.5f * (r - l)
         aim.zoneHalfH = 0.5f * (b - t)
+        Hub.zone = intArrayOf(l.toInt(), t.toInt(), r.toInt(), b.toInt())
     }
 
     /** the screen furniture found so far, plus the status dot, as masks the detectors keep away from */
@@ -357,6 +371,7 @@ class Engine(private val app: Context) {
         val plane = img.planes[0]
         if (img.width != w || img.height != h || plane.rowStride != stride) configure(img.width, img.height, plane.rowStride)
         val st = Hub.stats
+        if (!st.running) SightService.instance?.guard?.poke()
         st.running = true
         frameNo++
         // the screen is looked at again every few pictures: the phone may have turned
@@ -518,9 +533,12 @@ class Engine(private val app: Context) {
             epoch = svc.strokeEpoch
             aim.endStroke()
         }
-        // the aim only works inside the owner's own game: it has to be the app in front (our own screen does not count), the picture and the
-        // screen have to agree, and a moment has to have passed since the phone turned
-        val inGame = verdict == Safety.Verdict.OK && SightService.foreground == prefs.gamePkg
+        // the aim only works inside the owner's own game: it has to be the app in front (our own screen does not count), nothing else may lie
+        // over the place where the finger works (a system message, the shade, a keyboard, a floating button), the picture and the screen
+        // have to agree, and a moment has to have passed since the phone turned
+        val coveredBy = whoCovers(svc)
+        st.coveredBy = coveredBy
+        val inGame = verdict == Safety.Verdict.OK && SightService.foreground == prefs.gamePkg && coveredBy.isEmpty()
         st.inGame = inGame
         val allowed = inGame && svc != null && Hub.testAim && !svc.userTouching() && sizeOk && SystemClock.uptimeMillis() >= settleUntil
         if (allowed && pick != null && svc != null) {
@@ -574,5 +592,8 @@ class Engine(private val app: Context) {
     private companion object {
         /** how long nothing is aimed after the screen or the picture changed its size (ms) */
         const val SETTLE_MS = 1200L
+
+        /** an answer of the window guard older than this (ms) is not trusted */
+        const val GUARD_FRESH_MS = 2000L
     }
 }

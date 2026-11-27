@@ -28,6 +28,10 @@ adb shell wm density
 adb logcat -G 16M > /dev/null 2>&1 || true
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 0
+# the emulator draws everything in software: no animations, so the launcher and the system have less to do
+adb shell settings put global window_animation_scale 0
+adb shell settings put global transition_animation_scale 0
+adb shell settings put global animator_duration_scale 0
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard 2> /dev/null || true
 
@@ -119,12 +123,29 @@ shot 31-capture-started
 tags SightLive:I
 
 step "motion test: the app aims at the bots of the stand-in game"
+# the number of gestures the app has sent so far (the app writes its numbers to the log every two seconds)
+sent() { adb logcat -d -s SightLive:I | grep "strokes sent=" | tail -n 1 | sed -E 's/.*strokes sent=([0-9]+).*/\1/'; }
+focus() { adb shell dumpsys window | grep -E "mCurrentFocus" | head -1; }
 adb logcat -c
 app "motion_test"
-sleep 8;  shot 40-aim-8s;  adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" | head -2
-sleep 12; shot 41-aim-20s; adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" | head -2
-sleep 20; shot 42-aim-40s
-sleep 20; shot 43-aim-60s
+sleep 10; shot 40-aim-10s; focus
+sent_a=$(sent)
+echo "--- the notification shade is pulled down over the game: the app must stop touching"
+adb shell cmd statusbar expand-notifications
+sleep 5; shot 44-shade-over-game; focus
+sent_b=$(sent)
+sleep 8
+sent_c=$(sent); focus
+echo "--- the shade is closed again: the app may go on"
+adb shell cmd statusbar collapse
+sleep 8; shot 45-shade-closed; focus
+sent_d=$(sent)
+echo "SHADE CHECK: gestures before the shade ${sent_a:-?}; at +5 s under the shade ${sent_b:-?}; at +13 s under the shade ${sent_c:-?}; 8 s after closing it ${sent_d:-?}"
+echo "(a good run: the number stays the same while the shade is down, and grows again after it is closed)"
+adb logcat -d -s SightLive:I | grep "guard:" | tail -n 12 | cut -c1-300
+sleep 12; shot 41-aim-45s
+sleep 15; shot 42-aim-60s
+sleep 15; shot 43-aim-75s
 LINES_MAX=3 tags SightTestGame:I
 LINES_MAX=2 tags SightLive:I
 

@@ -13,8 +13,9 @@ import com.omega.sight.engine.Hub
 import com.omega.sight.overlay.Pill
 
 /**
- * The accessibility service. It does three small things: it learns which app is in front (window-change events only; it never reads what
- * is on screen), it sends the aiming finger as gestures, and it hosts the little status capsule.
+ * The accessibility service. It does four small things: it learns which app is in front (window-change events), it watches whether any
+ * other window lies over the place where the aiming finger works ([WindowGuard]: only the package and the rectangle of each window, never
+ * what a window shows), it sends the aiming finger as gestures, and it hosts the little status capsule.
  */
 class SightService : AccessibilityService() {
     private var main: Handler? = null
@@ -22,6 +23,11 @@ class SightService : AccessibilityService() {
     private var pill: Pill? = null
     private var imePkgs: Set<String> = emptySet()
     private var imeAt = 0L
+
+    /** the newest answer to "is anything over the aim zone" lives here; null while the service is not connected */
+    @Volatile
+    var guard: WindowGuard? = null
+        private set
 
     val strokeEpoch: Int get() = stroker?.epoch ?: 0
 
@@ -42,12 +48,14 @@ class SightService : AccessibilityService() {
         main = h
         stroker = Stroker(this, h)
         pill = Pill(this, h).also { it.start() }
+        guard = WindowGuard(this).also { it.start() }
         instance = this
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val p = event.packageName?.toString() ?: return
+        guard?.learn(event.windowId, p)
         if (p == packageName) {
             // our own screen counts when it is the app's main screen, not our little capsule
             if (event.className?.toString() == "com.omega.sight.ui.MainActivity") {
@@ -77,6 +85,8 @@ class SightService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         pill?.stop()
         pill = null
+        guard?.stop()
+        guard = null
         stroker?.lift()
         stroker = null
         if (instance === this) instance = null

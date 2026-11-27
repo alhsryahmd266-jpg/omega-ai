@@ -566,8 +566,12 @@ class MainActivity : Activity() {
         val sb = StringBuilder()
         sb.append(if (Hub.testAim) "شغّال" else "واقف").append(" · ").append(Safety.explain(verdict))
         if (Hub.testAim && verdict == Safety.Verdict.OK && !st.inGame) {
-            sb.append(" · مستني اللعبة تبقى قدّامك")
-            if (SightService.foreground.isNotEmpty()) sb.append(" (قدّامك دلوقتي ${ltr(SightService.foreground)})")
+            if (st.coveredBy.isNotEmpty()) {
+                sb.append(" · فيه نافذة فوق منطقة التصويب (${ltr(st.coveredBy)}) فالتطبيق واقف لحد ما تختفي")
+            } else {
+                sb.append(" · مستني اللعبة تبقى قدّامك")
+                if (SightService.foreground.isNotEmpty()) sb.append(" (قدّامك دلوقتي ${ltr(SightService.foreground)})")
+            }
         } else if (verdict == Safety.Verdict.WRONG_APP && SightService.foreground.isNotEmpty()) {
             sb.append(" (قدّامك دلوقتي ${ltr(SightService.foreground)})")
         }
