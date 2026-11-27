@@ -11,6 +11,19 @@ import kotlin.math.roundToInt
  * joined into blobs. A frame taken while the camera whips round is skipped (nothing is reliable then).
  */
 class MotionDetector(val w: Int, val h: Int) {
+    private companion object {
+        /**
+         * how far (pixels of this picture) the shifted previous picture may be off before a change counts, while the camera moves.
+         * Reading a sampled sharp edge at a fractional place is itself off by up to a quarter of its height, so a smaller number lets the
+         * edges of lit windows through; the price is that, while the camera turns, something that moves against the world by much less
+         * than a pixel per frame is not seen here (the far mode and the glow detector still see it, and a still camera sees all of it).
+         */
+        const val TOL = 0.25f
+
+        /** with a moving camera, more leftover blobs than this in one frame are treated as edges, not movers */
+        const val FLOOD = 8
+    }
+
     private val diff = ByteArray(w * h)
     private val mask = ByteArray(w * h)
     private val tmp = ByteArray(w * h)
@@ -39,18 +52,41 @@ class MotionDetector(val w: Int, val h: Int) {
         val cx = ego.cx
         val cy = ego.cy
         val still = !ego.valid || (abs(ego.tx) < 0.03f && abs(ego.ty) < 0.03f && abs(ego.s) < 0.0005f)
+        // The camera shift is measured to a fraction of a pixel, and a sharp edge (a lit window on a dark wall) that is off by a tenth of
+        // a pixel changes by many luma steps: it looks like movement all over the picture while the camera turns. So with a moving camera
+        // the previous picture is read at the shifted place and a little around it (+-TOL pixel), and a pixel only counts as changed when
+        // it falls outside the range found there. A still camera has no such error and keeps the full sensitivity.
+        val tol = if (still) 0f else TOL
         for (y in 0 until h) {
             val row = y * w
             for (x in 0 until w) {
                 val c = cur.d[row + x].toInt() and 255
-                val p: Float = if (still) {
-                    (prev.d[row + x].toInt() and 255).toFloat()
+                val d: Int
+                if (still) {
+                    d = min(255, abs(c - (prev.d[row + x].toInt() and 255)))
                 } else {
-                    val dx = ego.tx + ego.s * (x - cx)
-                    val dy = ego.ty + ego.s * (y - cy)
-                    prev.sample(x - dx, y - dy)
+                    val px = x - (ego.tx + ego.s * (x - cx))
+                    val py = y - (ego.ty + ego.s * (y - cy))
+                    if (px < tol || py < tol || px > w - 1f - tol || py > h - 1f - tol) {
+                        // the strip that the turning camera just brought in at the edge: the previous picture has nothing to compare with
+                        d = 0
+                    } else if (hud != null && hud[(py + 0.5f).toInt() * w + (px + 0.5f).toInt()].toInt() != 0) {
+                        // the world that was behind a fixed button a moment ago and has come out from under it: nothing to compare with either
+                        d = 0
+                    } else {
+                        var lo = Float.MAX_VALUE
+                        var hi = -Float.MAX_VALUE
+                        for (j in -1..1) {
+                            for (k in -1..1) {
+                                val v = prev.sample(px + k * tol, py + j * tol)
+                                if (v < lo) lo = v
+                                if (v > hi) hi = v
+                            }
+                        }
+                        val gap = if (c > hi) c - hi else if (c < lo) lo - c else 0f
+                        d = min(255, gap.roundToInt())
+                    }
                 }
-                val d = min(255, abs(c - p).roundToInt())
                 diff[row + x] = d.toByte()
                 hist[d]++
             }
@@ -159,6 +195,10 @@ class MotionDetector(val w: Int, val h: Int) {
                 out.add(Det(box, score, Kind.MOTION))
             }
         }
+        // A turning camera in front of a picture full of sharp, regular edges (a wall of lit windows, a fence, a grid of tiles) leaves a
+        // crowd of small leftovers that are really the edges, not movers. Real movers are a few; a crowd means the leftovers cannot be
+        // trusted, and aiming at one of them would turn the camera more and so make more of them. So report nothing from such a frame.
+        if (!still && out.size > FLOOD) return emptyList()
         out.sortByDescending { it.score }
         return if (out.size > 16) out.subList(0, 16).toList() else out
     }

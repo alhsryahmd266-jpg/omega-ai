@@ -29,6 +29,8 @@ object CoreTests {
         geometry(); safety(); ego(); motion(); yolo(); preprocess(); tracker(); picker(); brain()
         ScreenTests.run()
         CoverTests.run()
+        ChaseTests.run()
+        PanTests.run()
         ControlTests.run()
         VisionTests.run()
         GlowTests.run()
@@ -165,7 +167,8 @@ object CoreTests {
             var stray = 0
             for (t in 1..14) {
                 val cur = world.frame(w, h, 50f + 2.3f * t, 40f + 0.7f * t, 0f, 1.5f, rnd)
-                val ox = 140f - 2f * t
+                // 4.5 px per frame on the screen against the camera's 2.3: it moves against the world by 2.2 px per frame
+                val ox = 140f - 4.5f * t
                 val oy = 40f
                 paintRect(cur, ox, oy, ox + 7f, oy + 12f, 25f)
                 val truth = Box(ox, oy, ox + 7f, oy + 12f)

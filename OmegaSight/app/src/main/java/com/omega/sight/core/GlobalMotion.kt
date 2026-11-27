@@ -93,6 +93,7 @@ class GlobalMotion(val w: Int, val h: Int) {
         if (!e.valid && (guessX != 0f || guessY != 0f)) e = pass(prev, cur, hud, 4, 0, 0)
         if (!e.valid) e = pass(prev, cur, hud, 8, 0, 0)
         if (e.valid) {
+            e = refine(prev, cur, hud, e)
             guessX = e.tx
             guessY = e.ty
         } else {
@@ -130,6 +131,71 @@ class GlobalMotion(val w: Int, val h: Int) {
             }
         }
         return fit(n)
+    }
+
+    /**
+     * The patch search finds the shift only to within a third of a pixel at best (it reads the answer off a parabola), and a sharp edge
+     * that is off by that much shows up as "movement" along every lit window while the camera turns. A few Gauss-Newton steps over every
+     * pixel pull (tx, ty) to what the pixel values themselves say, after which the error is a few hundredths of a pixel. Pixels that do
+     * not fit (something moving on its own, a fixed button) get little or no weight, so they do not drag the answer. The zoom is left as
+     * the patch fit found it: it is much harder to read from the pixels, and noise would only make it wander.
+     */
+    private fun refine(prev: Gray, cur: Gray, hud: ByteArray?, e: Ego): Ego {
+        var tx = e.tx.toDouble()
+        var ty = e.ty.toDouble()
+        val s = e.s.toDouble()
+        val cx = e.cx.toDouble()
+        val cy = e.cy.toDouble()
+        val step = if (w * h > 40000) 2 else 1
+        val first = tx
+        val firstY = ty
+        for (iter in 0 until 3) {
+            var a00 = 0.0
+            var a01 = 0.0
+            var a11 = 0.0
+            var b0 = 0.0
+            var b1 = 0.0
+            var used = 0
+            var y = 2
+            while (y < h - 2) {
+                var x = 2
+                while (x < w - 2) {
+                    val i = y * w + x
+                    if (hud == null || hud[i].toInt() == 0) {
+                        val u = (x - (tx + s * (x - cx))).toFloat()
+                        val v = (y - (ty + s * (y - cy))).toFloat()
+                        if (u >= 2f && v >= 2f && u <= w - 3f && v <= h - 3f && (hud == null || hud[v.toInt() * w + u.toInt()].toInt() == 0)) {
+                            val gx = 0.5f * ((cur.d[i + 1].toInt() and 255) - (cur.d[i - 1].toInt() and 255))
+                            val gy = 0.5f * ((cur.d[i + w].toInt() and 255) - (cur.d[i - w].toInt() and 255))
+                            val g2 = gx * gx + gy * gy
+                            if (g2 >= 4f) {
+                                val r = (cur.d[i].toInt() and 255) - prev.sample(u, v)
+                                val q = 1.0 / (1.0 + (r / 10.0) * (r / 10.0))
+                                a00 += q * gx * gx
+                                a01 += q * gx * gy
+                                a11 += q * gy * gy
+                                b0 += q * gx * r
+                                b1 += q * gy * r
+                                used++
+                            }
+                        }
+                    }
+                    x += step
+                }
+                y += step
+            }
+            val det = a00 * a11 - a01 * a01
+            // too little to read from (a flat picture), or an edge in one direction only: keep what the patches said
+            if (used < 60 || det < 1e-3 * (a00 + a11) * (a00 + a11)) break
+            val dx = -(a11 * b0 - a01 * b1) / det
+            val dy = -(a00 * b1 - a01 * b0) / det
+            tx += dx.coerceIn(-0.6, 0.6)
+            ty += dy.coerceIn(-0.6, 0.6)
+            if (abs(dx) < 0.004 && abs(dy) < 0.004) break
+        }
+        // never wander far from the patch answer: a big jump means the pixels were misleading
+        if (abs(tx - first) > 0.8 || abs(ty - firstY) > 0.8) return e
+        return Ego(tx.toFloat(), ty.toFloat(), e.s, e.cx, e.cy, e.mad, e.inliers, e.valid)
     }
 
     private fun onHud(hud: ByteArray, x: Int, y: Int, pw: Int, ph: Int): Boolean {

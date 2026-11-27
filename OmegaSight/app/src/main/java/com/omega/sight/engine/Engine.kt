@@ -15,6 +15,7 @@ import com.omega.sight.core.AimController
 import com.omega.sight.core.Box
 import com.omega.sight.core.Brain
 import com.omega.sight.core.BrainSpec
+import com.omega.sight.core.ChaseGuard
 import com.omega.sight.core.Cover
 import com.omega.sight.core.Det
 import com.omega.sight.core.Ego
@@ -37,6 +38,7 @@ import com.omega.sight.input.SightService
 import com.omega.sight.ml.BrainModel
 import com.omega.sight.ml.TfliteRunner
 import com.omega.sight.model.ModelStore
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -116,6 +118,9 @@ class Engine(private val app: Context) {
     private var pass = 0
     private var zoneCx = 0f
     private var zoneCy = 0f
+
+    /** stops a chase that never ends (a loop that feeds itself) */
+    private val chase = ChaseGuard()
     private var wasAiming = false
     private var aimSince = 0L
     private var epoch = 0
@@ -540,7 +545,8 @@ class Engine(private val app: Context) {
         st.coveredBy = coveredBy
         val inGame = verdict == Safety.Verdict.OK && SightService.foreground == prefs.gamePkg && coveredBy.isEmpty()
         st.inGame = inGame
-        val allowed = inGame && svc != null && Hub.testAim && !svc.userTouching() && sizeOk && SystemClock.uptimeMillis() >= settleUntil
+        val allowed = inGame && svc != null && Hub.testAim && !svc.userTouching() && sizeOk && SystemClock.uptimeMillis() >= settleUntil &&
+            !chase.holding
         if (allowed && pick != null && svc != null) {
             if (!wasAiming) aimSince = now
             val cmd: AimCmd = aim.step(pick, cross, tuning, dt)
@@ -548,7 +554,21 @@ class Engine(private val app: Context) {
             lastCmdY = cmd.dy
             if (cmd.active) svc.aim(cmd.dx, cmd.dy, cmd.restart, zoneCx, zoneCy)
             wasAiming = true
+            val onTarget = hypot(aim.errX, aim.errY) < 0.06f * ch
+            if (chase.update(cmd.active, onTarget, dt)) {
+                // a chase that went on for seconds without reaching anything: forget what was followed, the finger stays away for a while
+                tracker.reset()
+                picker.reset()
+                far.reset()
+                svc.lift()
+                aim.endStroke()
+                wasAiming = false
+                aimSince = 0L
+                lastCmdX = 0f
+                lastCmdY = 0f
+            }
         } else {
+            chase.update(false, false, dt)
             aim.step(null, cross, tuning, dt)
             if (wasAiming) {
                 svc?.lift()
@@ -570,6 +590,7 @@ class Engine(private val app: Context) {
         st.nModel = nModel
         st.nTracks = tracks.size
         st.picked = pick?.track?.kind?.name ?: ""
+        st.chaseStops = chase.trips
         st.calibrated = aim.calibrated
         st.relX = aim.relX
         st.relY = aim.relY

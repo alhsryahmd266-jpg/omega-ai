@@ -42,6 +42,9 @@ class Stats {
 
     /** the package of the window that lies over the aim zone ("?" = a window that did not say who it is), "" = nothing covers it */
     @Volatile var coveredBy = ""
+
+    /** how many times the safety net stopped a chase that did not end */
+    @Volatile var chaseStops = 0
     @Volatile var fps = 0f
     @Volatile var frameMs = 0f
     @Volatile var motionMs = 0f
@@ -83,15 +86,16 @@ class Stats {
     fun logLine(): String = String.format(
         java.util.Locale.US,
         "%dx%d screen=%dx%d cap=%dx%d sizeOk=%b inGame=%b covered=%s fps=%.1f frameMs=%.1f motionMs=%.1f farMs=%.1f glowMs=%.1f | motion=%d far=%d glow=%d model=%d tracks=%d picked=%s ego=%.2f hud=%d/%b | verdict=%s | " +
-            "calibrated=%b rel=(%.2f,%.2f) lag=%.1f conf=%.2f | strokes sent=%d done=%d cancelled=%d failed=%d | vision=%s %.1fms gpu=%b brain=%s | err=%s",
+            "calibrated=%b rel=(%.2f,%.2f) lag=%.1f conf=%.2f chaseStops=%d | strokes sent=%d done=%d cancelled=%d failed=%d | vision=%s %.1fms gpu=%b brain=%s | err=%s",
         w, h, screenW, screenH, capW, capH, sizeOk, inGame, coveredBy.ifEmpty { "-" }, fps, frameMs, motionMs, farMs, glowMs, nMotion, nFar, nGlow, nModel, nTracks, picked, egoSpeed, hudPairs, hudReady, verdict.name,
-        calibrated, relX, relY, lag, confidence, strokesSent, strokesDone, strokesCancelled, strokesFailed, visionStatus, visionMs, visionGpu, brainStatus, error,
+        calibrated, relX, relY, lag, confidence, chaseStops, strokesSent, strokesDone, strokesCancelled, strokesFailed, visionStatus, visionMs, visionGpu, brainStatus, error,
     )
 
     fun clear() {
         running = false
         inGame = false
         coveredBy = ""
+        chaseStops = 0
         fps = 0f
         frameMs = 0f
         nTracks = 0
