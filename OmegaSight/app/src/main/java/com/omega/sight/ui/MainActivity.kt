@@ -568,6 +568,7 @@ class MainActivity : Activity() {
         if (Hub.testAim && verdict == Safety.Verdict.OK && !st.inGame) {
             if (st.coveredBy.isNotEmpty()) {
                 sb.append(" · فيه نافذة فوق منطقة التصويب (${ltr(st.coveredBy)}) فالتطبيق واقف لحد ما تختفي")
+                if (st.coveredBy == "android") sb.append(" — دي رسالة من النظام (مثلاً «عرض بملء الشاشة»): اقفلها بإصبعك مرة واحدة")
             } else {
                 sb.append(" · مستني اللعبة تبقى قدّامك")
                 if (SightService.foreground.isNotEmpty()) sb.append(" (قدّامك دلوقتي ${ltr(SightService.foreground)})")

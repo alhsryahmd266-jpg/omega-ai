@@ -32,6 +32,8 @@ adb shell settings put system user_rotation 0
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
+# the system's first-time message "Viewing full screen - Got it" would sit over the game and (rightly) stop the aim: mark it as seen
+adb shell settings put secure immersive_mode_confirmations confirmed
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard 2> /dev/null || true
 
@@ -64,6 +66,10 @@ if [ -n "$MODEL" ] && [ -f "$MODEL" ]; then
   app "scroll:files"; sleep 2; shot 10-files-with-model
   app "test_vision"; sleep 10; shot 11-vision-test
   adb shell input keyevent KEYCODE_BACK; sleep 1
+  # that model ignores the picture and always answers the same boxes: left in, the app would chase boxes that never move on the screen.
+  # The game runs below use the app's own detectors only (motion, far motion, the red glow, the screen furniture).
+  adb shell "run-as $PKG rm -f files/models/vision.tflite"
+  echo "the test model is removed again"
 else
   echo "no test model: skipped"
 fi
@@ -129,6 +135,7 @@ focus() { adb shell dumpsys window | grep -E "mCurrentFocus" | head -1; }
 adb logcat -c
 app "motion_test"
 sleep 10; shot 40-aim-10s; focus
+sleep 20; shot 41-aim-30s
 sent_a=$(sent)
 echo "--- the notification shade is pulled down over the game: the app must stop touching"
 adb shell cmd statusbar expand-notifications
@@ -143,9 +150,8 @@ sent_d=$(sent)
 echo "SHADE CHECK: gestures before the shade ${sent_a:-?}; at +5 s under the shade ${sent_b:-?}; at +13 s under the shade ${sent_c:-?}; 8 s after closing it ${sent_d:-?}"
 echo "(a good run: the number stays the same while the shade is down, and grows again after it is closed)"
 adb logcat -d -s SightLive:I | grep "guard:" | tail -n 12 | cut -c1-300
-sleep 12; shot 41-aim-45s
-sleep 15; shot 42-aim-60s
-sleep 15; shot 43-aim-75s
+sleep 12; shot 42-aim-65s
+sleep 15; shot 43-aim-80s
 LINES_MAX=3 tags SightTestGame:I
 LINES_MAX=2 tags SightLive:I
 
