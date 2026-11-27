@@ -580,6 +580,19 @@ class Engine(private val app: Context) {
             }
         }
 
+        if (debugLog && Hub.testAim && inGame) {
+            // one line per picture while the hands-off test runs: what was seen, what the finger was told (the emulator run reads these)
+            Log.i(
+                "SightTrace",
+                String.format(
+                    java.util.Locale.US,
+                    "f=%d t=%d ts=%d dt=%.0f ego=%.2f,%.2f ok=%d inl=%.2f tr=%d pick=%s err=%.1f,%.1f cmd=%.1f,%.1f cal=%b rel=%.2f,%.2f lag=%.1f hold=%b",
+                    frameNo, SystemClock.uptimeMillis(), img.timestamp / 1_000_000L, dt * 1000f, ego.tx, ego.ty, if (ego.valid) 1 else 0, ego.inliers, tracks.size,
+                    pick?.track?.kind?.name ?: "-", if (pick != null) aim.errX else 0f, if (pick != null) aim.errY else 0f, lastCmdX, lastCmdY,
+                    aim.calibrated, aim.relX, aim.relY, aim.lag, chase.holding,
+                ),
+            )
+        }
         if (frameNo % 150L == 0L) saveCalibration(false)
 
         // ---- numbers for the screens ----

@@ -9,6 +9,7 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
@@ -153,6 +154,8 @@ class GameView(ctx: Context) : View(ctx) {
         val dt = if (lastNs == 0L) 0f else ((now - lastNs) / 1e9f).coerceAtMost(0.1f)
         lastNs = now
         step(dt)
+        // where the camera is at every picture drawn (the emulator run compares this with what the app saw and what it ordered)
+        Log.i("SightGameTrace", "d t=${SystemClock.uptimeMillis()} x=%.1f y=%.1f".format(camX, camY))
         p.style = Paint.Style.FILL
         p.strokeWidth = 1f
 
@@ -371,6 +374,7 @@ class GameView(ctx: Context) : View(ctx) {
                     val x = e.getX(i)
                     val y = e.getY(i)
                     // dragging the finger right turns the view right: the picture moves left
+                    Log.i("SightGameTrace", "m t=${e.eventTime} dx=%.1f dy=%.1f".format(x - lookX, y - lookY))
                     camX += (x - lookX) * GAIN
                     camY = (camY + (y - lookY) * GAIN).coerceIn(-0.25f * h, 0.25f * h)
                     lookX = x

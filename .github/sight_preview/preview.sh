@@ -177,6 +177,8 @@ LINES_MAX=2 tags SightLive:I
 step "results"
 adb logcat -d -s SightTestGame:I > "$OUT/game.log"
 adb logcat -d -s SightLive:I SightCmd:I > "$OUT/sight.log"
+adb logcat -d -s SightTrace:I SightGameTrace:I > "$OUT/trace.log"
+echo "trace lines: $(wc -l < "$OUT/trace.log")"
 echo "capture events:"; grep "capture:" "$OUT/sight.log" | tee "$OUT/capture-events.txt"
 echo "baseline:"; python3 "$HERE/analyze.py" "$OUT/game-baseline.log" | tee "$OUT/analysis-baseline.txt"
 echo "with the app aiming:"; python3 "$HERE/analyze.py" "$OUT/game.log" | tee "$OUT/analysis-aim.txt"
