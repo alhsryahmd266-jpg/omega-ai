@@ -19,6 +19,24 @@ shot() { adb exec-out screencap -p > "$OUT/$1.png" 2> /dev/null; echo "shot $1: 
 # the command string is quoted for the device's shell too (it may contain ";")
 app() { adb shell "am start -W -n $PKG/.ui.MainActivity --es sight_cmd '$1'" > /dev/null; }
 tags() { adb logcat -d -s "$@" | tail -n "${LINES_MAX:-4}"; }
+# the emulator draws everything in software and is slow: now and then its launcher shows "isn't responding" over the game. That is a
+# message of the system (the app rightly stops under it, see the window guard); close it with "Wait" so the run can go on, and say so
+anr() {
+  if adb shell dumpsys window windows 2> /dev/null | grep -q "Application Not Responding"; then
+    echo "a system 'not responding' message was over the screen ($1): tapping Wait"
+    python3 "$HERE/ui.py" tap '^Wait$' || true
+    sleep 1
+  fi
+}
+# sleep for N seconds, looking at the screen for that message every two seconds
+nap() {
+  local n=$1
+  while [ "$n" -gt 0 ]; do
+    sleep 2
+    anr "$2"
+    n=$((n - 2))
+  done
+}
 
 step "device"
 adb wait-for-device
@@ -132,10 +150,11 @@ step "motion test: the app aims at the bots of the stand-in game"
 # the number of gestures the app has sent so far (the app writes its numbers to the log every two seconds)
 sent() { adb logcat -d -s SightLive:I | grep "strokes sent=" | tail -n 1 | sed -E 's/.*strokes sent=([0-9]+).*/\1/'; }
 focus() { adb shell dumpsys window | grep -E "mCurrentFocus" | head -1; }
+anr "before the motion test"
 adb logcat -c
 app "motion_test"
-sleep 10; shot 40-aim-10s; focus
-sleep 20; shot 41-aim-30s
+nap 10 "aim 10 s"; shot 40-aim-10s; focus
+nap 20 "aim 30 s"; shot 41-aim-30s
 sent_a=$(sent)
 echo "--- the notification shade is pulled down over the game: the app must stop touching"
 adb shell cmd statusbar expand-notifications
@@ -150,8 +169,8 @@ sent_d=$(sent)
 echo "SHADE CHECK: gestures before the shade ${sent_a:-?}; at +5 s under the shade ${sent_b:-?}; at +13 s under the shade ${sent_c:-?}; 8 s after closing it ${sent_d:-?}"
 echo "(a good run: the number stays the same while the shade is down, and grows again after it is closed)"
 adb logcat -d -s SightLive:I | grep "guard:" | tail -n 12 | cut -c1-300
-sleep 12; shot 42-aim-65s
-sleep 15; shot 43-aim-80s
+nap 12 "aim 65 s"; shot 42-aim-65s
+nap 16 "aim 80 s"; shot 43-aim-80s
 LINES_MAX=3 tags SightTestGame:I
 LINES_MAX=2 tags SightLive:I
 
