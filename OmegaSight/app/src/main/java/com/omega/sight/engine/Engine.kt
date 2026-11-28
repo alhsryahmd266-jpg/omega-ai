@@ -121,6 +121,7 @@ class Engine(private val app: Context) {
 
     /** stops a chase that never ends (a loop that feeds itself) */
     private val chase = ChaseGuard()
+    private val expect = FloatArray(2)
     private var wasAiming = false
     private var aimSince = 0L
     private var epoch = 0
@@ -428,11 +429,18 @@ class Engine(private val app: Context) {
         Resample.lumaFromRgba(rgba, w, h, stride, 0, 0, w, h, cur)
         var ego = Ego.none(cw, ch)
         if (havePrev) {
+            // the finger movements already ordered tell where to look for the shift of the picture, so even a sudden big movement is found
+            if (aim.calibrated) {
+                aim.expectedShift(expect)
+                if (hypot(expect[0], expect[1]) > 2f) gm.hint(expect[0], expect[1])
+            }
             ego = gm.estimate(prev, cur, maskC)
             hud.update(prev, cur)
         }
-        cumTx += ego.tx
-        cumTy += ego.ty
+        if (ego.valid) {
+            cumTx += ego.tx
+            cumTy += ego.ty
+        }
         aim.observe(ego)
         st.egoSpeed = ego.speed
         st.hudPairs = hud.pairsSeen
@@ -457,7 +465,7 @@ class Engine(private val app: Context) {
         var nFar = 0
         if (havePrev && tuning.farMode && tuning.motionTargets) {
             Resample.lumaFromRgba(rgba, w, h, stride, 0, 0, w, h, fine)
-            val half = (tuning.fov.coerceIn(0.1f, 0.9f) * 1.3f * fh).toInt()
+            val half = (tuning.fov.coerceIn(0.1f, 1.2f) * 1.3f * fh).toInt()
             val cxF = (crossX * fw).toInt()
             val cyF = (crossY * fh).toInt()
             val roi = intArrayOf(max(2, cxF - half), max(2, cyF - half), min(fw - 2, cxF + half), min(fh - 2, cyF + half))

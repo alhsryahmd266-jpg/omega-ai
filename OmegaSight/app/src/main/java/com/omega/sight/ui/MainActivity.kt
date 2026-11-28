@@ -463,7 +463,7 @@ class MainActivity : Activity() {
     private fun tuningCard(col: LinearLayout) {
         val card = Card(this, "الضبط", Pal.MAGENTA, false)
         card.add(SliderRow(this, "قوة التصويب", "قد إيه من التصحيح يتنفّذ", 0f, 1f, tuning.strength, ::pct) { setT(tuning.copy(strength = it)) }, 0)
-        card.add(SliderRow(this, "مجال التصويب", "أبعد هدف عن المؤشر يتصوّب عليه", 0.1f, 0.9f, tuning.fov, ::pct) { setT(tuning.copy(fov = it)) }, 16)
+        card.add(SliderRow(this, "مجال التصويب", "أبعد هدف عن المؤشر يتصوّب عليه (الأقصى = الشاشة كلها)", 0.1f, 1.2f, tuning.fov, ::pct) { setT(tuning.copy(fov = it)) }, 16)
         card.add(SliderRow(this, "نعومة الحركة", "٠ = حاد وسريع ، ١ = ناعم وبطيء", 0f, 1f, tuning.smooth, ::pct) { setT(tuning.copy(smooth = it)) }, 16)
         card.add(SliderRow(this, "أقصى سرعة", "ارتفاعات الشاشة في الثانية", 0.5f, 6f, tuning.maxSpeed, { String.format(Locale.US, "%.1f", it) }) { setT(tuning.copy(maxSpeed = it)) }, 16)
         card.add(SliderRow(this, "الصدر ↔ الرأس", "مكان التصويب جوه الجسم لو مفيش رأس", 0f, 1f, tuning.headBias, ::pct) { setT(tuning.copy(headBias = it)) }, 16)

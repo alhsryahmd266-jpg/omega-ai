@@ -32,6 +32,8 @@ object CoreTests {
         ChaseTests.run()
         PanTests.run()
         ControlTests.run()
+        LagTests.run()
+        RangeTests.run()
         VisionTests.run()
         GlowTests.run()
         println("checks run: ${T.checks}, failures: ${T.failures.size}")

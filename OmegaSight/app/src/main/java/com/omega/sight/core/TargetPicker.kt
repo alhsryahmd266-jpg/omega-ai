@@ -33,7 +33,7 @@ class TargetPicker {
      * @param latency seconds between the picture and the moment a correction shows up (the lead looks this far ahead)
      */
     fun pick(tracks: List<Track>, cross: Vec2, frameH: Float, t: Tuning, latency: Float): Pick? {
-        val fovPx = t.fov.coerceIn(0.1f, 0.9f) * frameH
+        val fovPx = t.fov.coerceIn(0.1f, 1.2f) * frameH
         var best: Pick? = null
         var bestScore = -1e9f
         var currentScore = -1e9f
@@ -51,7 +51,8 @@ class TargetPicker {
                 Kind.MOTION -> 0.4f
             }
             val size = min(1f, tr.box.h / (0.25f * frameH))
-            val s = -d / fovPx + 0.25f * kindW + 0.10f * size + 0.15f * tr.score + (if (tr.id == currentId) 0.22f else 0f)
+            // nearer is better, measured against a fixed length (not against the field), so a wide field does not make the choice vague
+            val s = -d / (0.45f * frameH) + 0.25f * kindW + 0.10f * size + 0.15f * tr.score + (if (tr.id == currentId) 0.22f else 0f)
             val p = Pick(tr, aim, d)
             if (tr.id == currentId) {
                 currentScore = s

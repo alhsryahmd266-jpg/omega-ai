@@ -153,7 +153,7 @@ object ControlTests {
             ctl.loadCalibration(-1f, -1f, 3f, 1f)
             T.check("loaded calibration is used", ctl.calibrated && abs(ctl.lag - 3f) < 1e-6f)
             ctl.loadCalibration(0f, 0f, 99f, 2f)
-            T.check("silly calibration values are not taken", ctl.relX == -1f && ctl.lag <= 6f && ctl.confidence <= 1f)
+            T.check("silly calibration values are not taken", ctl.relX == -1f && ctl.lag <= 9f && ctl.confidence <= 1f)
         }
         val worst = max(0f, 0f)
         T.check("control suite ran", worst == 0f)

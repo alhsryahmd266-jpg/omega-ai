@@ -7,8 +7,8 @@ package com.omega.sight.core
 data class Tuning(
     /** how much of the needed correction is applied (0 = nothing, 1 = all of it) */
     val strength: Float = 0.9f,
-    /** how far from the crosshair a target may be and still be picked, as a share of the frame height (0.1 .. 0.9) */
-    val fov: Float = 0.45f,
+    /** how far from the crosshair a target may be and still be picked, as a share of the frame height (0.1 .. 1.2; 1.2 = the whole screen) */
+    val fov: Float = 1.2f,
     /** 0 = quick and sharp, 1 = soft and slow */
     val smooth: Float = 0.25f,
     /** the fastest image motion the correction may ask for, in frame heights per second */
