@@ -1,0 +1,11 @@
+--- run 1: 85 log lines, 87 s
+t   0- 10 s: on target  15.3%  fps  15.0  locks +4  looks +15  moves +45  nearest 96px  cam (-91,42)
+t  10- 20 s: on target  18.1%  fps  19.8  locks +6  looks +11  moves +59  nearest 71px  cam (-447,116)
+t  20- 30 s: on target  13.7%  fps  19.8  locks +5  looks +14  moves +60  nearest 57px  cam (-1501,54)
+t  30- 40 s: on target  13.5%  fps  19.3  locks +2  looks +6  moves +14  nearest 191px  cam (-1473,70)
+t  40- 50 s: on target   1.8%  fps  18.4  locks +0  looks +3  moves +3  nearest 73px  cam (-1504,131)
+t  50- 60 s: on target  22.5%  fps  21.1  locks +5  looks +9  moves +65  nearest 113px  cam (-1649,-20)
+t  60- 70 s: on target   2.1%  fps  21.2  locks +1  looks +9  moves +47  nearest 255px  cam (-960,55)
+t  70- 80 s: on target  25.6%  fps  19.6  locks +9  looks +18  moves +58  nearest 120px  cam (-221,19)
+t  80- 90 s: on target  27.8%  fps  20.7  locks +5  looks +10  moves +47  nearest 156px  cam (780,-53)
+total: on target 16.2%  locks 42  first lock at 4.2 s  longest lock 0.8 s  looks 107  moves 438

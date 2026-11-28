@@ -1,0 +1,4 @@
+--- run 1: 19 log lines, 19 s
+t   0- 10 s: on target  13.3%  fps  19.6  locks +1  looks +0  moves +0  nearest 198px  cam (0,0)
+t  10- 20 s: on target   5.2%  fps  23.6  locks +1  looks +0  moves +0  nearest 540px  cam (0,0)
+total: on target 8.7%  locks 2  first lock at 4.4 s  longest lock 1.1 s  looks 0  moves 0

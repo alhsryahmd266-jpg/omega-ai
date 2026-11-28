@@ -1,0 +1,157 @@
+
+=== 02:49:11 device
+34
+Physical size: 1080x2400
+Physical density: 420
+
+=== 02:49:13 install
+Performing Streamed Install
+Success
+Performing Streamed Install
+Success
+package:com.omega.sight
+package:com.omega.sight.testgame
+    requested permissions:
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION: granted=true
+      android.permission.WAKE_LOCK: granted=true
+        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+
+=== 02:49:17 screens
+shot 01-top: 365168 bytes
+shot 02-setup: 359512 bytes
+shot 03-files: 350789 bytes
+shot 04-tests: 235127 bytes
+shot 05-tuning: 182996 bytes
+shot 06-tuning-2: 239439 bytes
+shot 07-tuning-3: 244013 bytes
+shot 08-limits: 288564 bytes
+
+=== 02:49:44 model self-test
+/home/runner/work/_temp/vision.tflite: 1 file pushed, 0 skipped. 86.6 MB/s (7948 bytes in 0.000s)
+total 28
+drwx------ 2 u0_a192 u0_a192 4096 2026-11-28 02:49 .
+drwxrwx--x 3 u0_a192 u0_a192 4096 2026-11-28 02:49 ..
+-rw-rw-rw- 1 u0_a192 u0_a192 7948 2026-11-28 02:49 vision.tflite
+shot 10-files-with-model: 349062 bytes
+shot 11-vision-test: 308999 bytes
+the test model is removed again
+
+=== 02:49:59 accessibility service
+     button target:{null}
+     Bound services:{Service[label=Omega Sight — مساعد التصويب, feedbackType[FEEDBACK_GENERIC], capabilities=33, eventTypes=TYPE_WINDOW_STATE_CHANGED, notificationTimeout=50, requestA11yBtn=false]}
+     Enabled services:{{com.omega.sight/com.omega.sight.input.SightService}}
+     Binding services:{}
+     Crashed services:{}
+     Client list info:{
+          Client list callbacks: 14
+          Client list killed: false
+          Client list broadcasts count: -1
+          Registered clients:{
+[com.google.android.youtube][com.omega.sight][com.google.android.apps.wellbeing][com.google.android.apps.nexuslauncher][com.omega.sight][com.android.systemui][com.google.android.googlequicksearchbox][com.google.android.inputmethod.latin][com.google.android.as][com.google.android.apps.youtube.music][com.google.android.apps.nexuslauncher][com.google.android.contacts][com.google.android.googlequicksearchbox][com.google.android.apps.nexuslauncher]}]
+Global Info [ Top focused display Id = 0
+     Active Window Id = 7
+     Top Focused Window Id = 7
+     Accessibility Focused Window Id = -1 ]
+
+Display[0] : 
+--
+,
+A11yWindow[AccessibilityWindowInfo[title=Omega Sight, displayId=0, id=7, taskId=8, type=TYPE_APPLICATION, layer=0, region=SkRegion((0,0,1080,2400)), bounds=Rect(0, 0 - 1080, 2400), focused=true, active=true, pictureInPicture=false, transitionTime=93175, hasParent=false, isAnchored=false, hasChildren=false]]
+WindowInfo[WindowInfo[title=Omega Sight, displayId=0, taskId=8, type=1, layer=1, token=android.os.BinderProxy@2f84148, region=SkRegion((0,0,1080,2400)), bounds=Rect(0, 0 - 1080, 2400), parent=null, focused=true, children=null, accessibility anchor=9223372034707292159, pictureInPicture=false, watchOutsideTouch=false, mTransformMatrix=Matrix{[1.0, 0.0, 0.0][0.0, 1.0, 0.0][0.0, 0.0, 1.0]}, mMagnificationSpec=<scale:1.0,offsetX:0.0,offsetY:0.0>, locales=[en_US]]]
+
+
+Window attributes:[{0=AccessibilityWindowAttributes{mAccessibilityWindowTitle=nullmLocales=[en_US]}, 1=AccessibilityWindowAttributes{mAccessibilityWindowTitle=nullmLocales=[en_US]}, 2=AccessibilityWindowAttributes{mAccessibilityWindowTitle=Navigation bar Edge PanelmLocales=[en_US]}, 4=AccessibilityWindowAttributes{mAccessibilityWindowTitle=nullmLocales=[en_US]}, 5=AccessibilityWindowAttributes{mAccessibilityWindowTitle=nullmLocales=[en_US]}, 6=AccessibilityWindowAttributes{mAccessibilityWindowTitle=nullmLocales=[en_US]}, 7=AccessibilityWindowAttributes{mAccessibilityWindowTitle=Omega SightmLocales=[en_US]}, 8=AccessibilityWindowAttributes{mAccessibilityWindowTitle=nullmLocales=[en_US]}, 9=AccessibilityWindowAttributes{mAccessibilityWindowTitle=Navigation barmLocales=[en_US]}, 10=AccessibilityWindowAttributes{mAccessibilityWindowTitle=nullmLocales=[en_US]}, 11=AccessibilityWindowAttributes{mAccessibilityWindowTitle=HomemLocales=[en_US]}}]
+A11yInputFilter Info : 
+Enabled features of Display [0] = [MotionEventInjector]
+Global client list info:{
+    Client list callbacks: 7
+    Client list killed: false
+    Client list broadcasts count: -1
+shot 12-setup-accessibility: 332549 bytes
+
+=== 02:50:11 the stand-in game alone (baseline: nothing aims)
+shot 20-game-baseline: 60236 bytes
+11-28 02:50:30.901  6153  6153 I SightTestGame: t=17.7 frames=378 fireFrames=378 hits=35 pct=9.3 locks=2 firstLock=4.4 longestLock=1.1 nearestPx=505 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:31.939  6153  6153 I SightTestGame: t=18.7 frames=403 fireFrames=403 hits=35 pct=8.7 locks=2 firstLock=4.4 longestLock=1.1 nearestPx=540 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+Physical size: 1080x2400
+Override size: 720x1600
+
+=== 02:50:32 image test on that picture
+preview-out/20-game-baseline-keep.png: 1 file pushed, 0 skipped. 256.0 MB/s (60236 bytes in 0.000s)
+shot 21-image-test: 176716 bytes
+
+=== 02:50:46 pick the stand-in game and start the capture
+capture started: 1
+shot 31-capture-started: 199136 bytes
+11-28 02:50:49.404  3877  3877 I SightLive: capture: content resize 720x1600
+11-28 02:50:49.521  3877  5599 I SightLive: guard: COVERED by=com.omega.sight windows: com.android.systemui/3[0,0,720,85] com.omega.sight/1[0,0,720,1600]
+11-28 02:50:49.901  3877  6612 I SightLive: 576x1280 screen=720x1600 cap=576x1280 sizeOk=true inGame=false covered=com.omega.sight fps=30.0 frameMs=391.8 motionMs=0.0 farMs=46.9 glowMs=20.3 | motion=0 far=0 glow=2 model=0 tracks=0 picked= ego=0.00 hud=0/false | verdict=OK | calibrated=false rel=(-1.00,-1.00) lag=2.0 conf=0.00 chaseStops=0 | strokes sent=0 done=0 cancelled=0 failed=0 | vision= 0.0ms gpu=false brain= | err=
+11-28 02:50:49.960  3877  3877 I SightLive: window: foreground = com.omega.sight (our screen)
+
+=== 02:50:51 motion test: the app aims at the bots of the stand-in game
+shot 40-aim-10s: 63753 bytes
+  mCurrentFocus=Window{d4a54d0 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}
+shot 41-aim-30s: 62409 bytes
+--- the notification shade is pulled down over the game: the app must stop touching
+shot 44-shade-over-game: 70860 bytes
+  mCurrentFocus=Window{d4a54d0 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}
+  mCurrentFocus=Window{d4a54d0 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}
+--- the shade is closed again: the app may go on
+shot 45-shade-closed: 62394 bytes
+  mCurrentFocus=Window{d4a54d0 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}
+SHADE CHECK: gestures before the shade 165; at +5 s under the shade 185; at +13 s under the shade 185; 8 s after closing it 222
+(a good run: the number stays the same while the shade is down, and grows again after it is closed)
+11-28 02:50:52.830  3877  5599 I SightLive: guard: NO_GAME by=- windows: com.omega.sight/4[308,89,412,126] com.android.systemui/3[0,0,720,85] com.omega.sight/1[0,0,720,1600]
+11-28 02:50:54.919  3877  5599 I SightLive: guard: CLEAR by=- windows: com.omega.sight/4[783,4,901,40] com.omega.sight.testgame/1[0,0,1600,720]
+11-28 02:51:26.086  3877  5599 I SightLive: guard: COVERED by=com.android.systemui windows: com.omega.sight/4[783,4,901,40] com.android.systemui/3[0,0,1600,720]
+11-28 02:51:40.436  3877  5599 I SightLive: guard: CLEAR by=- windows: com.omega.sight/4[780,4,905,40] com.android.systemui/3[0,0,1600,84] com.omega.sight.testgame/1[0,0,1600,720]
+shot 42-aim-65s: 64044 bytes
+shot 43-aim-80s: 66485 bytes
+11-28 02:52:17.743  6645  6645 I SightTestGame: t=84.7 frames=1647 fireFrames=1647 hits=250 pct=15.2 locks=39 firstLock=4.2 longestLock=0.8 nearestPx=133 looks=103 moves=421 camX=575 camY=-13 onTarget=false cur=0.0
+11-28 02:52:18.750  6645  6645 I SightTestGame: t=85.7 frames=1668 fireFrames=1668 hits=266 pct=15.9 locks=40 firstLock=4.2 longestLock=0.8 nearestPx=86 looks=104 moves=430 camX=810 camY=26 onTarget=false cur=0.0
+11-28 02:52:19.778  6645  6645 I SightTestGame: t=86.7 frames=1689 fireFrames=1689 hits=274 pct=16.2 locks=42 firstLock=4.2 longestLock=0.8 nearestPx=156 looks=107 moves=438 camX=780 camY=-53 onTarget=false cur=0.0
+11-28 02:52:17.613  3877  6612 I SightLive: 1280x576 screen=1600x720 cap=1280x576 sizeOk=true inGame=true covered=- fps=7.1 frameMs=157.4 motionMs=0.0 farMs=10.8 glowMs=30.2 | motion=0 far=0 glow=3 model=0 tracks=0 picked= ego=0.00 hud=218/true | verdict=OK | calibrated=true rel=(-0.80,-0.65) lag=2.0 conf=1.00 chaseStops=1 | strokes sent=397 done=394 cancelled=3 failed=0 | vision=مفيش ملف رؤية 0.0ms gpu=false brain= | err=
+11-28 02:52:19.864  3877  6612 I SightLive: 1280x576 screen=1600x720 cap=1280x576 sizeOk=true inGame=true covered=- fps=8.2 frameMs=148.4 motionMs=80.9 farMs=62.3 glowMs=45.4 | motion=6 far=0 glow=3 model=0 tracks=6 picked=MOTION ego=7.78 hud=225/true | verdict=OK | calibrated=true rel=(-0.91,-0.72) lag=2.0 conf=1.00 chaseStops=1 | strokes sent=416 done=412 cancelled=3 failed=0 | vision=مفيش ملف رؤية 0.0ms gpu=false brain= | err=
+
+=== 02:52:20 results
+trace lines: 2635
+capture events:
+11-28 02:50:52.432  3877  3877 I SightLive: capture: content resize 1600x720
+11-28 02:50:52.432  3877  3877 I SightLive: capture: content: 576x1280 -> 1280x576
+11-28 02:50:52.460  3877  3877 I SightLive: capture: resized to 1280x576
+11-28 02:50:52.527  3877  3877 I SightLive: capture: content resize 1600x720
+baseline:
+--- run 1: 19 log lines, 19 s
+t   0- 10 s: on target  13.3%  fps  19.6  locks +1  looks +0  moves +0  nearest 198px  cam (0,0)
+t  10- 20 s: on target   5.2%  fps  23.6  locks +1  looks +0  moves +0  nearest 540px  cam (0,0)
+total: on target 8.7%  locks 2  first lock at 4.4 s  longest lock 1.1 s  looks 0  moves 0
+with the app aiming:
+--- run 1: 85 log lines, 87 s
+t   0- 10 s: on target  15.3%  fps  15.0  locks +4  looks +15  moves +45  nearest 96px  cam (-91,42)
+t  10- 20 s: on target  18.1%  fps  19.8  locks +6  looks +11  moves +59  nearest 71px  cam (-447,116)
+t  20- 30 s: on target  13.7%  fps  19.8  locks +5  looks +14  moves +60  nearest 57px  cam (-1501,54)
+t  30- 40 s: on target  13.5%  fps  19.3  locks +2  looks +6  moves +14  nearest 191px  cam (-1473,70)
+t  40- 50 s: on target   1.8%  fps  18.4  locks +0  looks +3  moves +3  nearest 73px  cam (-1504,131)
+t  50- 60 s: on target  22.5%  fps  21.1  locks +5  looks +9  moves +65  nearest 113px  cam (-1649,-20)
+t  60- 70 s: on target   2.1%  fps  21.2  locks +1  looks +9  moves +47  nearest 255px  cam (-960,55)
+t  70- 80 s: on target  25.6%  fps  19.6  locks +9  looks +18  moves +58  nearest 120px  cam (-221,19)
+t  80- 90 s: on target  27.8%  fps  20.7  locks +5  looks +10  moves +47  nearest 156px  cam (780,-53)
+total: on target 16.2%  locks 42  first lock at 4.2 s  longest lock 0.8 s  looks 107  moves 438
+error log lines: 66
+shot 50-main-after: 205447 bytes
+11-28 02:52:21.974  3877  3877 I SightLive: capture: content resize 720x1600
+11-28 02:52:24.031  3877  6612 I SightLive: 576x1280 screen=720x1600 cap=576x1280 sizeOk=true inGame=false covered=com.omega.sight fps=7.5 frameMs=110.8 motionMs=0.0 farMs=10.4 glowMs=6.3 | motion=0 far=0 glow=1 model=0 tracks=0 picked= ego=0.00 hud=2/false | verdict=OK | calibrated=true rel=(-0.42,-0.33) lag=2.0 conf=1.00 chaseStops=1 | strokes sent=424 done=421 cancelled=3 failed=0 | vision=مفيش ملف رؤية 0.0ms gpu=false brain= | err=
+11-28 02:52:26.102  3877  6612 I SightLive: 576x1280 screen=720x1600 cap=576x1280 sizeOk=true inGame=false covered=com.omega.sight fps=9.2 frameMs=84.1 motionMs=0.0 farMs=30.0 glowMs=19.0 | motion=0 far=0 glow=1 model=0 tracks=0 picked= ego=0.00 hud=2/false | verdict=OK | calibrated=true rel=(-0.37,-0.28) lag=2.1 conf=1.00 chaseStops=1 | strokes sent=424 done=421 cancelled=3 failed=0 | vision=مفيش ملف رؤية 0.0ms gpu=false brain= | err=
+11-28 02:50:52.432  3877  3877 I SightLive: capture: content resize 1600x720
+11-28 02:50:52.432  3877  3877 I SightLive: capture: content: 576x1280 -> 1280x576
+11-28 02:50:52.460  3877  3877 I SightLive: capture: resized to 1280x576
+11-28 02:50:52.527  3877  3877 I SightLive: capture: content resize 1600x720
+11-28 02:52:21.898  3877  3877 I SightLive: capture: content resize 720x1600
+11-28 02:52:21.898  3877  3877 I SightLive: capture: content: 1280x576 -> 576x1280
+11-28 02:52:21.899  3877  3877 I SightLive: capture: resized to 576x1280
+11-28 02:52:21.974  3877  3877 I SightLive: capture: content resize 720x1600
+shot 51-main-stopped: 171668 bytes
+shot 52-whole-page: 816264 bytes
+
+=== 02:52:40 done

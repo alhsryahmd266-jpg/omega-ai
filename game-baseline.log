@@ -1,0 +1,20 @@
+--------- beginning of main
+11-28 02:50:13.196  6153  6153 I SightTestGame: t=0.0 frames=1 fireFrames=1 hits=0 pct=0.0 locks=0 firstLock=-1.0 longestLock=0.0 nearestPx=877 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:14.588  6153  6153 I SightTestGame: t=1.4 frames=2 fireFrames=2 hits=0 pct=0.0 locks=0 firstLock=-1.0 longestLock=0.0 nearestPx=155 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:15.614  6153  6153 I SightTestGame: t=2.4 frames=26 fireFrames=26 hits=0 pct=0.0 locks=0 firstLock=-1.0 longestLock=0.0 nearestPx=140 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:16.640  6153  6153 I SightTestGame: t=3.4 frames=50 fireFrames=50 hits=0 pct=0.0 locks=0 firstLock=-1.0 longestLock=0.0 nearestPx=133 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:17.675  6153  6153 I SightTestGame: t=4.5 frames=74 fireFrames=74 hits=4 pct=5.4 locks=1 firstLock=4.4 longestLock=0.1 nearestPx=96 looks=0 moves=0 camX=0 camY=0 onTarget=true cur=0.1
+11-28 02:50:18.685  6153  6153 I SightTestGame: t=5.5 frames=97 fireFrames=97 hits=25 pct=25.8 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=104 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:19.695  6153  6153 I SightTestGame: t=6.5 frames=122 fireFrames=122 hits=25 pct=20.5 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=117 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:20.727  6153  6153 I SightTestGame: t=7.5 frames=147 fireFrames=147 hits=25 pct=17.0 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=116 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:21.758  6153  6153 I SightTestGame: t=8.6 frames=171 fireFrames=171 hits=25 pct=14.6 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=153 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:22.764  6153  6153 I SightTestGame: t=9.6 frames=189 fireFrames=189 hits=25 pct=13.2 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=198 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:23.812  6153  6153 I SightTestGame: t=10.6 frames=212 fireFrames=212 hits=25 pct=11.8 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=265 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:24.844  6153  6153 I SightTestGame: t=11.6 frames=235 fireFrames=235 hits=25 pct=10.6 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=307 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:25.850  6153  6153 I SightTestGame: t=12.7 frames=253 fireFrames=253 hits=25 pct=9.9 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=337 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:26.850  6153  6153 I SightTestGame: t=13.7 frames=278 fireFrames=278 hits=25 pct=9.0 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=305 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:27.865  6153  6153 I SightTestGame: t=14.7 frames=303 fireFrames=303 hits=25 pct=8.3 locks=1 firstLock=4.4 longestLock=1.1 nearestPx=133 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:28.865  6153  6153 I SightTestGame: t=15.7 frames=328 fireFrames=328 hits=35 pct=10.7 locks=2 firstLock=4.4 longestLock=1.1 nearestPx=153 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:29.869  6153  6153 I SightTestGame: t=16.7 frames=353 fireFrames=353 hits=35 pct=9.9 locks=2 firstLock=4.4 longestLock=1.1 nearestPx=332 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:30.901  6153  6153 I SightTestGame: t=17.7 frames=378 fireFrames=378 hits=35 pct=9.3 locks=2 firstLock=4.4 longestLock=1.1 nearestPx=505 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0
+11-28 02:50:31.939  6153  6153 I SightTestGame: t=18.7 frames=403 fireFrames=403 hits=35 pct=8.7 locks=2 firstLock=4.4 longestLock=1.1 nearestPx=540 looks=0 moves=0 camX=0 camY=0 onTarget=false cur=0.0

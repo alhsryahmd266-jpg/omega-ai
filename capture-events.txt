@@ -1,0 +1,8 @@
+11-28 02:50:52.432  3877  3877 I SightLive: capture: content resize 1600x720
+11-28 02:50:52.432  3877  3877 I SightLive: capture: content: 576x1280 -> 1280x576
+11-28 02:50:52.460  3877  3877 I SightLive: capture: resized to 1280x576
+11-28 02:50:52.527  3877  3877 I SightLive: capture: content resize 1600x720
+11-28 02:52:21.898  3877  3877 I SightLive: capture: content resize 720x1600
+11-28 02:52:21.898  3877  3877 I SightLive: capture: content: 1280x576 -> 576x1280
+11-28 02:52:21.899  3877  3877 I SightLive: capture: resized to 576x1280
+11-28 02:52:21.974  3877  3877 I SightLive: capture: content resize 720x1600
